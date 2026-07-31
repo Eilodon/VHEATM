@@ -1,0 +1,102 @@
+s {tool_class!r} is unsupported by the broker",
++                controls=tuple(controls + ["policy:fail-closed"]),
++                evaluated_at=now,
++                approval_token_id=verified_token_id,
++            )
++
++        allowed, reason, class_controls = evaluator(request, scope)
++        controls.extend(class_controls)
++        if not allowed:
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason=reason,
++                controls=tuple(controls + ["policy:fail-closed"]),
++                evaluated_at=now,
++                approval_token_id=verified_token_id,
++            )
++
++        return self._decision(
++            request_id=request_id,
++            allowed=True,
++            reason=reason,
++            controls=tuple(controls),
++            evaluated_at=now,
++            approval_token_id=verified_token_id,
++        )
++
++    def _evaluate_read(
++        self, request: Mapping[str, Any], scope: PurePosixPath
++    ) -> tuple[bool, str, tuple[str, ...]]:
++        del scope
++        if request.get("secret_expansion") is not False:
++            return False, "read requests must explicitly disable secret expansion", ("read:no-secret-expansion",)
++        if request.get("contains_secrets") is not False:
++            return False, "read requests must explicitly declare that the target contains no secrets", ("read:no-secret-content",)
++        return True, "read request satisfies workspace and secret-boundary controls", (
++            "read:workspace-only",
++            "read:no-secret-expansion",
++            "read:no-secret-content",
++        )
++
++    def _evaluate_execute(
++        self, request: Mapping[str, Any], scope: PurePosixPath
++    ) -> tuple[bool, str, tuple[str, ...]]:
++        del scope
++        if request.get("sandboxed") is not True:
++            return False, "execute requests require an active sandbox", ("execute:sandbox",)
++        if request.get("network_enabled") is not False:
++            return False, "execute sandbox network must be disabled", ("execute:network-disabled",)
++        if request.get("inherit_secrets") is not False:
++            return False, "execute sandbox must not inherit environment secrets", ("execute:no-secret-inheritance",)
++        command = request.get("command")
++        if not isinstance(command, str) or command != command.strip() or "\x00" in command:
++            return False, "execute command must be a normalized non-null string", ("execute:normalized-command",)
++        if command not in self.capabilities.exact_command_allowlist:
++            return False, "execute command is not present in the exact command allowlist", ("execute:command-allowlist",)
++        return True, "execute request satisfies sandbox and exact-command controls", (
++            "execute:sandbox",
++            "execute:network-disabled",
++            "execute:no-secret-inheritance",
++            "execute:command-allowlist",
++        )
++
++    def _evaluate_write(
++        self, request: Mapping[str, Any], scope: PurePosixPath
++    ) -> tuple[bool, str, tuple[str, ...]]:
++        diff_paths = request.get("diff_paths", [])
++        try:
++            normalized = tuple(_workspace_relative_path(str(value), label="diff path") for value in diff_paths)
++        except ValueError as exc:
++            return False, str(exc), ("write:scoped-diff",)
++        if not all(_is_within_scope(path, scope) for path in normalized):
++            return False, "write diff path escapes the approved workspace scope", ("write:scoped-diff",)
++        if not isinstance(request.get("rollback_plan"), str) or not request["rollback_plan"].strip():
++            return False, "write requests require a non-empty rollback plan", ("write:rollback-plan",)
++        return True, "write request satisfies scoped-diff and rollback controls", (
++            "write:scoped-diff",
++            "write:rollback-plan",
++        )
++
++    def _evaluate_network(
++        self, request: Mapping[str, Any], scope: PurePosixPath
++    ) -> tuple[bool, str, tuple[str, ...]]:
++        del scope
++        destination = request.get("destination")
++        allowlist = self.policy.get("egress", {}).get("destinations", [])
++        if destination not in allowlist:
++            return False, "network destination is not allowlisted by runtime policy", ("network:destination-allowlist",)
++        data_classes = set(request.get("data_classes", []))
++        prohibited = set(self.policy.get("egress", {}).get("prohibited_data", []))
++        if data_classes & prohibited:
++            return False, "network request contains prohibited data classes", ("network:data-classification",)
++        if self.policy.get("egress", {}).get("requires_redaction") is True and request.get("redacted") is not True:
++            return False, "network request must confirm redaction", ("network:redaction",)
++        return True, "network request satisfies destination, data-class, and redaction controls", (
++            "network:destination-allowlist",
++            "network:data-classification",
++            "network:redaction",
++        )
++
++    def _evaluate_secrets(
++        self, reque
