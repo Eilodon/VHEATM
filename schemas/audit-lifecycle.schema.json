@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/audit-lifecycle.schema.json",
+  "title": "VHEATM audit lifecycle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "audit_id", "state", "events"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "audit_id": {"type": "string", "minLength": 1},
+    "state": {"enum": ["created", "context_validated", "planned", "running", "blocked", "partial", "complete", "attested"]},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "audit_id", "from", "to", "actor", "reason", "occurred_at", "evidence_refs", "sequence"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^EVT-[A-F0-9]{16}$"},
+          "audit_id": {"type": "string", "minLength": 1},
+          "from": {"enum": ["created", "context_validated", "planned", "running", "blocked", "partial", "complete"]},
+          "to": {"enum": ["context_validated", "planned", "running", "blocked", "partial", "complete", "attested"]},
+          "actor": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "occurred_at": {"type": "string", "format": "date-time"},
+          "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "sequence": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

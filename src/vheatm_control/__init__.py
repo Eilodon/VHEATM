@@ -1,3 +1,8 @@
-"""Executable validation and planning layer for VHEATM."""
+"""Executable validation, planning, enforcement, and provenance for VHEATM."""
 
-__version__ = "0.2.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("vheatm-control")
+except PackageNotFoundError:  # pragma: no cover - source tree without installation
+    __version__ = "0+unknown"

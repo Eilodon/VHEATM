@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/approval-token.schema.json",
+  "title": "VHEATM single-use approval token",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token_id",
+    "schema_version",
+    "requester",
+    "tool_class",
+    "exact_scope",
+    "issued_at",
+    "expires_at",
+    "approved_by",
+    "nonce",
+    "single_use",
+    "signature"
+  ],
+  "properties": {
+    "token_id": {"type": "string", "pattern": "^APR-[A-F0-9]{16}$"},
+    "schema_version": {"const": "1.0.0"},
+    "requester": {"type": "string", "minLength": 1},
+    "tool_class": {"enum": ["execute", "write", "network", "secrets"]},
+    "exact_scope": {"type": "string", "pattern": "^workspace:"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "approved_by": {"type": "string", "minLength": 1},
+    "nonce": {"type": "string", "minLength": 1},
+    "single_use": {"const": true},
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": {"const": "hmac-sha256"},
+        "key_id": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

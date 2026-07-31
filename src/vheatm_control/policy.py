@@ -1,0 +1,322 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from threading import Lock
+from typing import Any, Callable, Mapping, TypeVar
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
+
+
+class PolicyError(ValueError):
+    """Raised when policy or approval material is malformed."""
+
+
+class PolicyDenied(PermissionError):
+    """Raised by GuardedExecutor before an unauthorized action can run."""
+
+
+def _canonical_bytes(value: Mapping[str, Any]) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _parse_time(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as exc:
+        raise PolicyError(f"invalid RFC3339 timestamp: {value!r}") from exc
+    if parsed.tzinfo is None:
+        raise PolicyError("approval timestamps must include a timezone")
+    return parsed.astimezone(UTC)
+
+
+def sign_approval_token(claims: Mapping[str, Any], *, key: bytes, key_id: str) -> dict[str, Any]:
+    required = {"requester", "tool_class", "exact_scope", "issued_at", "expires_at", "approved_by", "nonce"}
+    allowed = required | {"single_use"}
+    missing = sorted(required - claims.keys())
+    extra = sorted(claims.keys() - allowed)
+    if missing:
+        raise PolicyError(f"approval token missing fields: {missing}")
+    if extra:
+        raise PolicyError(f"approval token contains unsupported fields: {extra}")
+    if claims.get("tool_class") not in {"execute", "write", "network", "secrets"}:
+        raise PolicyError("approval tokens are only valid for restricted tool classes")
+    if not str(claims.get("exact_scope", "")).startswith("workspace:"):
+        raise PolicyError("approval exact_scope must be workspace-bound")
+    issued = _parse_time(str(claims.get("issued_at", "")))
+    expires = _parse_time(str(claims.get("expires_at", "")))
+    if expires <= issued:
+        raise PolicyError("approval token expiry must be after issue time")
+    if claims.get("single_use", True) is not True:
+        raise PolicyError("approval tokens must be single-use")
+    unsigned = {"schema_version": "1.0.0", **dict(claims), "single_use": True}
+    token_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest()[:16].upper()}"
+    payload = {"token_id": token_id, **unsigned}
+    signature = hmac.new(key, _canonical_bytes(payload), hashlib.sha256).hexdigest()
+    return {
+        **payload,
+        "signature": {"algorithm": "hmac-sha256", "key_id": key_id, "value": signature},
+    }
+
+
+class ApprovalLedger:
+    """Single-use token ledger with optional process-safe file persistence."""
+
+    def __init__(self, path: str | Path | None = None) -> None:
+        self.path = Path(path) if path is not None else None
+        self._used: set[str] = set()
+        self._lock = Lock()
+        if self.path is not None and self.path.exists():
+            self._used.update(line.strip() for line in self.path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+    def consume(self, token_id: str) -> None:
+        if self.path is None:
+            with self._lock:
+                if token_id in self._used:
+                    raise PolicyError(f"approval token already used: {token_id}")
+                self._used.add(token_id)
+            return
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a+", encoding="utf-8") as handle:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                handle.seek(0)
+                used = {line.strip() for line in handle if line.strip()}
+                if token_id in used:
+                    raise PolicyError(f"approval token already used: {token_id}")
+                handle.seek(0, os.SEEK_END)
+                handle.write(token_id + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+                self._used.add(token_id)
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+class ApprovalVerifier:
+    def __init__(self, keys: Mapping[str, bytes], *, ledger: ApprovalLedger | None = None) -> None:
+        self.keys = dict(keys)
+        self.ledger = ledger or ApprovalLedger()
+
+    def verify(
+        self,
+        token: Mapping[str, Any],
+        request: Mapping[str, Any],
+        *,
+        now: datetime | None = None,
+        consume: bool = True,
+    ) -> str:
+        allowed_fields = {
+            "token_id", "schema_version", "requester", "tool_class", "exact_scope", "issued_at",
+            "expires_at", "approved_by", "nonce", "single_use", "signature"
+        }
+        extra_fields = sorted(token.keys() - allowed_fields)
+        if extra_fields:
+            raise PolicyError(f"approval token contains unsupported fields: {extra_fields}")
+        signature = token.get("signature")
+        if not isinstance(signature, Mapping):
+            raise PolicyError("approval token signature is missing")
+        if signature.get("algorithm") != "hmac-sha256":
+            raise PolicyError("unsupported approval signature algorithm")
+        key_id = str(signature.get("key_id", ""))
+        key = self.keys.get(key_id)
+        if key is None:
+            raise PolicyError(f"unknown approval key_id: {key_id}")
+        signed_payload = {field: value for field, value in token.items() if field != "signature"}
+        expected = hmac.new(key, _canonical_bytes(signed_payload), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, str(signature.get("value", ""))):
+            raise PolicyError("invalid approval token signature")
+
+        if token.get("single_use") is not True:
+            raise PolicyError("approval token must be single-use")
+        if token.get("requester") != request.get("requester"):
+            raise PolicyError("approval requester does not match request")
+        if token.get("tool_class") != request.get("tool_class"):
+            raise PolicyError("approval tool_class does not match request")
+        if token.get("exact_scope") != request.get("scope"):
+            raise PolicyError("approval scope does not exactly match request")
+        issued = _parse_time(str(token.get("issued_at", "")))
+        expires = _parse_time(str(token.get("expires_at", "")))
+        current = (now or datetime.now(UTC)).astimezone(UTC)
+        if expires <= issued:
+            raise PolicyError("approval token expiry must be after issue time")
+        if current < issued:
+            raise PolicyError("approval token is not active yet")
+        if current >= expires:
+            raise PolicyError("approval token has expired")
+
+        token_id = str(token.get("token_id", ""))
+        unsigned = {field: value for field, value in signed_payload.items() if field != "token_id"}
+        expected_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest()[:16].upper()}"
+        if token_id != expected_id:
+            raise PolicyError("approval token_id does not match signed claims")
+        if consume:
+            self.ledger.consume(token_id)
+        return token_id
+
+
+@dataclass(frozen=True)
+class PolicyDecision:
+    request_id: str
+    decision: str
+    reason: str
+    controls: tuple[str, ...]
+    evaluated_at: str
+    approval_token_id: str | None = None
+
+    def to_document(self) -> dict[str, Any]:
+        document = asdict(self)
+        document["schema_version"] = "1.0.0"
+        document["controls"] = list(self.controls)
+        return document
+
+
+class PolicyEngine:
+    def __init__(
+        self,
+        policy: Mapping[str, Any],
+        *,
+        approval_verifier: ApprovalVerifier | None = None,
+        command_allowlist: set[str] | None = None,
+        network_allowlist: set[str] | None = None,
+        secret_allowlist: set[str] | None = None,
+    ) -> None:
+        self.policy = dict(policy)
+        self.approval_verifier = approval_verifier
+        self.command_allowlist = set(command_allowlist or set())
+        configured_destinations = set(policy.get("egress", {}).get("destinations", []))
+        self.network_allowlist = configured_destinations | set(network_allowlist or set())
+        self.secret_allowlist = set(secret_allowlist or set())
+
+    @staticmethod
+    def _decision(request: Mapping[str, Any], decision: str, reason: str, controls: list[str], token_id: str | None = None) -> PolicyDecision:
+        return PolicyDecision(
+            request_id=str(request.get("request_id", "<missing>")),
+            decision=decision,
+            reason=reason,
+            controls=tuple(controls),
+            approval_token_id=token_id,
+            evaluated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        )
+
+    def authorize(
+        self,
+        request: Mapping[str, Any],
+        *,
+        approval_token: Mapping[str, Any] | None = None,
+        now: datetime | None = None,
+        consume_approval: bool = True,
+    ) -> PolicyDecision:
+        required = {"request_id", "requester", "tool_class", "scope"}
+        allowed_request_fields = {
+            "schema_version", "request_id", "requester", "tool_class", "scope", "secret_expansion",
+            "contains_secrets", "sandboxed", "command", "network_enabled", "inherit_secrets",
+            "diff_paths", "rollback_plan", "destination", "data_classes", "redacted", "secret_name",
+            "least_privilege", "no_model_echo"
+        }
+        missing = sorted(required - request.keys())
+        extra = sorted(request.keys() - allowed_request_fields)
+        if missing:
+            return self._decision(request, "deny", f"request missing fields: {missing}", ["fail_safe"])
+        if extra:
+            return self._decision(request, "deny", f"request contains unsupported fields: {extra}", ["fail_safe"])
+        tool_class = str(request["tool_class"])
+        classes = self.policy.get("tools", {}).get("classes", {})
+        if tool_class not in classes:
+            return self._decision(request, "deny", f"unknown tool class: {tool_class}", ["deny_by_default"])
+        if not str(request["scope"]).startswith("workspace:"):
+            return self._decision(request, "deny", "scope must be explicitly workspace-bound", ["workspace_scope"])
+
+        controls = ["deny_by_default", "workspace_scope"]
+        if tool_class == "read":
+            if request.get("secret_expansion") is True or request.get("contains_secrets") is True:
+                return self._decision(request, "deny", "read request may not expand or expose secrets", controls + ["no_secret_expansion"])
+            return self._decision(request, "allow", "read request satisfies no-approval constraints", controls + ["no_secret_expansion"])
+
+        if approval_token is None or self.approval_verifier is None:
+            return self._decision(request, "deny", "restricted tool class requires a verified approval token", controls + ["human_approval"])
+        try:
+            token_id = self.approval_verifier.verify(approval_token, request, now=now, consume=False)
+        except PolicyError as exc:
+            return self._decision(request, "deny", str(exc), controls + ["human_approval"])
+        controls.extend(["human_approval", "exact_scope", "expiry", "single_use"])
+
+        def allow(reason: str, final_controls: list[str]) -> PolicyDecision:
+            if consume_approval:
+                try:
+                    self.approval_verifier.ledger.consume(token_id)
+                except PolicyError as exc:
+                    return self._decision(request, "deny", str(exc), final_controls, token_id)
+            return self._decision(request, "allow", reason, final_controls, token_id)
+
+        if tool_class == "execute":
+            if request.get("sandboxed") is not True:
+                return self._decision(request, "deny", "execute request is not sandboxed", controls + ["sandbox"], token_id)
+            command = str(request.get("command", ""))
+            if command not in self.command_allowlist:
+                return self._decision(request, "deny", "command is not allowlisted", controls + ["command_allowlist"], token_id)
+            if request.get("network_enabled") is True or request.get("inherit_secrets") is True:
+                return self._decision(request, "deny", "sandbox must disable network and secret inheritance", controls + ["sandbox"], token_id)
+            return allow("execute request satisfies sandbox and allowlist policy", controls + ["sandbox", "command_allowlist"])
+
+        if tool_class == "write":
+            paths = request.get("diff_paths")
+            if not isinstance(paths, list) or not paths or any(not str(path).strip() for path in paths):
+                return self._decision(request, "deny", "write request requires explicit diff_paths", controls + ["scoped_diff"], token_id)
+            if not str(request.get("rollback_plan", "")).strip():
+                return self._decision(request, "deny", "write request requires rollback_plan", controls + ["rollback_plan"], token_id)
+            return allow("write request is scoped and reversible", controls + ["scoped_diff", "rollback_plan"])
+
+        if tool_class == "network":
+            destination = str(request.get("destination", ""))
+            if destination not in self.network_allowlist:
+                return self._decision(request, "deny", "network destination is not allowlisted", controls + ["destination_allowlist"], token_id)
+            prohibited = set(self.policy.get("egress", {}).get("prohibited_data", []))
+            overlap = sorted(prohibited & set(request.get("data_classes", [])))
+            if overlap:
+                return self._decision(request, "deny", f"egress contains prohibited data classes: {overlap}", controls + ["data_classification"], token_id)
+            if request.get("redacted") is not True:
+                return self._decision(request, "deny", "network egress must be redacted", controls + ["redaction"], token_id)
+            return allow("network request satisfies destination and egress policy", controls + ["destination_allowlist", "data_classification", "redaction"])
+
+        if tool_class == "secrets":
+            secret_name = str(request.get("secret_name", ""))
+            if secret_name not in self.secret_allowlist:
+                return self._decision(request, "deny", "secret is not allowlisted", controls + ["named_secret"], token_id)
+            if request.get("least_privilege") is not True or request.get("no_model_echo") is not True:
+                return self._decision(request, "deny", "secret request lacks least-privilege/no-model-echo controls", controls + ["least_privilege", "no_model_echo"], token_id)
+            return allow("secret request satisfies named-secret policy", controls + ["named_secret", "least_privilege", "no_model_echo"])
+
+        return self._decision(request, "deny", "tool class has no executable policy", controls + ["fail_safe"], token_id)
+
+
+T = TypeVar("T")
+
+
+class GuardedExecutor:
+    def __init__(self, engine: PolicyEngine) -> None:
+        self.engine = engine
+
+    def run(
+        self,
+        request: Mapping[str, Any],
+        action: Callable[[], T],
+        *,
+        approval_token: Mapping[str, Any] | None = None,
+        now: datetime | None = None,
+    ) -> tuple[T, PolicyDecision]:
+        decision = self.engine.authorize(request, approval_token=approval_token, now=now)
+        if decision.decision != "allow":
+            raise PolicyDenied(decision.reason)
+        return action(), decision

@@ -4,16 +4,11 @@
   "title": "VHEATM provenance registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "sources", "claims"],
+  "required": ["schema_version", "root_hash", "sources", "claims"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "sources": {
-      "type": "array",
-      "items": {"$ref": "https://vheatm.dev/schemas/provenance-record.schema.json"}
-    },
-    "claims": {
-      "type": "array",
-      "items": {"$ref": "https://vheatm.dev/schemas/claim.schema.json"}
-    }
+    "root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sources": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/provenance-record.schema.json"}},
+    "claims": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/claim.schema.json"}}
   }
 }
