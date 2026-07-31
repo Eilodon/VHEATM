@@ -273,6 +273,20 @@ def validate_module_repository(
         )
 
     module_ids = set(loaded)
+    gate_owners: dict[str, set[str]] = {}
+    for module_id, module in loaded.items():
+        for gate in set(module.document.get("gate_coverage", [])):
+            gate_owners.setdefault(str(gate), set()).add(module_id)
+    for gate in sorted(gate_owners):
+        owners = sorted(gate_owners[gate])
+        if len(owners) > 1:
+            issues.append(
+                ModuleIssue(
+                    "modules/registry.yaml",
+                    f"gate {gate} has multiple authoritative owners: {owners}",
+                )
+            )
+
     graph: dict[str, tuple[str, ...]] = {}
     for module_id, module in loaded.items():
         selection = module.document.get("selection", {})
@@ -316,6 +330,7 @@ def _registry_root(registry: Mapping[str, Any]) -> str:
         "coverage_mode": registry.get("coverage_mode"),
         "hard_token_budget": registry.get("hard_token_budget"),
         "required_gate_coverage": sorted(registry.get("required_gate_coverage", [])),
+        "legacy_source": registry.get("legacy_source"),
         "modules": [
             {"id": item.get("id"), "path": item.get("path"), "sha256": item.get("sha256")}
             for item in registry.get("modules", [])
