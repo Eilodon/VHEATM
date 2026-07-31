@@ -20,7 +20,8 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
     },
-    "evidence_kind": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]}
+    "evidence_kind": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]},
+    "supersedes": {"type": "string", "pattern": "^CLM-[A-F0-9]{16}$"}
   },
   "allOf": [
     {
