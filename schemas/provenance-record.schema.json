@@ -21,6 +21,7 @@
     "trust_zone": {"enum": ["system_policy", "operator_input", "artifact_content", "model_output", "external_data"]},
     "taint_state": {"enum": ["tainted", "validated", "human_approved"]},
     "captured_at": {"type": "string", "format": "date-time"},
+    "content_length": {"type": "integer", "minimum": 0},
     "metadata": {"type": "object"}
   }
 }
