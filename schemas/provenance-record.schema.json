@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/provenance-record.schema.json",
+  "title": "VHEATM provenance source record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "source_type", "locator", "digest", "trust_zone", "taint_state", "captured_at", "metadata"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"},
+    "source_type": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]},
+    "locator": {"type": "string", "minLength": 1},
+    "digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "value": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "trust_zone": {"enum": ["system_policy", "operator_input", "artifact_content", "model_output", "external_data"]},
+    "taint_state": {"enum": ["tainted", "validated", "human_approved"]},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "metadata": {"type": "object"}
+  }
+}
