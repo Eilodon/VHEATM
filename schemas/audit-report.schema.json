@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/audit-report.schema.json",
+  "title": "VHEATM audit report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["framework_version", "mode", "target_tier", "cycle_status", "declarations", "gate_results", "findings", "attestation"],
+  "properties": {
+    "framework_version": {"type": "string"},
+    "mode": {"enum": ["fast", "standard", "full"]},
+    "target_tier": {"enum": [1, 2, 3]},
+    "cycle_status": {"enum": ["complete", "blocked", "partial"]},
+    "declarations": {"type": "object", "additionalProperties": {"enum": ["yes", "no", "unknown"]}},
+    "gate_results": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["gate", "state", "reason"], "properties": {"gate": {"type": "string", "pattern": "^HG-[A-Z]+$"}, "state": {"enum": ["pass", "fail", "unknown", "not_applicable"]}, "reason": {"type": "string", "minLength": 1}}}},
+    "findings": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/finding.schema.json"}},
+    "attestation": {"type": "object", "additionalProperties": false, "required": ["executor", "validated_at", "limitations"], "properties": {"executor": {"type": "string", "minLength": 1}, "validated_at": {"type": "string", "format": "date-time"}, "limitations": {"type": "array", "items": {"type": "string"}}}}
+  }
+}

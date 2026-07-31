@@ -1,0 +1,14 @@
+{
+  "framework_version": "17.0.0-dev.1",
+  "mode": "standard",
+  "target_tier": 2,
+  "cycle_status": "complete",
+  "declarations": {"self_audit": "no", "ai_integrated": "unknown", "async_worker": "yes"},
+  "gate_results": [
+    {"gate": "HG-P", "state": "pass", "reason": "Required context is declared."},
+    {"gate": "HG-CPT", "state": "pass", "reason": "All triggered write paths have terminal states."},
+    {"gate": "HG-IJ", "state": "pass", "reason": "Async-worker override invoked an independent judge."}
+  ],
+  "findings": [{"id": "F-BOUNDARY-001", "title": "Uncommitted async write path", "severity": "high", "priority": "mandatory", "epistemic_status": "verified", "confidence": 0.93, "evidence": [{"kind": "code", "anchor": "src/worker.py:41-63", "claim": "The worker exits without committing the transaction.", "verified": true}], "ownership": {"owner": "platform-runtime", "boundary": "technical"}, "remediation": {"action": "Commit or roll back explicitly.", "verification": "Assert durable state after completion.", "rollback": "Disable the queue consumer and restore the prior implementation."}, "gate_trace": ["HG-CPT", "HG-E", "HG-FV"]}],
+  "attestation": {"executor": "vheatm-control test fixture", "validated_at": "2026-07-31T14:00:00Z", "limitations": []}
+}

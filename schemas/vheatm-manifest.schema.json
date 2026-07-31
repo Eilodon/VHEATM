@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/vheatm-manifest.schema.json",
+  "title": "VHEATM canonical manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "framework", "decision_semantics", "phases", "gates", "defaults"],
+  "properties": {
+    "schema_version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "framework": {"type": "object", "additionalProperties": false, "required": ["id", "name", "version", "status", "legacy_source_version", "architecture"], "properties": {"id": {"const": "vheatm"}, "name": {"const": "VHEATM"}, "version": {"type": "string", "minLength": 1}, "status": {"enum": ["alpha", "beta", "stable"]}, "legacy_source_version": {"type": "string"}, "architecture": {"type": "array", "prefixItems": [{"const": "core_loop"}, {"const": "specialist_lenses"}, {"const": "meta_defense"}], "items": false, "minItems": 3, "maxItems": 3}}},
+    "decision_semantics": {"type": "object", "additionalProperties": false, "required": ["declaration_state", "gate_state", "missing_declaration", "unknown_gate_effect"], "properties": {"declaration_state": {"const": ["yes", "no", "unknown"]}, "gate_state": {"const": ["pass", "fail", "unknown", "not_applicable"]}, "missing_declaration": {"const": "unknown"}, "unknown_gate_effect": {"const": "block"}}},
+    "phases": {"type": "object", "additionalProperties": false, "required": ["total", "items"], "properties": {"total": {"const": 8}, "items": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["id", "name", "order"], "properties": {"id": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]}, "name": {"type": "string", "minLength": 1}, "order": {"type": "integer", "minimum": 1, "maximum": 8}}}}}},
+    "gates": {"type": "object", "additionalProperties": false, "required": ["total", "distribution", "items"], "properties": {"total": {"const": 22}, "distribution": {"type": "object", "additionalProperties": false, "required": ["core", "triggered", "meta"], "properties": {"core": {"const": 9}, "triggered": {"const": 8}, "meta": {"const": 5}}}, "items": {"type": "array", "minItems": 22, "maxItems": 22, "items": {"type": "object", "additionalProperties": false, "required": ["id", "layer", "activation", "phase", "description"], "properties": {"id": {"type": "string", "pattern": "^HG-[A-Z]+$"}, "layer": {"enum": ["core", "triggered", "meta"]}, "activation": {"type": "string", "minLength": 1}, "phase": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]}, "description": {"type": "string", "minLength": 20}}}}}},
+    "defaults": {"type": "object", "additionalProperties": false, "required": ["mode", "target_tier", "declarations", "enforcement"], "properties": {"mode": {"enum": ["fast", "standard", "full"]}, "target_tier": {"enum": [1, 2, 3]}, "declarations": {"type": "object", "minProperties": 1, "additionalProperties": {"enum": ["yes", "no", "unknown"]}}, "enforcement": {"type": "object", "additionalProperties": false, "required": ["on_unknown_security_relevant_declaration", "on_unknown_required_gate", "on_validator_error"], "properties": {"on_unknown_security_relevant_declaration": {"const": "escalate"}, "on_unknown_required_gate": {"const": "block"}, "on_validator_error": {"const": "block"}}}}}
+  }
+}

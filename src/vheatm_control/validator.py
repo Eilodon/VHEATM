@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+
+from .models import Manifest
+
+
+@dataclass(frozen=True)
+class ValidationIssue:
+    source: str
+    message: str
+
+
+def _load_yaml(path: Path) -> Any:
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _load_json(path: Path) -> Any:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _schema_registry(schema_dir: Path) -> Registry:
+    registry = Registry()
+    for path in sorted(schema_dir.glob("*.schema.json")):
+        schema = _load_json(path)
+        resource = Resource.from_contents(schema)
+        registry = registry.with_resource(schema["$id"], resource)
+    return registry
+
+
+def _validate_schema(instance: Any, schema: dict[str, Any], registry: Registry, source: str) -> list[ValidationIssue]:
+    validator = Draft202012Validator(schema, registry=registry)
+    issues: list[ValidationIssue] = []
+    for error in sorted(validator.iter_errors(instance), key=lambda item: list(item.absolute_path)):
+        location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+        issues.append(ValidationIssue(source, f"{location}: {error.message}"))
+    return issues
+
+
+def validate_repository(root: Path) -> list[ValidationIssue]:
+    root = root.resolve()
+    schema_dir = root / "schemas"
+    manifest_path = root / "manifests" / "vheatm-v17.yaml"
+    policy_path = root / "policies" / "runtime-boundaries.yaml"
+
+    required = [schema_dir, manifest_path, policy_path]
+    missing = [str(path.relative_to(root)) for path in required if not path.exists()]
+    if missing:
+        return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
+
+    registry = _schema_registry(schema_dir)
+    manifest = _load_yaml(manifest_path)
+    policy = _load_yaml(policy_path)
+    manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
+    policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
+
+    issues = []
+    issues.extend(_validate_schema(manifest, manifest_schema, registry, str(manifest_path.relative_to(root))))
+    issues.extend(_validate_schema(policy, policy_schema, registry, str(policy_path.relative_to(root))))
+
+    if not issues:
+        try:
+            parsed = Manifest.model_validate(manifest)
+        except Exception as exc:
+            issues.append(ValidationIssue(str(manifest_path.relative_to(root)), str(exc)))
+        else:
+            phase_ids = {phase.id for phase in parsed.phases.items}
+            unknown_phase_gates = [gate.id for gate in parsed.gates.items if gate.phase not in phase_ids]
+            if unknown_phase_gates:
+                issues.append(ValidationIssue("manifest", f"gates reference unknown phases: {unknown_phase_gates}"))
+
+    issues.extend(_validate_runtime_policy_invariants(policy))
+    return issues
+
+
+def _validate_runtime_policy_invariants(policy: dict[str, Any]) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    if policy.get("default_decision") != "unknown":
+        issues.append(ValidationIssue("runtime policy", "default_decision must be unknown"))
+    if policy.get("tools", {}).get("default") != "deny":
+        issues.append(ValidationIssue("runtime policy", "tools.default must be deny"))
+    if policy.get("egress", {}).get("default") != "deny":
+        issues.append(ValidationIssue("runtime policy", "egress.default must be deny"))
+    approval = set(policy.get("human_approval", {}).get("token_required_for", []))
+    required = {"execute", "write", "network", "secrets"}
+    if not required.issubset(approval):
+        issues.append(ValidationIssue("runtime policy", f"human approval missing tool classes: {sorted(required - approval)}"))
+    if policy.get("taint", {}).get("propagation") != "transitive":
+        issues.append(ValidationIssue("runtime policy", "taint propagation must be transitive"))
+    return issues
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Validate the VHEATM canonical control-plane artifacts.")
+    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--json", action="store_true", dest="as_json")
+    args = parser.parse_args()
+
+    issues = validate_repository(args.root)
+    if args.as_json:
+        print(json.dumps({"valid": not issues, "issues": [issue.__dict__ for issue in issues]}, indent=2))
+    elif issues:
+        for issue in issues:
+            print(f"ERROR [{issue.source}] {issue.message}")
+    else:
+        print("VHEATM control-plane validation passed.")
+    return 1 if issues else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
