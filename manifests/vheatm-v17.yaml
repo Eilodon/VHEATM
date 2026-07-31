@@ -1,0 +1,164 @@
+schema_version: "1.0.0"
+framework:
+  id: vheatm
+  name: VHEATM
+  version: "17.0.0-dev.1"
+  status: alpha
+  legacy_source_version: "16.1.1"
+  architecture:
+    - core_loop
+    - specialist_lenses
+    - meta_defense
+
+decision_semantics:
+  declaration_state: ["yes", "no", "unknown"]
+  gate_state: [pass, fail, unknown, not_applicable]
+  missing_declaration: unknown
+  unknown_gate_effect: block
+
+phases:
+  total: 8
+  items:
+    - {id: P, name: Pre-conditions, order: 1}
+    - {id: V, name: Vision, order: 2}
+    - {id: G, name: Generation, order: 3}
+    - {id: E, name: Experiment, order: 4}
+    - {id: A, name: Architecture synthesis, order: 5}
+    - {id: T, name: Transformation, order: 6}
+    - {id: M, name: Closure, order: 7}
+    - {id: KB, name: Knowledge base, order: 8}
+
+gates:
+  total: 22
+  distribution:
+    core: 9
+    triggered: 8
+    meta: 5
+  items:
+    - id: HG-P
+      layer: core
+      activation: always
+      phase: P
+      description: Context, scope, tier, evidence currency, and required declarations are valid.
+    - id: HG-V
+      layer: core
+      activation: always
+      phase: V
+      description: System, delta, ownership, and boundary maps are sufficient for the selected scope.
+    - id: HG-G
+      layer: core
+      activation: always
+      phase: G
+      description: Required generation lenses, hypotheses, and bias controls produced actionable output.
+    - id: HG-CF
+      layer: core
+      activation: always
+      phase: G
+      description: Compound features are decomposed and component assumptions are checked.
+    - id: HG-PG
+      layer: core
+      activation: always
+      phase: G
+      description: Confirmed patterns are searched globally using structural methods where available.
+    - id: HG-E
+      layer: core
+      activation: always
+      phase: E
+      description: High-priority hypotheses and mandatory claims have evidence anchors.
+    - id: HG-A
+      layer: core
+      activation: always
+      phase: A
+      description: Decisions include alternatives, consequences, ownership, boundaries, and rollback impact.
+    - id: HG-T
+      layer: core
+      activation: always
+      phase: T
+      description: Transformation is verified with an appropriate red-green or equivalent check.
+    - id: HG-FV
+      layer: core
+      activation: always
+      phase: T
+      description: Fixes have post-change evidence and explicit verification anchors.
+
+    - id: HG-UT
+      layer: triggered
+      activation: mode in [standard, full]
+      phase: V
+      description: ATAM utility tree is complete when architecture depth is required.
+    - id: HG-AS
+      layer: triggered
+      activation: mode in [standard, full]
+      phase: V
+      description: Architecture smell scan is complete and seeds hypotheses.
+    - id: HG-FL
+      layer: triggered
+      activation: mode in [standard, full] and (safety_critical == yes or blast_radius >= 3)
+      phase: G
+      description: FMEA-lite is complete for safety-critical or high-blast-radius scope.
+    - id: HG-INC
+      layer: triggered
+      activation: context_mode == enterprise and mode in [standard, full]
+      phase: G
+      description: Incentive misalignment is evaluated for confirmed hypotheses.
+    - id: HG-ORG
+      layer: triggered
+      activation: context_mode == enterprise and mode in [standard, full]
+      phase: G
+      description: Organizational blast radius and escalation chains are evaluated.
+    - id: HG-HV
+      layer: triggered
+      activation: mandatory_findings > 0
+      phase: E
+      description: Mandatory findings receive hybrid verification or a documented unavailable result.
+    - id: HG-AP
+      layer: triggered
+      activation: always
+      phase: M
+      description: An adversarial pass runs at mode-appropriate depth.
+    - id: HG-AD
+      layer: triggered
+      activation: ai_executor == yes and mode in [standard, full]
+      phase: G
+      description: Auditor-defense checks inspect artifact-borne instruction and naming attacks.
+
+    - id: HG-CPT
+      layer: meta
+      activation: write_chain_components >= 3 or financial_path == yes or async_worker == yes
+      phase: G
+      description: Triggered code paths declare terminal state and unresolved paths create hypotheses.
+    - id: HG-IJ
+      layer: meta
+      activation: target_tier == 3 or self_audit == yes or async_worker == yes
+      phase: E
+      description: An independent judge reconciles findings using isolated context.
+    - id: HG-EF
+      layer: meta
+      activation: always
+      phase: M
+      description: Execution fidelity proves every required section produced a decision-bearing artifact.
+    - id: HG-M
+      layer: meta
+      activation: always
+      phase: M
+      description: Metrics, debt, calibration, behavior, attestation, and stop conditions are recorded.
+    - id: HG-KB
+      layer: meta
+      activation: always
+      phase: KB
+      description: Archives, accuracy history, self-tests, and lifecycle records are updated.
+
+defaults:
+  mode: standard
+  target_tier: 2
+  declarations:
+    self_audit: unknown
+    ai_integrated: unknown
+    ai_executor: unknown
+    async_worker: unknown
+    safety_critical: unknown
+    financial_path: unknown
+  enforcement:
+    on_unknown_security_relevant_declaration: escalate
+    on_unknown_required_gate: block
+    on_validator_error: block

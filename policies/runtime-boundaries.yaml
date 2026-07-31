@@ -1,0 +1,72 @@
+schema_version: "1.0.0"
+policy_id: vheatm-runtime-boundaries
+policy_version: "1.0.0"
+default_decision: unknown
+fail_safe: true
+
+trust_zones:
+  - id: system_policy
+    trust: trusted
+    examples: [canonical manifest, runtime policy, validated schemas]
+  - id: operator_input
+    trust: conditionally_trusted
+    examples: [explicit human declarations, approval tokens]
+  - id: artifact_content
+    trust: untrusted
+    examples: [source code comments, docstrings, documents, issue bodies, logs]
+  - id: model_output
+    trust: untrusted
+    examples: [findings, summaries, generated commands, tool arguments]
+  - id: external_data
+    trust: untrusted
+    examples: [web content, dependency metadata, retrieved knowledge]
+
+taint:
+  initial_labels:
+    artifact_content: [artifact_untrusted]
+    model_output: [model_unverified]
+    external_data: [external_untrusted]
+  propagation: transitive
+  string_interpolation_propagates: true
+  cleared_only_by:
+    - schema_validation
+    - policy_validation
+    - evidence_verification
+    - explicit_human_approval
+
+tools:
+  default: deny
+  classes:
+    read:
+      allowed_without_approval: true
+      constraints: [workspace_scope, no_secret_expansion]
+    execute:
+      allowed_without_approval: false
+      requires: [sandbox, allowlisted_command, explicit_human_approval]
+    write:
+      allowed_without_approval: false
+      requires: [scoped_diff, rollback_plan, explicit_human_approval]
+    network:
+      allowed_without_approval: false
+      requires: [allowlisted_destination, data_classification, explicit_human_approval]
+    secrets:
+      allowed_without_approval: false
+      requires: [named_secret, least_privilege, no_model_echo, explicit_human_approval]
+
+sandbox:
+  required_for: [execute]
+  filesystem: workspace_only
+  network: disabled_by_default
+  environment_secret_inheritance: deny
+  resource_limits_required: true
+
+egress:
+  default: deny
+  destinations: []
+  prohibited_data: [secrets, credentials, raw_pii, regulated_data, unreviewed_source]
+  requires_redaction: true
+
+human_approval:
+  token_required_for: [execute, write, network, secrets]
+  approval_must_bind: [tool_class, exact_scope, expiry, requester]
+  reusable: false

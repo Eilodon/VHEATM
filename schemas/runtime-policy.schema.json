@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/runtime-policy.schema.json",
+  "title": "VHEATM runtime boundary policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "policy_version", "default_decision", "fail_safe", "trust_zones", "taint", "tools", "sandbox", "egress", "human_approval"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "policy_id": {"const": "vheatm-runtime-boundaries"},
+    "policy_version": {"type": "string"},
+    "default_decision": {"const": "unknown"},
+    "fail_safe": {"const": true},
+    "trust_zones": {"type": "array", "minItems": 5, "items": {"type": "object", "additionalProperties": false, "required": ["id", "trust", "examples"], "properties": {"id": {"type": "string"}, "trust": {"enum": ["trusted", "conditionally_trusted", "untrusted"]}, "examples": {"type": "array", "minItems": 1, "items": {"type": "string"}}}}},
+    "taint": {"type": "object", "required": ["initial_labels", "propagation", "string_interpolation_propagates", "cleared_only_by"], "properties": {"initial_labels": {"type": "object"}, "propagation": {"const": "transitive"}, "string_interpolation_propagates": {"const": true}, "cleared_only_by": {"type": "array", "minItems": 3, "items": {"type": "string"}}}, "additionalProperties": false},
+    "tools": {"type": "object", "required": ["default", "classes"], "properties": {"default": {"const": "deny"}, "classes": {"type": "object", "required": ["read", "execute", "write", "network", "secrets"]}}, "additionalProperties": false},
+    "sandbox": {"type": "object", "required": ["required_for", "filesystem", "network", "environment_secret_inheritance", "resource_limits_required"]},
+    "egress": {"type": "object", "required": ["default", "destinations", "prohibited_data", "requires_redaction"], "properties": {"default": {"const": "deny"}, "destinations": {"type": "array"}, "prohibited_data": {"type": "array", "minItems": 1}, "requires_redaction": {"const": true}}, "additionalProperties": false},
+    "human_approval": {"type": "object", "required": ["token_required_for", "approval_must_bind", "reusable"], "properties": {"token_required_for": {"type": "array", "minItems": 4}, "approval_must_bind": {"type": "array", "minItems": 4}, "reusable": {"const": false}}, "additionalProperties": false}
+  }
+}

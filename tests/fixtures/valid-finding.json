@@ -1,0 +1,12 @@
+{
+  "id": "F-BOUNDARY-001",
+  "title": "Uncommitted async write path",
+  "severity": "high",
+  "priority": "mandatory",
+  "epistemic_status": "verified",
+  "confidence": 0.93,
+  "evidence": [{"kind": "code", "anchor": "src/worker.py:41-63", "claim": "The worker exits without committing the transaction.", "verified": true}],
+  "ownership": {"owner": "platform-runtime", "boundary": "technical"},
+  "remediation": {"action": "Commit or roll back explicitly within the worker transaction boundary.", "verification": "Run the integration test and assert durable state after worker completion.", "rollback": "Restore the prior worker implementation and disable the queue consumer."},
+  "gate_trace": ["HG-CPT", "HG-E", "HG-FV"]
+}
