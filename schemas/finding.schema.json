@@ -11,7 +11,21 @@
     "severity": {"enum": ["critical", "high", "medium", "low", "info"]},
     "priority": {"enum": ["mandatory", "required", "recommended", "optional"]},
     "epistemic_status": {"enum": ["verified", "inferred", "unknown", "contradicted"]},
-    "confidence": {"oneOf": [{"type": "number", "minimum": 0, "maximum": 1}, {"type": "null"}]},
+    "confidence": {
+      "oneOf": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "null"}
+      ]
+    },
+    "disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": {"enum": ["open", "remediated", "false_positive", "accepted_risk", "deferred"]},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
     "evidence": {
       "type": "array",
       "minItems": 1,
@@ -33,12 +47,45 @@
         }
       }
     },
-    "ownership": {"type": "object", "additionalProperties": false, "required": ["owner", "boundary"], "properties": {"owner": {"type": "string", "minLength": 1}, "boundary": {"enum": ["none", "technical", "handoff", "approval", "disputed", "unknown"]}}},
-    "remediation": {"type": "object", "additionalProperties": false, "required": ["action", "verification", "rollback"], "properties": {"action": {"type": "string", "minLength": 1}, "verification": {"type": "string", "minLength": 1}, "rollback": {"type": "string", "minLength": 1}}},
-    "gate_trace": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^HG-[A-Z]+$"}}
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "boundary"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1},
+        "boundary": {"enum": ["none", "technical", "handoff", "approval", "disputed", "unknown"]}
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "verification", "rollback"],
+      "properties": {
+        "action": {"type": "string", "minLength": 1},
+        "verification": {"type": "string", "minLength": 1},
+        "rollback": {"type": "string", "minLength": 1}
+      }
+    },
+    "gate_trace": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^HG-[A-Z]+$"}
+    }
   },
   "allOf": [
-    {"if": {"properties": {"epistemic_status": {"const": "unknown"}}, "required": ["epistemic_status"]}, "then": {"properties": {"confidence": {"type": "null"}}}},
-    {"if": {"properties": {"priority": {"const": "mandatory"}}, "required": ["priority"]}, "then": {"properties": {"evidence": {"minItems": 1}, "ownership": {"properties": {"owner": {"not": {"const": "unknown"}}}}}}}
+    {
+      "if": {"properties": {"epistemic_status": {"const": "unknown"}}, "required": ["epistemic_status"]},
+      "then": {"properties": {"confidence": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"priority": {"const": "mandatory"}}, "required": ["priority"]},
+      "then": {
+        "properties": {
+          "evidence": {"minItems": 1},
+          "ownership": {"properties": {"owner": {"not": {"const": "unknown"}}}}
+        }
+      }
+    }
   ]
 }
