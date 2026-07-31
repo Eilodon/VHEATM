@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/claim.schema.json",
+  "title": "VHEATM provenance claim",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "text", "epistemic_status", "confidence", "source_refs", "evidence_kind"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^CLM-[A-F0-9]{16}$"},
+    "text": {"type": "string", "minLength": 1},
+    "epistemic_status": {"enum": ["verified", "inferred", "unknown", "contradicted"]},
+    "confidence": {
+      "oneOf": [
+        {"type": "number", "minimum": 0, "maximum": 1},
+        {"type": "null"}
+      ]
+    },
+    "source_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
+    },
+    "evidence_kind": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"epistemic_status": {"const": "unknown"}}, "required": ["epistemic_status"]},
+      "then": {"properties": {"confidence": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"epistemic_status": {"const": "verified"}}, "required": ["epistemic_status"]},
+      "then": {"properties": {"source_refs": {"minItems": 1}}}
+    }
+  ]
+}
