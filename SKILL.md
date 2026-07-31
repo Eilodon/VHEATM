@@ -90,4 +90,4 @@ Stop and block when:
 
 ## Current migration state
 
-The module registry begins in `pilot` coverage mode. Only registered modules are runtime-authoritative. Unmigrated v16.1.1 material remains research input and cannot override V17 contracts.
+The registry remains in `pilot` coverage mode with nine runtime-authoritative gate modules. The core chain from context through evidence anchoring is migrated; thirteen gates remain legacy-only research input and cannot override V17 contracts.

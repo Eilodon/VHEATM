@@ -1,11 +1,10 @@
 schema_version: 1.0.0
 id: MOD-CONTEXT-CONTRACT
-version: 0.1.0
+version: 0.2.0
 status: experimental
 kind: core
 title: Context contract
-summary: Validates scope, declarations, evidence currency, ownership, and fail-safe
-  unknown handling.
+summary: Validates scope, declarations, evidence currency, ownership, and fail-safe unknown handling.
 gate_coverage:
 - HG-P
 phase_coverage:
@@ -42,15 +41,16 @@ contract:
     claims_required: true
     sources_required: true
     legacy_refs:
-    - v16.1.1 phase P pre-conditions and declarations
+    - VHEATM-v16.1.1.skill::SKILL.md#Entry Protocol — Minimum 3 Fields, Maximum 13
+    - VHEATM-v16.1.1.skill::references/00-context-modes.md#Context Mode — Self-Check
   runtime:
     tool_classes:
     - read
     sandbox_required: false
     network_required: false
   disclosure:
-    router_summary: Validates scope, declarations, evidence currency, ownership, and
-      fail-safe unknown handling.
+    router_summary: Validates scope, declarations, evidence currency, ownership, and fail-safe unknown
+      handling.
     instruction_path: instructions.md
     instruction_sha256: 29b21639a3ef225f62dad5a5f30ccb8f4bd9226bdd624a5ff3b88ab327d046a3
     token_budget: 512

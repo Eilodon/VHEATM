@@ -14,6 +14,17 @@ from vheatm_control.module_router import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_MODULES = {
+    "MOD-CONTEXT-CONTRACT",
+    "MOD-SYSTEM-MAPS",
+    "MOD-ARCHITECTURE-SMELLS",
+    "MOD-COMPOUND-DECOMPOSITION",
+    "MOD-HYPOTHESIS-GENERATION",
+    "MOD-PATTERN-GLOBALIZATION",
+    "MOD-AUDITOR-DEFENSE",
+    "MOD-EVIDENCE-ANCHORS",
+    "MOD-EXECUTION-FIDELITY",
+}
 
 
 def _manifest():
@@ -52,12 +63,7 @@ def test_repository_module_contracts_validate():
         registry_schema=_load_document(ROOT / "schemas" / "module-registry.schema.json"),
     )
     assert issues == []
-    assert set(loaded) == {
-        "MOD-CONTEXT-CONTRACT",
-        "MOD-ARCHITECTURE-SMELLS",
-        "MOD-AUDITOR-DEFENSE",
-        "MOD-EXECUTION-FIDELITY",
-    }
+    assert set(loaded) == EXPECTED_MODULES
 
 
 def test_router_selects_active_modules_and_dependency_order():
@@ -68,11 +74,36 @@ def test_router_selects_active_modules_and_dependency_order():
     ids = [item["id"] for item in result["selected_modules"]]
     assert ids == [
         "MOD-CONTEXT-CONTRACT",
+        "MOD-SYSTEM-MAPS",
         "MOD-ARCHITECTURE-SMELLS",
         "MOD-EXECUTION-FIDELITY",
     ]
     assert result["summary"]["completion_blocked"] is False
     assert all(not item["instruction_path"].startswith("/") for item in result["selected_modules"])
+
+
+def test_evidence_gate_closes_the_core_dependency_chain():
+    result = load_and_route(ROOT, _plan({"HG-E": "active"}))
+    assert [item["id"] for item in result["selected_modules"]] == [
+        "MOD-CONTEXT-CONTRACT",
+        "MOD-SYSTEM-MAPS",
+        "MOD-COMPOUND-DECOMPOSITION",
+        "MOD-HYPOTHESIS-GENERATION",
+        "MOD-PATTERN-GLOBALIZATION",
+        "MOD-EVIDENCE-ANCHORS",
+    ]
+
+
+def test_auditor_defense_depends_on_hypothesis_generation():
+    result = load_and_route(ROOT, _plan({"HG-AD": "active"}))
+    ids = [item["id"] for item in result["selected_modules"]]
+    assert ids == [
+        "MOD-CONTEXT-CONTRACT",
+        "MOD-SYSTEM-MAPS",
+        "MOD-COMPOUND-DECOMPOSITION",
+        "MOD-HYPOTHESIS-GENERATION",
+        "MOD-AUDITOR-DEFENSE",
+    ]
 
 
 def test_unknown_covered_gate_is_not_silently_skipped():
@@ -107,7 +138,7 @@ def test_budget_overflow_blocks():
     assert not issues
     registry = copy.deepcopy(registry)
     registry["hard_token_budget"] = 1
-    result = route_modules(manifest, registry, modules, _plan({"HG-P": "active"}))
+    result = route_modules(manifest, registry, modules, _plan({"HG-E": "active"}))
     assert result["summary"]["budget_exceeded"] is True
     assert result["summary"]["completion_blocked"] is True
 
@@ -123,6 +154,7 @@ def test_dependency_selected_module_is_removed_from_unselected():
 def test_invalid_activation_state_fails_closed():
     import pytest
     from vheatm_control.module_router import ModuleRoutingError
+
     plan = _plan({"HG-P": "banana"})
     with pytest.raises(ModuleRoutingError, match="invalid activation_state"):
         load_and_route(ROOT, plan)

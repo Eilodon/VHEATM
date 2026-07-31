@@ -1,0 +1,71 @@
+schema_version: 1.0.0
+id: MOD-HYPOTHESIS-GENERATION
+version: 0.1.0
+status: experimental
+kind: core
+title: Hypothesis generation and bias control
+summary: Generates traceable hypotheses through premortem, specialist lenses, and explicit bias controls.
+gate_coverage:
+- HG-G
+phase_coverage:
+- G
+selection:
+  policy: any_active_gate
+  priority: 20
+  dependencies:
+  - MOD-COMPOUND-DECOMPOSITION
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    - target_tier
+    artifact_classes:
+    - repository
+    - audit_context
+    - system_map
+    - component_matrix
+    - prior_findings
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: hypothesis_register
+    required: true
+    description: Prioritized hypotheses with source lens, affected boundary, and falsification path.
+  - id: lens_trace
+    required: true
+    description: Record of applicable core and specialist lenses, including explicit skip reasons.
+  - id: bias_record
+    required: true
+    description: Anchoring, confirmation, availability, automation, self-audit, and capture bias checks.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - configuration
+    - historical_record
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[G] Generation
+    - VHEATM-v16.1.1.skill::references/02-bias-probes.md#Bias Probe Output (updated for 6 checks)
+    - VHEATM-v16.1.1.skill::references/22-specialist-lens-router.md#Router Trigger Table
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Generate falsifiable, prioritized hypotheses through mapped lenses and explicit bias
+      checks.
+    instruction_path: instructions.md
+    instruction_sha256: 24f0ce629649c08c4f9f6b6318b32db6fd10081ad86f045d041ed2e886829461
+    token_budget: 1024

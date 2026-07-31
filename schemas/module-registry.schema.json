@@ -4,25 +4,95 @@
   "title": "VHEATM module registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "framework_version", "coverage_mode", "hard_token_budget", "required_gate_coverage", "modules"],
+  "required": [
+    "schema_version",
+    "framework_version",
+    "legacy_source",
+    "coverage_mode",
+    "hard_token_budget",
+    "required_gate_coverage",
+    "modules"
+  ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "framework_version": {"type": "string", "minLength": 1},
-    "coverage_mode": {"enum": ["pilot", "complete"]},
-    "hard_token_budget": {"type": "integer", "minimum": 256, "maximum": 100000},
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "framework_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "coverage_mode": {
+      "enum": [
+        "pilot",
+        "complete"
+      ]
+    },
+    "hard_token_budget": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 100000
+    },
     "required_gate_coverage": {
-      "type": "array", "minItems": 1, "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^HG-[A-Z0-9]+$"}
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^HG-[A-Z0-9]+$"
+      }
     },
     "modules": {
-      "type": "array", "minItems": 1,
+      "type": "array",
+      "minItems": 1,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["id", "path", "sha256"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "sha256"
+        ],
         "properties": {
-          "id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
-          "path": {"type": "string", "pattern": "^modules/[A-Za-z0-9._/-]+\\.ya?ml$"},
-          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          "id": {
+            "type": "string",
+            "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^modules/[A-Za-z0-9._/-]+\\.ya?ml$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "legacy_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "version",
+        "sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "artifact": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+\\.skill$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

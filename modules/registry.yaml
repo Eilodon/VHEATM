@@ -4,19 +4,44 @@ coverage_mode: pilot
 hard_token_budget: 4096
 required_gate_coverage:
 - HG-P
+- HG-V
+- HG-G
+- HG-CF
+- HG-PG
+- HG-E
 - HG-AS
 - HG-AD
 - HG-EF
 modules:
 - id: MOD-CONTEXT-CONTRACT
   path: modules/context-contract/module.yaml
-  sha256: 416e4c00904de36324b9d181f4c3c66ae009e35ab747d192155595bdad4f0033
+  sha256: 2f796b26e21a97360909d72c4d551b642311daa54910399ded7820e64e8eef23
+- id: MOD-SYSTEM-MAPS
+  path: modules/system-maps/module.yaml
+  sha256: 9d25f2e7b328bc088b8fe9ca309a8cebcf64dd20568c3a251464a51cf8d220a6
 - id: MOD-ARCHITECTURE-SMELLS
   path: modules/architecture-smells/module.yaml
-  sha256: 41b31cbc7493d514c8ba844676bdeb79d566406018ce7b357510d9f585abe4f1
+  sha256: a74817cfd5b4e06115538b9ac5922105149f500ebb9e17f819b544613d19ff62
+- id: MOD-COMPOUND-DECOMPOSITION
+  path: modules/compound-decomposition/module.yaml
+  sha256: c40f30124e2fde8b7c1cd4c06cf1a9eaf6f212e27c14e16dbc03a605601fb210
+- id: MOD-HYPOTHESIS-GENERATION
+  path: modules/hypothesis-generation/module.yaml
+  sha256: c61dd6b858fbea6c1be25d2b8656da55115a836b5430c19c4cc69f4f7a34cff6
+- id: MOD-PATTERN-GLOBALIZATION
+  path: modules/pattern-globalization/module.yaml
+  sha256: 78ac73e0bf475288e924f588725b0e1f249649542e5eab1bc73d6d2a4145c4d8
 - id: MOD-AUDITOR-DEFENSE
   path: modules/auditor-defense/module.yaml
-  sha256: 53e31a17bbe21bcab376fe38e6893e81033a8a246d40033c62a112fc96fdad3b
+  sha256: 7654c58e20b67fd463ca7cd88b3a110e63233df6a81541a1650d735ea362dea6
+- id: MOD-EVIDENCE-ANCHORS
+  path: modules/evidence-anchors/module.yaml
+  sha256: 140257d10d18c6652016c7bc5d87471e39229e39208406167fee2a72f7e3c3be
 - id: MOD-EXECUTION-FIDELITY
   path: modules/execution-fidelity/module.yaml
-  sha256: 10bf9531e5ae50b4d1751a0309bd84d3c054e30930b9688d5aa8e18ca945f71d
+  sha256: 099fd0d77dd888e71b9fa0aa6e44605fdb7b0adba8374ae4be041a84ce2cb755
+legacy_source:
+  artifact: VHEATM-v16.1.1.skill
+  version: 16.1.1
+  sha256: efdf9dc7255bebfa5277a729caeeb1edca64be456c62169241fa3573d9fb67bd
+  size_bytes: 202566
