@@ -1,0 +1,155 @@
++    freshness_required: true
++  failure:
++    on_missing_input: block
++    on_tool_denied: block
++    produces_unknown: true
++  provenance:
++    claims_required: true
++    sources_required: true
++    legacy_refs:
++    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[M] Closure
++    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#Persona Rotation Stranger Review (updated for
++      ENTERPRISE)
++    - "VHEATM-v16.1.1.skill::references/01-phase-guide.md#\U0001F195\U0001F195\U0001F195 Attestation Artifact\
++      \ (v15.0)"
++  runtime:
++    tool_classes:
++    - read
++    sandbox_required: false
++    network_required: false
++  disclosure:
++    router_summary: Close the cycle with measurable outcomes, debt, calibration, review, stop conditions,
++      and attestation.
++    instruction_path: instructions.md
++    instruction_sha256: 69ec53ecbfda6e0c9c349b336bed083f66eca2fb7a0b04f60f38b91f55cd019c
++    token_budget: 80
+diff --git a/modules/code-path-trace/instructions.md b/modules/code-path-trace/instructions.md
+new file mode 100644
+index 0000000..564d317
+--- /dev/null
++++ b/modules/code-path-trace/instructions.md
+@@ -0,0 +1,2 @@
++# Code path trace
++Trace each triggered path across boundaries to COMMITTED, UNCOMMITTED or UNKNOWN. Every unresolved terminal state needs a CRIT/HIGH hypothesis.
+diff --git a/modules/code-path-trace/module.yaml b/modules/code-path-trace/module.yaml
+new file mode 100644
+index 0000000..86da231
+--- /dev/null
++++ b/modules/code-path-trace/module.yaml
+@@ -0,0 +1,65 @@
++schema_version: 1.0.0
++id: MOD-CODE-PATH-TRACE
++version: 0.1.0
++status: experimental
++kind: meta
++title: Code path trace
++summary: Traces triggered write and async paths across interface boundaries to explicit terminal states
++  and creates hypotheses for unresolved commits.
++gate_coverage:
++- HG-CPT
++phase_coverage:
++- G
++selection:
++  policy: any_active_gate
++  priority: 25
++  dependencies:
++  - MOD-HYPOTHESIS-GENERATION
++  conflicts: []
++contract:
++  inputs:
++    required_context_fields:
++    - write_chain_components
++    - financial_path
++    - async_worker
++    artifact_classes:
++    - system_map
++    - hypothesis_register
++    - source_records
++  outputs:
++  - id: module_decision
++    required: true
++    description: Decision-bearing module result with gate trace and evidence references.
++  - id: code_path_traces
++    required: true
++    description: Boundary-by-boundary path traces with terminal states, divergences, and linked CRIT/HIGH
++      hypotheses.
++  evidence:
++    required_kinds:
++    - code
++    - configuration
++    - runtime
++    minimum_sources: 1
++    freshness_required: true
++  failure:
++    on_missing_input: block
++    on_tool_denied: block
++    produces_unknown: true
++  provenance:
++    claims_required: true
++    sources_required: true
++    legacy_refs:
++    - VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Trigger Conditions
++    - "VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Protocol \u2014 5 Steps"
++    - 'VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Hard Gate: HG-CPT'
++  runtime:
++    tool_classes:
++    - read
++    sandbox_required: false
++    network_required: false
++  disclosure:
++    router_summary: Trace triggered write paths to explicit terminal states and convert unresolved boundaries
++      into hypotheses.
++    instruction_path: instructions.md
++    instruction_sha256: d44597b9a82112d11697c02cb8a6044a9871ec33c782469662b5be54255d19d3
++    token_budget: 80
+diff --git a/modules/fmea-lite/instructions.md b/modules/fmea-lite/instructions.md
+new file mode 100644
+index 0000000..500901a
+--- /dev/null
++++ b/modules/fmea-lite/instructions.md
+@@ -0,0 +1,2 @@
++# FMEA-lite
++Record component, failure mode, cause, local/system effects, S/O/D and RPN. Link every material row to a hypothesis; silent rows block `HG-FL`.
+diff --git a/modules/fmea-lite/module.yaml b/modules/fmea-lite/module.yaml
+new file mode 100644
+index 0000000..1232de4
+--- /dev/null
++++ b/modules/fmea-lite/module.yaml
+@@ -0,0 +1,65 @@
++schema_version: 1.0.0
++id: MOD-FMEA-LITE
++version: 0.1.0
++status: experimental
++kind: specialist
++title: FMEA-lite failure ledger
++summary: Enumerates triggered failure modes, causes, local and system effects, and calibrated risk priority
++  before hypotheses are finalized.
++gate_coverage:
++- HG-FL
++phase_coverage:
++- G
++selection:
++  policy: any_active_gate
++  priority: 25
++  dependencies:
++  - MOD-UTILITY-TREE
++  - MOD-HYPOTHESIS-GENERATION
++  conflicts: []
++contract:
++  inputs:
++    required_context_fields:
++    - mode
++    - blast_radius
++    - safety_critical
++    artifact_classes:
++    - utility_tree
++    - system_map
++    - hypothesis_register
++  outputs:
++  - id: module_decision
++    required: true
++    description: Decision-bearing module result with gate trace and evidence references.
++  - id: fmea_ledger
++    required: true
++    description: Triggered six-field failure ledger with RPN components, disposition, and linked hypotheses.
++  evidence:
