@@ -1,0 +1,150 @@
++    description: Isolated judge inputs, independent verdicts, divergence classifications, human-review
++      escalations, and alignment metrics.
++  evidence:
++    required_kinds:
++    - document
++    - code
++    minimum_sources: 1
++    freshness_required: true
++  failure:
++    on_missing_input: block
++    on_tool_denied: block
++    produces_unknown: true
++  provenance:
++    claims_required: true
++    sources_required: true
++    legacy_refs:
++    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[E.IJ] Independent Judge Protocol (v15.0)
++    - "VHEATM-v16.1.1.skill::SKILL.md#[E.IJ] Independent Judge \u2014 applicability note (v16 honesty)"
++    - "VHEATM-v16.1.1.skill::SKILL.md#Independent Generation Protocol \u2014 replacing CONTEXT_DENIED\
++      \ (v13.0 mechanism)"
++  runtime:
++    tool_classes:
++    - read
++    sandbox_required: false
++    network_required: false
++  disclosure:
++    router_summary: Run isolated finding assessment and reconcile every divergence without exposing auditor
++      reasoning.
++    instruction_path: instructions.md
++    instruction_sha256: 878a90a30b23cafa988a37e9fd7929b45e8454b4b13324b094d5a0e0a72e459c
++    token_budget: 80
+diff --git a/modules/knowledge-base/instructions.md b/modules/knowledge-base/instructions.md
+new file mode 100644
+index 0000000..b15bb19
+--- /dev/null
++++ b/modules/knowledge-base/instructions.md
+@@ -0,0 +1,2 @@
++# Knowledge base
++Archive the cycle; update accuracy, maturity patterns, self-tests and lifecycle triggers. Missing lineage, stale evidence or failed invariants block closure.
+diff --git a/modules/knowledge-base/module.yaml b/modules/knowledge-base/module.yaml
+new file mode 100644
+index 0000000..b06be4c
+--- /dev/null
++++ b/modules/knowledge-base/module.yaml
+@@ -0,0 +1,63 @@
++schema_version: 1.0.0
++id: MOD-KNOWLEDGE-BASE
++version: 0.1.0
++status: experimental
++kind: meta
++title: Knowledge base lifecycle
++summary: Updates archives, accuracy history, framework self-tests, maturity patterns, lifecycle records,
++  and comparative-method triggers.
++gate_coverage:
++- HG-KB
++phase_coverage:
++- KB
++selection:
++  policy: any_active_gate
++  priority: 10
++  dependencies:
++  - MOD-CLOSURE-METRICS
++  conflicts: []
++contract:
++  inputs:
++    required_context_fields: []
++    artifact_classes:
++    - closure_record
++    - finding_register
++    - architecture_decision_records
++    - provenance_records
++  outputs:
++  - id: module_decision
++    required: true
++    description: Decision-bearing module result with gate trace and evidence references.
++  - id: knowledge_base_update
++    required: true
++    description: Versioned cycle archive, accuracy dashboard update, self-test results, pattern records,
++      and lifecycle actions.
++  evidence:
++    required_kinds:
++    - document
++    - test
++    minimum_sources: 1
++    freshness_required: true
++  failure:
++    on_missing_input: block
++    on_tool_denied: block
++    produces_unknown: true
++  provenance:
++    claims_required: true
++    sources_required: true
++    legacy_refs:
++    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[KB] Knowledge Base (updated from 9.0)
++    - VHEATM-v16.1.1.skill::references/30-framework-lifecycle.md#Framework Self-Test Catalog
++    - "VHEATM-v16.1.1.skill::references/30-framework-lifecycle.md#Part 7 \u2014 Accuracy Dashboard [KB.AD]\
++      \ (v14.0)"
++  runtime:
++    tool_classes:
++    - read
++    sandbox_required: false
++    network_required: false
++  disclosure:
++    router_summary: Archive the cycle and update accuracy, patterns, self-tests, and framework lifecycle
++      records.
++    instruction_path: instructions.md
++    instruction_sha256: e35f6ad92b2f7103620019df5e534b64b86b1bd598248ef77d8b01c352150470
++    token_budget: 80
+diff --git a/modules/org-blast-radius/instructions.md b/modules/org-blast-radius/instructions.md
+new file mode 100644
+index 0000000..453bac5
+--- /dev/null
++++ b/modules/org-blast-radius/instructions.md
+@@ -0,0 +1,2 @@
++# Org blast radius
++For each mandatory finding, map owner, downstream teams, SLA chains and regulation. Preserve unknown SLA data, compute BRS, and declare escalation.
+diff --git a/modules/org-blast-radius/module.yaml b/modules/org-blast-radius/module.yaml
+new file mode 100644
+index 0000000..d4f02df
+--- /dev/null
++++ b/modules/org-blast-radius/module.yaml
+@@ -0,0 +1,66 @@
++schema_version: 1.0.0
++id: MOD-ORG-BLAST-RADIUS
++version: 0.1.0
++status: experimental
++kind: specialist
++title: Organizational blast radius
++summary: Maps mandatory findings across owners, downstream teams, SLA chains, and regulatory exposure,
++  with conservative unknown handling.
++gate_coverage:
++- HG-ORG
++phase_coverage:
++- G
++selection:
++  policy: any_active_gate
++  priority: 45
++  dependencies:
++  - MOD-INCENTIVE-MISALIGNMENT
++  - MOD-SYSTEM-MAPS
++  conflicts: []
++contract:
++  inputs:
++    required_context_fields:
++    - mode
++    - context_mode
++    - mandatory_findings
++    artifact_classes:
++    - finding_register
++    - ownership_map
