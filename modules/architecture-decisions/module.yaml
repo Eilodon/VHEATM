@@ -1,0 +1,66 @@
+schema_version: 1.0.0
+id: MOD-ARCHITECTURE-DECISIONS
+version: 0.1.0
+status: experimental
+kind: core
+title: Architecture decision synthesis
+summary: Converts verified evidence into explicit architecture decisions with alternatives, consequences,
+  ownership, boundaries, and rollback impact.
+gate_coverage:
+- HG-A
+phase_coverage:
+- A
+selection:
+  policy: any_active_gate
+  priority: 10
+  dependencies:
+  - MOD-EVIDENCE-ANCHORS
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    artifact_classes:
+    - evidence_matrix
+    - finding_register
+    - architecture_documentation
+    - source_records
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: architecture_decision_records
+    required: true
+    description: Decision records with alternatives, consequences, ownership, boundaries, rollout, rollback,
+      and unresolved risks.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - configuration
+    - test
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[A] Architecture Synthesis
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#Core ADR — 🆕 9 Parts (was 7 in 9.0)
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#ADR 🆕 9-Part Template (Section 10) — updated
+      calibration
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Turn verified evidence into explicit ADRs with alternatives, ownership, boundaries,
+      consequences, rollout, and rollback.
+    instruction_path: instructions.md
+    instruction_sha256: 6fb21b40b93f723a022984ab9a21387730f4aada38de5c6f66644457e0a5919f
+    token_budget: 512
