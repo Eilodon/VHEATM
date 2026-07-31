@@ -1,0 +1,22 @@
+schema_version: 1.0.0
+framework_version: 17.0.0-dev.1
+coverage_mode: pilot
+hard_token_budget: 4096
+required_gate_coverage:
+- HG-P
+- HG-AS
+- HG-AD
+- HG-EF
+modules:
+- id: MOD-CONTEXT-CONTRACT
+  path: modules/context-contract/module.yaml
+  sha256: 416e4c00904de36324b9d181f4c3c66ae009e35ab747d192155595bdad4f0033
+- id: MOD-ARCHITECTURE-SMELLS
+  path: modules/architecture-smells/module.yaml
+  sha256: 41b31cbc7493d514c8ba844676bdeb79d566406018ce7b357510d9f585abe4f1
+- id: MOD-AUDITOR-DEFENSE
+  path: modules/auditor-defense/module.yaml
+  sha256: 53e31a17bbe21bcab376fe38e6893e81033a8a246d40033c62a112fc96fdad3b
+- id: MOD-EXECUTION-FIDELITY
+  path: modules/execution-fidelity/module.yaml
+  sha256: 10bf9531e5ae50b4d1751a0309bd84d3c054e30930b9688d5aa8e18ca945f71d
