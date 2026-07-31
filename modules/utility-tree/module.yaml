@@ -1,0 +1,64 @@
+schema_version: 1.0.0
+id: MOD-UTILITY-TREE
+version: 0.1.0
+status: experimental
+kind: specialist
+title: ATAM utility tree
+summary: Ranks architecture quality attributes and records measurable scenarios, sensitivity points, tradeoffs,
+  and architecture-smell weighting.
+gate_coverage:
+- HG-UT
+phase_coverage:
+- V
+selection:
+  policy: any_active_gate
+  priority: 30
+  dependencies:
+  - MOD-SYSTEM-MAPS
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    - context_mode
+    artifact_classes:
+    - system_map
+    - architecture_documentation
+    - stakeholder_declarations
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: utility_tree
+    required: true
+    description: Ranked ISO/IEC 25010 quality scenarios with measures, current state, sensitivity points,
+      tradeoffs, and smell weights.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - configuration
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/23-atam-utility-tree.md#When to Run [V.UT]
+    - VHEATM-v16.1.1.skill::references/23-atam-utility-tree.md#[V.UT] 4-Step Mini-Pass
+    - VHEATM-v16.1.1.skill::references/23-atam-utility-tree.md#[V.UT] Output Schema
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Build measurable quality scenarios and feed explicit weighting into architecture-smell
+      review.
+    instruction_path: instructions.md
+    instruction_sha256: 32f1bb0ae0526cc3a990ac87ac7da8e07b5f30d1e38ec99747c362a489141e84
+    token_budget: 80

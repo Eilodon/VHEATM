@@ -59,3 +59,21 @@ def test_registry_root_binds_legacy_source_fingerprint():
     mutated = copy.deepcopy(registry)
     mutated["legacy_source"]["sha256"] = "0" * 64
     assert _registry_root(mutated) != baseline
+
+
+def test_complete_registry_has_one_owner_for_every_manifest_gate():
+    registry = _load_document(ROOT / "modules" / "registry.yaml")
+    manifest = _load_document(ROOT / "manifests" / "vheatm-v17.yaml")
+    assert registry["coverage_mode"] == "complete"
+    issues, modules = validate_module_repository(
+        ROOT, manifest,
+        module_schema=_load_document(ROOT / "schemas" / "module-contract.schema.json"),
+        registry_schema=_load_document(ROOT / "schemas" / "module-registry.schema.json"),
+    )
+    assert issues == []
+    owners = {}
+    for module in modules.values():
+        for gate in module.document["gate_coverage"]:
+            owners.setdefault(gate, []).append(module.id)
+    assert set(owners) == {gate["id"] for gate in manifest["gates"]["items"]}
+    assert all(len(values) == 1 for values in owners.values())

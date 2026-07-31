@@ -1,0 +1,65 @@
+schema_version: 1.0.0
+id: MOD-INDEPENDENT-JUDGE
+version: 0.1.0
+status: experimental
+kind: meta
+title: Independent judge reconciliation
+summary: Separates finding assessment from auditor reasoning and reconciles independent verdict, severity,
+  confidence, and divergence.
+gate_coverage:
+- HG-IJ
+phase_coverage:
+- E
+selection:
+  policy: any_active_gate
+  priority: 40
+  dependencies:
+  - MOD-EVIDENCE-ANCHORS
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - target_tier
+    - self_audit
+    - async_worker
+    artifact_classes:
+    - finding_register
+    - evidence_matrix
+    - source_records
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: independent_judge_reconciliation
+    required: true
+    description: Isolated judge inputs, independent verdicts, divergence classifications, human-review
+      escalations, and alignment metrics.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[E.IJ] Independent Judge Protocol (v15.0)
+    - "VHEATM-v16.1.1.skill::SKILL.md#[E.IJ] Independent Judge \u2014 applicability note (v16 honesty)"
+    - "VHEATM-v16.1.1.skill::SKILL.md#Independent Generation Protocol \u2014 replacing CONTEXT_DENIED\
+      \ (v13.0 mechanism)"
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Run isolated finding assessment and reconcile every divergence without exposing auditor
+      reasoning.
+    instruction_path: instructions.md
+    instruction_sha256: 878a90a30b23cafa988a37e9fd7929b45e8454b4b13324b094d5a0e0a72e459c
+    token_budget: 80

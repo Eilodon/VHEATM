@@ -1,0 +1,65 @@
+schema_version: 1.0.0
+id: MOD-CODE-PATH-TRACE
+version: 0.1.0
+status: experimental
+kind: meta
+title: Code path trace
+summary: Traces triggered write and async paths across interface boundaries to explicit terminal states
+  and creates hypotheses for unresolved commits.
+gate_coverage:
+- HG-CPT
+phase_coverage:
+- G
+selection:
+  policy: any_active_gate
+  priority: 25
+  dependencies:
+  - MOD-HYPOTHESIS-GENERATION
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - write_chain_components
+    - financial_path
+    - async_worker
+    artifact_classes:
+    - system_map
+    - hypothesis_register
+    - source_records
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: code_path_traces
+    required: true
+    description: Boundary-by-boundary path traces with terminal states, divergences, and linked CRIT/HIGH
+      hypotheses.
+  evidence:
+    required_kinds:
+    - code
+    - configuration
+    - runtime
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Trigger Conditions
+    - "VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Protocol \u2014 5 Steps"
+    - 'VHEATM-v16.1.1.skill::references/31-code-path-trace.md#Hard Gate: HG-CPT'
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Trace triggered write paths to explicit terminal states and convert unresolved boundaries
+      into hypotheses.
+    instruction_path: instructions.md
+    instruction_sha256: d44597b9a82112d11697c02cb8a6044a9871ec33c782469662b5be54255d19d3
+    token_budget: 80

@@ -35,9 +35,17 @@ MOD-EVIDENCE-ANCHORS
 
 Hybrid verification also depends on evidence anchoring and is selected only when `HG-HV` is active. The migrated procedures preserve explicit unknowns, require evidence-bearing outputs, and never treat skipped execution or broad test success as proof.
 
-## Non-authoritative remainder
+## Batch 3 — triggered and meta-defense completion
 
-Eight gates remain unmigrated: `HG-UT`, `HG-FL`, `HG-INC`, `HG-ORG`, `HG-CPT`, `HG-IJ`, `HG-M`, and `HG-KB`. Their legacy sections remain research input only.
+```text
+MOD-SYSTEM-MAPS -> MOD-UTILITY-TREE -> MOD-FMEA-LITE
+MOD-HYPOTHESIS-GENERATION -> MOD-INCENTIVE-MISALIGNMENT -> MOD-ORG-BLAST-RADIUS
+MOD-HYPOTHESIS-GENERATION -> MOD-CODE-PATH-TRACE
+MOD-EVIDENCE-ANCHORS -> MOD-INDEPENDENT-JUDGE
+MOD-ADVERSARIAL-PASS + MOD-EXECUTION-FIDELITY -> MOD-CLOSURE-METRICS -> MOD-KNOWLEDGE-BASE
+```
+
+All 22 gates are now migrated. The V16.1.1 archive remains source provenance rather than runtime instruction authority.
 
 ## Acceptance rule
 

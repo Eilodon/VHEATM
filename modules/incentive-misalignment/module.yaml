@@ -1,0 +1,63 @@
+schema_version: 1.0.0
+id: MOD-INCENTIVE-MISALIGNMENT
+version: 0.1.0
+status: experimental
+kind: specialist
+title: Incentive misalignment probe
+summary: Tests whether ownership, incentives, or organizational velocity make confirmed findings unlikely
+  to be fixed correctly.
+gate_coverage:
+- HG-INC
+phase_coverage:
+- G
+selection:
+  policy: any_active_gate
+  priority: 40
+  dependencies:
+  - MOD-HYPOTHESIS-GENERATION
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    - context_mode
+    artifact_classes:
+    - hypothesis_register
+    - ownership_map
+    - organization_records
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: incentive_probe_records
+    required: true
+    description: Per-confirmed-hypothesis ownership, incentive, velocity, boundary, and remediation-friction
+      decisions.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/14-incentive-misalignment.md#The 3-Question Probe
+    - VHEATM-v16.1.1.skill::references/14-incentive-misalignment.md#BOUNDARY FLAG Protocol
+    - VHEATM-v16.1.1.skill::references/14-incentive-misalignment.md#Output Template
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Probe ownership, incentives, and delivery friction for every confirmed enterprise
+      hypothesis.
+    instruction_path: instructions.md
+    instruction_sha256: 5e216f380bcc78d2b72bc0faac82d2e661165b8761997bd9984631f0b91b5089
+    token_budget: 80

@@ -1,0 +1,66 @@
+schema_version: 1.0.0
+id: MOD-ORG-BLAST-RADIUS
+version: 0.1.0
+status: experimental
+kind: specialist
+title: Organizational blast radius
+summary: Maps mandatory findings across owners, downstream teams, SLA chains, and regulatory exposure,
+  with conservative unknown handling.
+gate_coverage:
+- HG-ORG
+phase_coverage:
+- G
+selection:
+  policy: any_active_gate
+  priority: 45
+  dependencies:
+  - MOD-INCENTIVE-MISALIGNMENT
+  - MOD-SYSTEM-MAPS
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    - context_mode
+    - mandatory_findings
+    artifact_classes:
+    - finding_register
+    - ownership_map
+    - incentive_probe_records
+    - sla_records
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: org_blast_radius_maps
+    required: true
+    description: Four-layer organizational impact maps with BRS, escalation, ownership, SLA, and regulatory
+      decisions.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/15-org-blast-radius.md#The 4-Layer ORG Map
+    - VHEATM-v16.1.1.skill::references/15-org-blast-radius.md#Blast Radius Score (BRS)
+    - VHEATM-v16.1.1.skill::references/15-org-blast-radius.md#ORG Map Output Template
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Map mandatory findings through teams, SLAs, and regulatory exposure with conservative
+      unknowns.
+    instruction_path: instructions.md
+    instruction_sha256: 08fcab8fb24ed0cea80c3753d494e888d86d2e1387f2ec23e13e3f15fef4b6d1
+    token_budget: 80

@@ -90,4 +90,4 @@ Stop and block when:
 
 ## Current migration state
 
-The registry remains in `pilot` coverage mode with fourteen runtime-authoritative gate modules. The analysis and closure chains now run from context through evidence, architecture decisions, transformation proof, fix proof, and adversarial challenge; eight gates remain legacy-only research input.
+The registry is in `complete` coverage mode with one runtime-authoritative module for each of the 22 canonical gates. Triggered and meta-defense procedures are digest-bound, dependency-ordered, provenance-linked, and covered by routing regressions.
