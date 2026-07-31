@@ -27,9 +27,9 @@ The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gat
 
 ## Integrity
 
-The registry pins every module digest, every module pins its instruction digest, and the deterministic registry root also binds the reviewed legacy-source fingerprint. Repository validation rejects path escape, digest mismatch, unknown or multiply-owned gates, dependency cycles, malformed or wrong-archive legacy references, missing instructions, and budget overflow.
+The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
 
-The legacy archive remains outside the runtime repository. Its recorded fingerprint is therefore a reviewed migration assertion rather than a CI rehash of the omitted source bundle.
+The registry records the reviewed legacy archive fingerprint, but the archive remains outside the runtime repository. Its fingerprint is therefore a migration-review assertion rather than a CI rehash of the omitted source bundle.
 
 ## Routing semantics
 
@@ -49,4 +49,4 @@ Hybrid verification branches from evidence anchoring for mandatory findings. Rou
 
 ## Migration rule
 
-Legacy prose can inform a module, but does not become authoritative until the module has a machine contract, exact archive/path/heading references, digest-bound instructions, registry inclusion, and regression tests.
+Legacy prose can inform a module, but does not become authoritative until the module has a machine contract, archive/path/heading references, digest-bound instructions, registry inclusion, and regression tests.
