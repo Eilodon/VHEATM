@@ -2,7 +2,7 @@
 
 VHEATM is an AI-executable audit orchestration framework being rebuilt as a **machine-validated, AI-native control plane**.
 
-The V17 line moves invariants, activation rules, evidence contracts, and runtime boundaries out of prose-only instructions and into executable artifacts.
+The V17 line moves invariants, activation rules, evidence contracts, runtime boundaries, and audit completion decisions out of prose-only instructions and into executable artifacts.
 
 ## Implemented slices
 
@@ -22,10 +22,20 @@ The V17 line moves invariants, activation rules, evidence contracts, and runtime
 - deterministic gate activation plans with machine-readable reasons;
 - context-schema reference validation that catches misspelled identifiers in CI;
 - content-addressed source and claim IDs;
-- append-only provenance registry with cross-reference checks;
-- optional provenance and activation-plan links in audit reports and findings.
+- provenance registry with cross-reference checks.
 
-The evaluator decides only whether a gate is **active**, **inactive**, or **unknown**. It never claims that a gate passed.
+### P1.5 — enforcement closure
+
+- replayable, append-only audit lifecycle state machine;
+- semantic report validation across manifest, plan, all 22 gate results, findings, provenance, lifecycle, and attestation;
+- passing gates require verified evidence references;
+- mandatory and verified findings cannot bypass claim/source lineage;
+- signed, scoped, expiring, single-use approval tokens for restricted tool classes;
+- deny-before-execution policy guard for execute, write, network, and secret requests;
+- atomic persistent provenance with ID recomputation, byte-digest verification, append-only updates, and optimistic concurrency protection;
+- expiring attestations bound to canonical manifest, runtime policy, and report subject digests.
+
+The evaluator decides only whether a gate is **active**, **inactive**, or **unknown**. Gate pass/fail remains evidence-bearing output and is checked separately by `vheatm-validate-report`.
 
 ## Quick start
 
@@ -33,6 +43,7 @@ The evaluator decides only whether a gate is **active**, **inactive**, or **unkn
 python -m pip install -e '.[dev]'
 vheatm-validate --root .
 vheatm-evaluate --root . --context examples/context-low-risk.yaml
+vheatm-validate-report --root . --report path/to/report.json
 pytest
 ```
 
@@ -46,9 +57,11 @@ pytest
 
 1. `manifests/vheatm-v17.yaml` — framework inventory and activation expressions.
 2. `policies/runtime-boundaries.yaml` — runtime trust and safety policy.
-3. `schemas/` — machine contracts, including audit context and gate plans.
-4. `src/vheatm_control/` — executable validation, planning, and provenance.
+3. `schemas/` — machine contracts for context, plans, reports, lifecycle, provenance, approvals, tool requests, and policy decisions.
+4. `src/vheatm_control/` — executable validation, planning, enforcement, lifecycle, and provenance.
 5. `tests/` — invariants and regression behavior.
 6. `docs/` — explanation; never overrides executable artifacts.
 
-The v16.1.1 prose corpus remains non-authoritative until migrated module-by-module with declared inputs, outputs, activation, evidence, failure behavior, and tests.
+The policy engine is a decision-and-guard layer. Platform adapters must still supply the concrete sandbox, filesystem isolation, and network transport required by an allowed decision.
+
+The v16.1.1 prose corpus remains non-authoritative until migrated module-by-module with declared inputs, outputs, activation, evidence, failure behavior, provenance expectations, and tests.
