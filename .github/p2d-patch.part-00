@@ -1,0 +1,115 @@
+diff --git a/SKILL.md b/SKILL.md
+index 274f53e..5d9a8ed 100644
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -90,4 +90,4 @@ Stop and block when:
+ 
+ ## Current migration state
+ 
+-The registry remains in `pilot` coverage mode with fourteen runtime-authoritative gate modules. The analysis and closure chains now run from context through evidence, architecture decisions, transformation proof, fix proof, and adversarial challenge; eight gates remain legacy-only research input.
++The registry is in `complete` coverage mode with one runtime-authoritative module for each of the 22 canonical gates. Triggered and meta-defense procedures are digest-bound, dependency-ordered, provenance-linked, and covered by routing regressions.
+diff --git a/docs/corpus-migration.md b/docs/corpus-migration.md
+index 1a53752..f276de3 100644
+--- a/docs/corpus-migration.md
++++ b/docs/corpus-migration.md
+@@ -35,9 +35,17 @@ MOD-EVIDENCE-ANCHORS
+ 
+ Hybrid verification also depends on evidence anchoring and is selected only when `HG-HV` is active. The migrated procedures preserve explicit unknowns, require evidence-bearing outputs, and never treat skipped execution or broad test success as proof.
+ 
+-## Non-authoritative remainder
++## Batch 3 — triggered and meta-defense completion
+ 
+-Eight gates remain unmigrated: `HG-UT`, `HG-FL`, `HG-INC`, `HG-ORG`, `HG-CPT`, `HG-IJ`, `HG-M`, and `HG-KB`. Their legacy sections remain research input only.
++```text
++MOD-SYSTEM-MAPS -> MOD-UTILITY-TREE -> MOD-FMEA-LITE
++MOD-HYPOTHESIS-GENERATION -> MOD-INCENTIVE-MISALIGNMENT -> MOD-ORG-BLAST-RADIUS
++MOD-HYPOTHESIS-GENERATION -> MOD-CODE-PATH-TRACE
++MOD-EVIDENCE-ANCHORS -> MOD-INDEPENDENT-JUDGE
++MOD-ADVERSARIAL-PASS + MOD-EXECUTION-FIDELITY -> MOD-CLOSURE-METRICS -> MOD-KNOWLEDGE-BASE
++```
++
++All 22 gates are now migrated. The V16.1.1 archive remains source provenance rather than runtime instruction authority.
+ 
+ ## Acceptance rule
+ 
+diff --git a/docs/module-system.md b/docs/module-system.md
+index 7bcd7aa..12a0b98 100644
+--- a/docs/module-system.md
++++ b/docs/module-system.md
+@@ -14,16 +14,11 @@ audit context
+   -> semantic report validation
+ ```
+ 
+-## Pilot coverage
++## Complete coverage
+ 
+-The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gates:
++The registry is `complete`: all 22 canonical gates have exactly one runtime-authoritative module. The final batch adds utility-tree analysis, FMEA-lite, incentive and organizational probes, code-path tracing, independent judging, closure metrics, and knowledge-base lifecycle updates.
+ 
+-- context, system maps, hypothesis generation, compound decomposition, pattern globalization, and evidence anchoring (`HG-P`, `HG-V`, `HG-G`, `HG-CF`, `HG-PG`, `HG-E`);
+-- architecture decision synthesis, transformation verification, and post-fix verification (`HG-A`, `HG-T`, `HG-FV`);
+-- architecture smells, auditor defense, hybrid verification, and the adversarial pass (`HG-AS`, `HG-AD`, `HG-HV`, `HG-AP`);
+-- execution fidelity (`HG-EF`).
+-
+-`complete` coverage mode is reserved for the point where all 22 gates have validated module coverage.
++Triggered modules remain selected only by the canonical activation plan. Dependencies may disclose prerequisite modules, but no gate gains a second authoritative owner.
+ 
+ ## Integrity
+ 
+diff --git a/modules/closure-metrics/instructions.md b/modules/closure-metrics/instructions.md
+new file mode 100644
+index 0000000..27b3c65
+--- /dev/null
++++ b/modules/closure-metrics/instructions.md
+@@ -0,0 +1,2 @@
++# Closure metrics
++Record outcomes, debt, calibration, behavior flags, stranger review, stop conditions and attestation inputs. Preserve partial or halted status.
+diff --git a/modules/closure-metrics/module.yaml b/modules/closure-metrics/module.yaml
+new file mode 100644
+index 0000000..b564e59
+--- /dev/null
++++ b/modules/closure-metrics/module.yaml
+@@ -0,0 +1,68 @@
++schema_version: 1.0.0
++id: MOD-CLOSURE-METRICS
++version: 0.1.0
++status: experimental
++kind: meta
++title: Closure metrics and attestation
++summary: Records metrics, debt, calibration, behavior signals, stranger review, stop conditions, and attestation
++  after adversarial and fidelity checks.
++gate_coverage:
++- HG-M
++phase_coverage:
++- M
++selection:
++  policy: any_active_gate
++  priority: 950
++  dependencies:
++  - MOD-ADVERSARIAL-PASS
++  - MOD-EXECUTION-FIDELITY
++  conflicts: []
++contract:
++  inputs:
++    required_context_fields:
++    - mode
++    - context_mode
++    artifact_classes:
++    - finding_register
++    - adversarial_challenge_set
++    - execution_fidelity_record
++    - fix_verification_records
++  outputs:
++  - id: module_decision
++    required: true
++    description: Decision-bearing module result with gate trace and evidence references.
++  - id: closure_record
++    required: true
++    description: Closure metrics, debt, calibration, behavior flags, human-review tags, stop conditions,
++      and attestation inputs.
++  evidence:
++    required_kinds:
++    - document
++    - test
++    - runtime
++    minimum_sources: 1
