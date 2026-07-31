@@ -1,0 +1,118 @@
+        self.policy = policy
++        self.schemas = schemas
++        self.keyring = dict(keyring or {})
++        self.capabilities = capabilities or BrokerCapabilities()
++        self.token_ledger = token_ledger or InMemoryTokenLedger()
++        self.clock = clock or (lambda: datetime.now(timezone.utc))
++        self._format_checker = FormatChecker()
++        self._validate_configuration()
++
++    @classmethod
++    def from_root(
++        cls,
++        root: Path,
++        *,
++        keyring: Mapping[str, bytes] | None = None,
++        capabilities: BrokerCapabilities | None = None,
++        token_ledger: TokenLedger | None = None,
++        clock: Callable[[], datetime] | None = None,
++    ) -> "ToolBroker":
++        root = root.resolve()
++        policy = _load_yaml(root / "policies" / "runtime-boundaries.yaml")
++        schemas = BrokerSchemas(
++            runtime_policy=_load_json(root / "schemas" / "runtime-policy.schema.json"),
++            tool_request=_load_json(root / "schemas" / "tool-request.schema.json"),
++            approval_token=_load_json(root / "schemas" / "approval-token.schema.json"),
++            policy_decision=_load_json(root / "schemas" / "policy-decision.schema.json"),
++        )
++        return cls(
++            policy=policy,
++            schemas=schemas,
++            keyring=keyring,
++            capabilities=capabilities,
++            token_ledger=token_ledger,
++            clock=clock,
++        )
++
++    def evaluate(
++        self,
++        request: Mapping[str, Any],
++        approval_token: Mapping[str, Any] | None = None,
++    ) -> dict[str, Any]:
++        now = _ensure_aware_utc(self.clock())
++        request_id = request.get("request_id") if isinstance(request, Mapping) else None
++        if not isinstance(request_id, str) or not request_id:
++            request_id = "invalid-request"
++
++        request_errors = self._schema_errors(request, self.schemas.tool_request)
++        if request_errors:
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason=f"tool request schema validation failed: {request_errors[0]}",
++                controls=("schema:tool-request", "policy:fail-closed"),
++                evaluated_at=now,
++            )
++
++        try:
++            scope = _workspace_scope(str(request["scope"]))
++        except ValueError as exc:
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason=str(exc),
++                controls=("scope:workspace", "policy:fail-closed"),
++                evaluated_at=now,
++            )
++
++        tool_class = str(request["tool_class"])
++        tool_policy = self.policy.get("tools", {}).get("classes", {}).get(tool_class)
++        if not isinstance(tool_policy, Mapping):
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason=f"tool class {tool_class!r} has no validated policy",
++                controls=("policy:tools.default-deny",),
++                evaluated_at=now,
++            )
++
++        controls = ["schema:tool-request", "scope:workspace", "policy:tools.default-deny"]
++        verified_token_id: str | None = None
++        token_required_for = set(self.policy.get("human_approval", {}).get("token_required_for", []))
++        requires_approval = tool_class in token_required_for or tool_policy.get("allowed_without_approval") is not True
++        if requires_approval:
++            token_result = self._verify_approval(request, approval_token, now)
++            if token_result[0] is None:
++                return self._decision(
++                    request_id=request_id,
++                    allowed=False,
++                    reason=token_result[1],
++                    controls=tuple(controls + ["approval:required", "policy:fail-closed"]),
++                    evaluated_at=now,
++                )
++            verified_token_id = token_result[0]
++            controls.extend(("approval:verified", "approval:single-use"))
++            if not self.token_ledger.consume(verified_token_id):
++                return self._decision(
++                    request_id=request_id,
++                    allowed=False,
++                    reason="approval token has already been consumed",
++                    controls=tuple(controls + ["approval:replay-blocked", "policy:fail-closed"]),
++                    evaluated_at=now,
++                    approval_token_id=verified_token_id,
++                )
++        elif approval_token is not None:
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason="approval token supplied for a tool class that does not require approval",
++                controls=tuple(controls + ["approval:unexpected", "policy:fail-closed"]),
++                evaluated_at=now,
++            )
++
++        evaluator = getattr(self, f"_evaluate_{tool_class}", None)
++        if evaluator is None:
++            return self._decision(
++                request_id=request_id,
++                allowed=False,
++                reason=f"tool clas
