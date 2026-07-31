@@ -1,11 +1,11 @@
 schema_version: 1.0.0
 id: MOD-AUDITOR-DEFENSE
-version: 0.1.0
+version: 0.2.0
 status: experimental
 kind: specialist
 title: Auditor defense
-summary: Inspects artifact-borne instructions and naming attacks while preserving
-  taint and deny-before-execution behavior.
+summary: Inspects artifact-borne instructions and naming attacks while preserving taint and deny-before-execution
+  behavior.
 gate_coverage:
 - HG-AD
 phase_coverage:
@@ -13,7 +13,8 @@ phase_coverage:
 selection:
   policy: any_active_gate
   priority: 50
-  dependencies: []
+  dependencies:
+  - MOD-HYPOTHESIS-GENERATION
   conflicts: []
 contract:
   inputs:
@@ -42,15 +43,15 @@ contract:
     claims_required: true
     sources_required: true
     legacy_refs:
-    - v16.1.1 auditor-defense artifact instruction attack checks
+    - VHEATM-v16.1.1.skill::references/28-auditor-defense.md#[G.AD] Protocol — Auditor Defense Scan
   runtime:
     tool_classes:
     - read
     sandbox_required: false
     network_required: false
   disclosure:
-    router_summary: Inspects artifact-borne instructions and naming attacks while
-      preserving taint and deny-before-execution behavior.
+    router_summary: Inspects artifact-borne instructions and naming attacks while preserving taint and
+      deny-before-execution behavior.
     instruction_path: instructions.md
     instruction_sha256: eec503641f303a1b65ab0226449039160a606817ef9a8a1bb5ceaf8c0d0c4180
     token_budget: 512
