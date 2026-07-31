@@ -2,7 +2,7 @@
 
 VHEATM is an AI-executable audit orchestration framework being rebuilt as a **machine-validated, AI-native control plane**.
 
-The V17 line moves invariants, activation rules, evidence contracts, runtime boundaries, and audit completion decisions out of prose-only instructions and into executable artifacts.
+The V17 line moves invariants, activation rules, evidence contracts, runtime boundaries, audit completion decisions, and instruction routing out of prose-only instructions and into executable artifacts.
 
 ## Implemented slices
 
@@ -35,33 +35,47 @@ The V17 line moves invariants, activation rules, evidence contracts, runtime bou
 - atomic persistent provenance with ID recomputation, byte-digest verification, append-only updates, and optimistic concurrency protection;
 - expiring attestations bound to canonical manifest, runtime policy, and report subject digests.
 
-The evaluator decides only whether a gate is **active**, **inactive**, or **unknown**. Gate pass/fail remains evidence-bearing output and is checked separately by `vheatm-validate-report`.
+### P2-A — module contracts and deterministic routing
+
+- compact root `SKILL.md` router capped at 350 lines;
+- machine contracts for modules, the module registry, and module-selection output;
+- digest chain from registry to module document to instruction file;
+- deterministic routing from the complete gate plan, never from keyword matching or agent intuition;
+- dependency closure, cycle detection, symmetric conflicts, phase ordering, and hard disclosure budgets;
+- unknown gates and unresolved modules remain blocking;
+- progressive disclosure keeps instruction bodies out of context until their modules are selected;
+- pilot migration for context validation, architecture smells, auditor defense, and execution fidelity.
+
+The evaluator decides only whether a gate is **active**, **inactive**, or **unknown**. The router decides which validated instruction modules are required. Neither component manufactures gate pass/fail results; evidence-bearing results are checked separately by `vheatm-validate-report`.
 
 ## Quick start
 
 ```bash
 python -m pip install -e '.[dev]'
 vheatm-validate --root .
-vheatm-evaluate --root . --context examples/context-low-risk.yaml
+vheatm-evaluate --root . --context examples/context-low-risk.yaml > gate-plan.json
+vheatm-route --root . --plan gate-plan.json > module-selection.json
 vheatm-validate-report --root . --report path/to/report.json
 pytest
 ```
 
-`vheatm-evaluate` exit codes:
+`vheatm-evaluate` and `vheatm-route` exit codes:
 
-- `0`: every activation is resolved;
-- `1`: invalid context, malformed input, or runtime error;
-- `2`: one or more activations remain unknown, so completion is blocked.
+- `0`: the plan or selection is resolved;
+- `1`: invalid input, malformed artifact, or runtime error;
+- `2`: unknown activation, unresolved module, conflict, or disclosure-budget violation blocks completion.
 
 ## Source-of-truth order
 
 1. `manifests/vheatm-v17.yaml` — framework inventory and activation expressions.
 2. `policies/runtime-boundaries.yaml` — runtime trust and safety policy.
-3. `schemas/` — machine contracts for context, plans, reports, lifecycle, provenance, approvals, tool requests, and policy decisions.
-4. `src/vheatm_control/` — executable validation, planning, enforcement, lifecycle, and provenance.
-5. `tests/` — invariants and regression behavior.
-6. `docs/` — explanation; never overrides executable artifacts.
+3. `schemas/` — machine contracts for context, plans, modules, reports, lifecycle, provenance, approvals, tool requests, and policy decisions.
+4. `modules/registry.yaml` and `modules/*/module.yaml` — digest-bound runtime-authoritative instruction modules.
+5. `SKILL.md` — compact execution router; it cannot override the artifacts above.
+6. `src/vheatm_control/` — executable validation, planning, routing, enforcement, lifecycle, and provenance.
+7. `tests/` — invariants and regression behavior.
+8. `docs/` — explanation; never overrides executable artifacts.
 
 The policy engine is a decision-and-guard layer. Platform adapters must still supply the concrete sandbox, filesystem isolation, and network transport required by an allowed decision.
 
-The v16.1.1 prose corpus remains non-authoritative until migrated module-by-module with declared inputs, outputs, activation, evidence, failure behavior, provenance expectations, and tests.
+The module registry currently uses `pilot` coverage. Unmigrated v16.1.1 prose remains non-authoritative until converted into digest-bound modules with declared inputs, outputs, selection, evidence, failure behavior, provenance expectations, runtime needs, and tests.
