@@ -12,6 +12,7 @@ from referencing import Registry, Resource
 
 from .activation import ActivationError, compile_activation
 from .models import Manifest
+from .module_router import validate_module_repository
 
 
 REQUIRED_SCHEMA_FILES = frozenset(
@@ -23,6 +24,9 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "claim.schema.json",
         "finding.schema.json",
         "gate-plan.schema.json",
+        "module-contract.schema.json",
+        "module-registry.schema.json",
+        "module-selection.schema.json",
         "policy-decision.schema.json",
         "provenance-record.schema.json",
         "provenance-registry.schema.json",
@@ -140,8 +144,10 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     schema_dir = root / "schemas"
     manifest_path = root / "manifests" / "vheatm-v17.yaml"
     policy_path = root / "policies" / "runtime-boundaries.yaml"
+    module_registry_path = root / "modules" / "registry.yaml"
+    skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path]
+    required = [schema_dir, manifest_path, policy_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -172,6 +178,15 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
             if unknown_phase_gates:
                 issues.append(ValidationIssue("manifest", f"gates reference unknown phases: {unknown_phase_gates}"))
             issues.extend(_validate_activations(parsed, context_schema))
+
+            module_issues, _ = validate_module_repository(
+                root,
+                manifest,
+                module_schema=_load_json(schema_dir / "module-contract.schema.json"),
+                registry_schema=_load_json(schema_dir / "module-registry.schema.json"),
+                context_schema=context_schema,
+            )
+            issues.extend(ValidationIssue(issue.source, issue.message) for issue in module_issues)
 
     issues.extend(_validate_runtime_policy_invariants(policy))
     return issues
