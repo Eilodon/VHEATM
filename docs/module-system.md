@@ -14,16 +14,11 @@ audit context
   -> semantic report validation
 ```
 
-## Pilot coverage
+## Complete coverage
 
-The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gates:
+The registry is `complete`: all 22 canonical gates have exactly one runtime-authoritative module. The final batch adds utility-tree analysis, FMEA-lite, incentive and organizational probes, code-path tracing, independent judging, closure metrics, and knowledge-base lifecycle updates.
 
-- context, system maps, hypothesis generation, compound decomposition, pattern globalization, and evidence anchoring (`HG-P`, `HG-V`, `HG-G`, `HG-CF`, `HG-PG`, `HG-E`);
-- architecture decision synthesis, transformation verification, and post-fix verification (`HG-A`, `HG-T`, `HG-FV`);
-- architecture smells, auditor defense, hybrid verification, and the adversarial pass (`HG-AS`, `HG-AD`, `HG-HV`, `HG-AP`);
-- execution fidelity (`HG-EF`).
-
-`complete` coverage mode is reserved for the point where all 22 gates have validated module coverage.
+Triggered modules remain selected only by the canonical activation plan. Dependencies may disclose prerequisite modules, but no gate gains a second authoritative owner.
 
 ## Integrity
 

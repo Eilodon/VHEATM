@@ -29,6 +29,14 @@ EXPECTED_MODULES = {
     "MOD-FIX-VERIFICATION",
     "MOD-ADVERSARIAL-PASS",
     "MOD-EXECUTION-FIDELITY",
+    "MOD-UTILITY-TREE",
+    "MOD-FMEA-LITE",
+    "MOD-INCENTIVE-MISALIGNMENT",
+    "MOD-ORG-BLAST-RADIUS",
+    "MOD-CODE-PATH-TRACE",
+    "MOD-INDEPENDENT-JUDGE",
+    "MOD-CLOSURE-METRICS",
+    "MOD-KNOWLEDGE-BASE",
 }
 
 
@@ -204,3 +212,24 @@ def test_adversarial_pass_depends_on_verified_fixes():
         "MOD-FIX-VERIFICATION",
         "MOD-ADVERSARIAL-PASS",
     ]
+
+
+def test_complete_registry_routes_all_twenty_two_gate_owners():
+    result = load_and_route(ROOT, _plan({gate["id"]: "active" for gate in _manifest()["gates"]["items"]}))
+    ids = [item["id"] for item in result["selected_modules"]]
+    assert len(ids) == 22
+    assert len(set(ids)) == 22
+    assert result["summary"]["budget_exceeded"] is False
+    assert result["summary"]["completion_blocked"] is False
+
+
+def test_triggered_and_meta_completion_dependencies():
+    utility = load_and_route(ROOT, _plan({"HG-UT": "active"}))
+    assert [item["id"] for item in utility["selected_modules"]] == [
+        "MOD-CONTEXT-CONTRACT", "MOD-SYSTEM-MAPS", "MOD-UTILITY-TREE"
+    ]
+    kb = load_and_route(ROOT, _plan({"HG-KB": "active"}))
+    ids = [item["id"] for item in kb["selected_modules"]]
+    assert ids[-2:] == ["MOD-CLOSURE-METRICS", "MOD-KNOWLEDGE-BASE"]
+    assert "MOD-ADVERSARIAL-PASS" in ids
+    assert "MOD-EXECUTION-FIDELITY" in ids
