@@ -16,32 +16,37 @@ audit context
 
 ## Pilot coverage
 
-The registry remains `pilot`, but Batch 1 expands validated coverage to nine gates:
+The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gates:
 
-- core context contract (`HG-P`);
-- core system and boundary maps (`HG-V`);
-- core hypothesis generation and bias control (`HG-G`);
-- core compound feature decomposition (`HG-CF`);
-- core pattern globalization (`HG-PG`);
-- core evidence anchors and claim disposition (`HG-E`);
-- triggered architecture smell scanning (`HG-AS`);
-- triggered auditor defense (`HG-AD`);
-- meta execution fidelity (`HG-EF`).
+- context, system maps, hypothesis generation, compound decomposition, pattern globalization, and evidence anchoring (`HG-P`, `HG-V`, `HG-G`, `HG-CF`, `HG-PG`, `HG-E`);
+- architecture decision synthesis, transformation verification, and post-fix verification (`HG-A`, `HG-T`, `HG-FV`);
+- architecture smells, auditor defense, hybrid verification, and the adversarial pass (`HG-AS`, `HG-AD`, `HG-HV`, `HG-AP`);
+- execution fidelity (`HG-EF`).
 
 `complete` coverage mode is reserved for the point where all 22 gates have validated module coverage.
 
 ## Integrity
 
-The registry pins the SHA-256 of every module document. Each module document pins the SHA-256 of its instruction file. The registry also records the artifact name, version, byte length, and SHA-256 declared for the legacy archive used during migration.
+The registry pins every module digest, every module pins its instruction digest, and the deterministic registry root also binds the reviewed legacy-source fingerprint. Repository validation rejects path escape, digest mismatch, unknown or multiply-owned gates, dependency cycles, malformed or wrong-archive legacy references, missing instructions, and budget overflow.
 
-Repository validation rejects path escape, digest mismatch, unknown gates or phases, dependency cycles, asymmetric conflicts, missing instructions, malformed legacy references, and instruction bodies that exceed their declared token budget. The legacy archive is intentionally not loaded into the runtime repository, so its recorded byte fingerprint is a migration-review assertion rather than a CI rehash of the source bundle.
+The legacy archive remains outside the runtime repository. Its recorded fingerprint is therefore a reviewed migration assertion rather than a CI rehash of the omitted source bundle.
 
 ## Routing semantics
 
 A module selects when its contract policy is satisfied by active covered gates. Unknown covered gates create an unresolved module rather than silently skipping it. Dependencies are included transitively and ordered before dependents. Selected modules are ordered deterministically by phase, priority, dependency, and module ID.
 
-Routing blocks completion when the plan contains unknown gates, a module remains unresolved, selected modules conflict, or instruction disclosure exceeds the registry hard budget.
+The Batch 2 closure path is:
+
+```text
+evidence anchors
+  -> architecture decisions
+  -> transformation verification
+  -> fix verification
+  -> adversarial pass
+```
+
+Hybrid verification branches from evidence anchoring for mandatory findings. Routing blocks completion when the plan contains unknown gates, a module remains unresolved, selected modules conflict, or disclosure exceeds the hard budget.
 
 ## Migration rule
 
-Legacy prose can inform a module, but does not become authoritative until the module has a machine contract, archive/path/heading references, digest-bound instructions, registry inclusion, and tests. The recorded archive fingerprint identifies the reviewed migration source; it does not make the legacy archive executable policy.
+Legacy prose can inform a module, but does not become authoritative until the module has a machine contract, exact archive/path/heading references, digest-bound instructions, registry inclusion, and regression tests.
