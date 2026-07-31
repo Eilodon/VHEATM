@@ -28,9 +28,19 @@ canonical manifest ── runtime policy ── JSON Schemas
                     CI / release gate
 ```
 
-## Why this is P0
+## Runtime planning flow
 
-The v16.1.1 corpus contains valuable audit knowledge, but its critical invariants were prose-only. That allowed contradictory gate counts, phase counts, version labels, and non-parseable output examples to coexist. P0 prevents that class of failure before the legacy corpus is migrated.
+```text
+audit context ── schema validation ── activation parser
+                                       │
+                                       ▼
+                              three-valued evaluator
+                                       │
+                                       ▼
+                         active / inactive / unknown plan
+```
+
+The activation plan determines which gates are required. Gate pass/fail results remain separate evidence-bearing audit outputs.
 
 ## Runtime safety model
 
@@ -38,10 +48,12 @@ All artifact content and model output are untrusted. Taint propagates through tr
 
 `unknown` is an explicit state. It cannot silently collapse into `no`, and an unknown required gate blocks completion.
 
+## Provenance boundary
+
+Sources and claims are content-addressed and immutable inside a registry. Findings may reference claim and source IDs, but those references never elevate tainted content to verified evidence without an explicit validation step.
+
 ## Next implementation slices
 
-- Build an executable gate evaluator from activation expressions.
-- Add provenance registry and claim IDs.
-- Split the legacy `SKILL.md` into a 250–350 line router plus validated modules.
+- Split the legacy `SKILL.md` into a compact router plus validated modules.
 - Add calibration datasets, mutation tests, adversarial regressions, and independent-judge evals.
 - Add packaging, SBOM, signing, SPDX/license policy, and bilingual documentation before GA.
