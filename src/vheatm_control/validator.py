@@ -14,6 +14,25 @@ from .activation import ActivationError, compile_activation
 from .models import Manifest
 
 
+REQUIRED_SCHEMA_FILES = frozenset(
+    {
+        "approval-token.schema.json",
+        "audit-context.schema.json",
+        "audit-lifecycle.schema.json",
+        "audit-report.schema.json",
+        "claim.schema.json",
+        "finding.schema.json",
+        "gate-plan.schema.json",
+        "policy-decision.schema.json",
+        "provenance-record.schema.json",
+        "provenance-registry.schema.json",
+        "runtime-policy.schema.json",
+        "tool-request.schema.json",
+        "vheatm-manifest.schema.json",
+    }
+)
+
+
 @dataclass(frozen=True)
 class ValidationIssue:
     source: str
@@ -28,6 +47,31 @@ def _load_yaml(path: Path) -> Any:
 def _load_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _validate_schema_documents(schema_dir: Path) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    paths = sorted(schema_dir.glob("*.schema.json"))
+    present = {path.name for path in paths}
+    for missing in sorted(REQUIRED_SCHEMA_FILES - present):
+        issues.append(ValidationIssue("schemas", f"missing required schema: {missing}"))
+    seen_ids: dict[str, str] = {}
+    for path in paths:
+        try:
+            schema = _load_json(path)
+            Draft202012Validator.check_schema(schema)
+        except Exception as exc:
+            issues.append(ValidationIssue(str(path.name), f"invalid Draft 2020-12 schema: {exc}"))
+            continue
+        schema_id = schema.get("$id") if isinstance(schema, dict) else None
+        if not isinstance(schema_id, str) or not schema_id:
+            issues.append(ValidationIssue(str(path.name), "schema requires a non-empty $id"))
+            continue
+        previous = seen_ids.get(schema_id)
+        if previous is not None:
+            issues.append(ValidationIssue(str(path.name), f"duplicate schema $id also used by {previous}: {schema_id}"))
+        seen_ids[schema_id] = path.name
+    return issues
 
 
 def _schema_registry(schema_dir: Path) -> Registry:
@@ -102,6 +146,10 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
 
+    schema_issues = _validate_schema_documents(schema_dir)
+    if schema_issues:
+        return schema_issues
+
     registry = _schema_registry(schema_dir)
     manifest = _load_yaml(manifest_path)
     policy = _load_yaml(policy_path)
@@ -109,7 +157,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
     context_schema = _load_json(schema_dir / "audit-context.schema.json")
 
-    issues = []
+    issues: list[ValidationIssue] = []
     issues.extend(_validate_schema(manifest, manifest_schema, registry, str(manifest_path.relative_to(root))))
     issues.extend(_validate_schema(policy, policy_schema, registry, str(policy_path.relative_to(root))))
 
@@ -141,6 +189,12 @@ def _validate_runtime_policy_invariants(policy: dict[str, Any]) -> list[Validati
     required = {"execute", "write", "network", "secrets"}
     if not required.issubset(approval):
         issues.append(ValidationIssue("runtime policy", f"human approval missing tool classes: {sorted(required - approval)}"))
+    required_bindings = {"tool_class", "exact_scope", "expiry", "requester"}
+    bindings = set(policy.get("human_approval", {}).get("approval_must_bind", []))
+    if not required_bindings.issubset(bindings):
+        issues.append(ValidationIssue("runtime policy", f"approval binding missing fields: {sorted(required_bindings - bindings)}"))
+    if policy.get("human_approval", {}).get("reusable") is not False:
+        issues.append(ValidationIssue("runtime policy", "approval tokens must be single-use"))
     if policy.get("taint", {}).get("propagation") != "transitive":
         issues.append(ValidationIssue("runtime policy", "taint propagation must be transitive"))
     return issues
