@@ -1,0 +1,141 @@
+diff --git a/docs/tool-broker.md b/docs/tool-broker.md
+new file mode 100644
+index 0000000..66e10f7
+--- /dev/null
++++ b/docs/tool-broker.md
+@@ -0,0 +1,32 @@
++# Guarded tool broker
++
++`vheatm-broker` evaluates canonical tool requests against `policies/runtime-boundaries.yaml`. It emits a schema-valid allow/deny decision and never performs the requested operation.
++
++## Fail-closed rules
++
++- Every request is validated against `tool-request.schema.json` and must use a normalized `workspace:` scope.
++- Read requests require explicit `secret_expansion: false` and `contains_secrets: false` declarations.
++- Execute requests require a valid single-use approval, an active sandbox, disabled network, disabled secret inheritance, and an exact command allowlist match.
++- Write requests require a valid single-use approval, safe diff paths contained by the exact workspace scope, and a rollback plan.
++- Network requests require a valid single-use approval, a destination listed by runtime policy, permitted data classes, and redaction. The current empty destination list therefore denies all network requests.
++- Secret requests require a valid single-use approval, a broker-registered secret name, least-privilege use, and a no-model-echo declaration.
++
++A cryptographically valid approval is consumed on its first verified evaluation attempt, even when later class-specific controls deny the request. This prevents command or argument probing with one approval token.
++
++## Approval signatures
++
++The broker verifies `hmac-sha256` over canonical UTF-8 JSON of the complete token except the `signature` object. Canonical JSON uses sorted keys with compact separators. Keyring files map key IDs to base64-encoded key bytes.
++
++## CLI
++
++```bash
++vheatm-broker \
++  --root . \
++  --request request.json \
++  --approval approval.json \
++  --keyring operator-keys.json \
++  --used-token-dir .vheatm/used-approvals \
++  --allow-command "pytest -q"
++```
++
++Exit code `0` means allow; exit code `1` means deny. Decisions conform to `policy-decision.schema.json` and include the controls evaluated. Approval and key material are never echoed.
+diff --git a/pyproject.toml b/pyproject.toml
+index 8055129..c266215 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -25,6 +25,7 @@ vheatm-validate = "vheatm_control.validator:main"
+ vheatm-evaluate = "vheatm_control.evaluator:main"
+ vheatm-route = "vheatm_control.module_router:main"
+ vheatm-validate-report = "vheatm_control.report_validator:main"
++vheatm-broker = "vheatm_control.tool_broker:main"
+ 
+ [tool.setuptools.packages.find]
+ where = ["src"]
+diff --git a/src/vheatm_control/tool_broker.py b/src/vheatm_control/tool_broker.py
+new file mode 100644
+index 0000000..dfe14c5
+--- /dev/null
++++ b/src/vheatm_control/tool_broker.py
+@@ -0,0 +1,521 @@
++from __future__ import annotations
++
++import argparse
++import base64
++import hashlib
++import hmac
++import json
++import os
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from pathlib import Path, PurePosixPath
++from typing import Any, Callable, Mapping, MutableSet, Protocol
++
++import yaml
++from jsonschema import Draft202012Validator, FormatChecker
++
++
++class BrokerConfigurationError(ValueError):
++    """Raised when broker policy or schema configuration is unsafe."""
++
++
++class TokenLedger(Protocol):
++    def consume(self, token_id: str) -> bool:
++        """Atomically consume a token. Return False when it was already consumed."""
++
++
++@dataclass
++class InMemoryTokenLedger:
++    consumed: MutableSet[str] = field(default_factory=set)
++
++    def consume(self, token_id: str) -> bool:
++        if token_id in self.consumed:
++            return False
++        self.consumed.add(token_id)
++        return True
++
++
++@dataclass(frozen=True)
++class DirectoryTokenLedger:
++    root: Path
++
++    def consume(self, token_id: str) -> bool:
++        self.root.mkdir(parents=True, exist_ok=True)
++        marker = self.root / token_id
++        try:
++            descriptor = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
++        except FileExistsError:
++            return False
++        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
++            handle.write("consumed\n")
++        return True
++
++
++@dataclass(frozen=True)
++class BrokerCapabilities:
++    exact_command_allowlist: frozenset[str] = frozenset()
++    known_secret_names: frozenset[str] = frozenset()
++
++
++@dataclass(frozen=True)
++class BrokerSchemas:
++    runtime_policy: Mapping[str, Any]
++    tool_request: Mapping[str, Any]
++    approval_token: Mapping[str, Any]
++    policy_decision: Mapping[str, Any]
++
++
++class ToolBroker:
++    """Fail-closed evaluator for guarded VHEATM tool requests.
++
++    The broker returns policy decisions only. It never executes, writes, performs
++    network access, or resolves secrets itself.
++    """
++
++    def __init__(
++        self,
++        *,
++        policy: Mapping[str, Any],
++        schemas: BrokerSchemas,
++        keyring: Mapping[str, bytes] | None = None,
++        capabilities: BrokerCapabilities | None = None,
++        token_ledger: TokenLedger | None = None,
++        clock: Callable[[], datetime] | None = None,
++    ) -> None:
++
