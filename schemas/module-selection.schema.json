@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/module-selection.schema.json",
+  "title": "VHEATM deterministic module selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "framework_version", "registry_root", "summary", "selected_modules", "unselected_modules", "unresolved_modules", "unknown_gates", "conflicts"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "framework_version": {"type": "string"},
+    "registry_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["selected", "unselected", "unresolved", "estimated_tokens", "hard_token_budget", "budget_exceeded", "completion_blocked"],
+      "properties": {
+        "selected": {"type": "integer", "minimum": 0},
+        "unselected": {"type": "integer", "minimum": 0},
+        "unresolved": {"type": "integer", "minimum": 0},
+        "estimated_tokens": {"type": "integer", "minimum": 0},
+        "hard_token_budget": {"type": "integer", "minimum": 0},
+        "budget_exceeded": {"type": "boolean"},
+        "completion_blocked": {"type": "boolean"}
+      }
+    },
+    "selected_modules": {"type": "array", "items": {"type": "object"}},
+    "unselected_modules": {"type": "array", "items": {"type": "object"}},
+    "unresolved_modules": {"type": "array", "items": {"type": "object"}},
+    "unknown_gates": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "conflicts": {"type": "array", "items": {"type": "object"}}
+  }
+}

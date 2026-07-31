@@ -1,0 +1,56 @@
+schema_version: 1.0.0
+id: MOD-AUDITOR-DEFENSE
+version: 0.1.0
+status: experimental
+kind: specialist
+title: Auditor defense
+summary: Inspects artifact-borne instructions and naming attacks while preserving
+  taint and deny-before-execution behavior.
+gate_coverage:
+- HG-AD
+phase_coverage:
+- G
+selection:
+  policy: any_active_gate
+  priority: 50
+  dependencies: []
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - ai_executor
+    - mode
+    artifact_classes:
+    - repository
+    - audit_context
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - test
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - v16.1.1 auditor-defense artifact instruction attack checks
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Inspects artifact-borne instructions and naming attacks while
+      preserving taint and deny-before-execution behavior.
+    instruction_path: instructions.md
+    instruction_sha256: eec503641f303a1b65ab0226449039160a606817ef9a8a1bb5ceaf8c0d0c4180
+    token_budget: 512

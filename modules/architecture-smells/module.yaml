@@ -1,0 +1,55 @@
+schema_version: 1.0.0
+id: MOD-ARCHITECTURE-SMELLS
+version: 0.1.0
+status: experimental
+kind: specialist
+title: Architecture smell scan
+summary: Generates evidence-bearing architecture hypotheses without promoting heuristic
+  matches directly to findings.
+gate_coverage:
+- HG-AS
+phase_coverage:
+- V
+selection:
+  policy: any_active_gate
+  priority: 40
+  dependencies: []
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    artifact_classes:
+    - repository
+    - audit_context
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - test
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - v16.1.1 architecture smell scan specialist lens
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Generates evidence-bearing architecture hypotheses without promoting
+      heuristic matches directly to findings.
+    instruction_path: instructions.md
+    instruction_sha256: f61a000d88f26a56511df23804f2c5bb498f1580262b8401005f73cbef6af714
+    token_budget: 512
