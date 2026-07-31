@@ -1,11 +1,11 @@
 schema_version: 1.0.0
 id: MOD-ARCHITECTURE-SMELLS
-version: 0.1.0
+version: 0.2.0
 status: experimental
 kind: specialist
 title: Architecture smell scan
-summary: Generates evidence-bearing architecture hypotheses without promoting heuristic
-  matches directly to findings.
+summary: Generates evidence-bearing architecture hypotheses without promoting heuristic matches directly
+  to findings.
 gate_coverage:
 - HG-AS
 phase_coverage:
@@ -13,7 +13,8 @@ phase_coverage:
 selection:
   policy: any_active_gate
   priority: 40
-  dependencies: []
+  dependencies:
+  - MOD-SYSTEM-MAPS
   conflicts: []
 contract:
   inputs:
@@ -41,15 +42,15 @@ contract:
     claims_required: true
     sources_required: true
     legacy_refs:
-    - v16.1.1 architecture smell scan specialist lens
+    - VHEATM-v16.1.1.skill::references/20-architecture-smells.md#5 Architecture Smell Scans
   runtime:
     tool_classes:
     - read
     sandbox_required: false
     network_required: false
   disclosure:
-    router_summary: Generates evidence-bearing architecture hypotheses without promoting
-      heuristic matches directly to findings.
+    router_summary: Generates evidence-bearing architecture hypotheses without promoting heuristic matches
+      directly to findings.
     instruction_path: instructions.md
     instruction_sha256: f61a000d88f26a56511df23804f2c5bb498f1580262b8401005f73cbef6af714
     token_budget: 512
