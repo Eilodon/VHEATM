@@ -1,0 +1,63 @@
+schema_version: 1.0.0
+id: MOD-FIX-VERIFICATION
+version: 0.1.0
+status: experimental
+kind: core
+title: Post-fix verification
+summary: Confirms each fix through bug, implementation, and verification anchors while checking scoped
+  sibling instances and claimed failure-path removal.
+gate_coverage:
+- HG-FV
+phase_coverage:
+- T
+selection:
+  policy: any_active_gate
+  priority: 30
+  dependencies:
+  - MOD-TRANSFORMATION-VERIFICATION
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    artifact_classes:
+    - finding_register
+    - change_set
+    - transformation_verification_record
+    - test_results
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: fix_verification_records
+    required: true
+    description: Per-fix records binding bug, implementation, sibling-scan, and verification anchors.
+  evidence:
+    required_kinds:
+    - code
+    - test
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/09-fix-verification.md#Protocol — 3-Anchor Rule
+    - VHEATM-v16.1.1.skill::references/09-fix-verification.md#Mandatory Steps
+    - VHEATM-v16.1.1.skill::references/09-fix-verification.md#Failure Modes of Fix Verification Itself
+  runtime:
+    tool_classes:
+    - read
+    - execute
+    sandbox_required: true
+    network_required: false
+  disclosure:
+    router_summary: Verify each fix with bug, implementation, sibling-scan, and proof anchors; comments
+      or broad suite success are insufficient.
+    instruction_path: instructions.md
+    instruction_sha256: fd50928fe5d80300dd3c0e260e84ef08f9eecb9790d31a8c546b01499a51a86f
+    token_budget: 512
