@@ -1,0 +1,33 @@
+name: Apply P2-D complete corpus patch
+
+on:
+  push:
+    branches:
+      - feat/v17-p2d-complete-corpus
+    paths:
+      - .github/p2d-patch.part-*
+      - .github/workflows/apply-p2d-complete-corpus.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v17-p2d-complete-corpus
+          fetch-depth: 0
+      - name: Apply validated patch
+        run: |
+          cat .github/p2d-patch.part-* > /tmp/p2d.patch
+          git apply --check /tmp/p2d.patch
+          git apply /tmp/p2d.patch
+      - name: Commit corpus completion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add SKILL.md docs/corpus-migration.md docs/module-system.md modules tests/test_module_router.py tests/test_registry_integrity.py
+          git commit -m "feat: complete V17 module corpus migration"
+          git push origin HEAD:feat/v17-p2d-complete-corpus
