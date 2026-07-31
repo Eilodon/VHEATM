@@ -8,7 +8,7 @@ Batch migrations are derived from `VHEATM-v16.1.1.skill` with:
 - size: `202566` bytes;
 - SHA-256: `efdf9dc7255bebfa5277a729caeeb1edca64be456c62169241fa3573d9fb67bd`.
 
-The fingerprint is recorded in `modules/registry.yaml` and included in the deterministic registry root. The archive is not loaded into the runtime repository, so CI validates the fingerprint contract but does not independently rehash the omitted bundle.
+The fingerprint is recorded in `modules/registry.yaml`. The archive is not loaded into the runtime repository, so CI validates the declared fingerprint contract but does not independently rehash the omitted bundle.
 
 ## Batch 1 — analysis chain
 
@@ -41,4 +41,4 @@ Eight gates remain unmigrated: `HG-UT`, `HG-FL`, `HG-INC`, `HG-ORG`, `HG-CPT`, `
 
 ## Acceptance rule
 
-A migration batch is accepted only when module and instruction digests validate, every gate has a unique owner, legacy references match the registered archive, dependencies are deterministic and acyclic, disclosure stays within budget, and regression tests prove routing plus tamper detection.
+A migration batch is accepted only when module and instruction digests validate, required registry coverage is present, legacy references identify archive/path/heading sources, dependencies are deterministic and acyclic, disclosure stays within budget, and regression tests prove routing plus tamper detection.
