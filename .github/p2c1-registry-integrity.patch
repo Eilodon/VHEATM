@@ -1,0 +1,116 @@
+diff --git a/docs/module-system.md b/docs/module-system.md
+index 4e79c43..7bcd7aa 100644
+--- a/docs/module-system.md
++++ b/docs/module-system.md
+@@ -27,9 +27,9 @@ The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gat
+ 
+ ## Integrity
+ 
+-The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
++The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, multiple authoritative owners for one gate, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
+ 
+-The registry records the reviewed legacy archive fingerprint, but the archive remains outside the runtime repository. Its fingerprint is therefore a migration-review assertion rather than a CI rehash of the omitted source bundle.
++The emitted `registry_root` commits to the schema and framework versions, coverage mode, disclosure budget, required gate coverage, module identity and digests, and the reviewed legacy archive fingerprint. The archive remains outside the runtime repository, so CI validates that declared source identity and the migrated digest chain but does not independently rehash the omitted source bundle.
+ 
+ ## Routing semantics
+ 
+diff --git a/src/vheatm_control/module_router.py b/src/vheatm_control/module_router.py
+index fad017c..50cf213 100644
+--- a/src/vheatm_control/module_router.py
++++ b/src/vheatm_control/module_router.py
+@@ -273,6 +273,20 @@ def validate_module_repository(
+         )
+ 
+     module_ids = set(loaded)
++    gate_owners: dict[str, set[str]] = {}
++    for module_id, module in loaded.items():
++        for gate in set(module.document.get("gate_coverage", [])):
++            gate_owners.setdefault(str(gate), set()).add(module_id)
++    for gate in sorted(gate_owners):
++        owners = sorted(gate_owners[gate])
++        if len(owners) > 1:
++            issues.append(
++                ModuleIssue(
++                    "modules/registry.yaml",
++                    f"gate {gate} has multiple authoritative owners: {owners}",
++                )
++            )
++
+     graph: dict[str, tuple[str, ...]] = {}
+     for module_id, module in loaded.items():
+         selection = module.document.get("selection", {})
+@@ -316,6 +330,7 @@ def _registry_root(registry: Mapping[str, Any]) -> str:
+         "coverage_mode": registry.get("coverage_mode"),
+         "hard_token_budget": registry.get("hard_token_budget"),
+         "required_gate_coverage": sorted(registry.get("required_gate_coverage", [])),
++        "legacy_source": registry.get("legacy_source"),
+         "modules": [
+             {"id": item.get("id"), "path": item.get("path"), "sha256": item.get("sha256")}
+             for item in registry.get("modules", [])
+diff --git a/tests/test_registry_integrity.py b/tests/test_registry_integrity.py
+new file mode 100644
+index 0000000..0fb9780
+--- /dev/null
++++ b/tests/test_registry_integrity.py
+@@ -0,0 +1,61 @@
++from __future__ import annotations
++
++import copy
++import hashlib
++import shutil
++from pathlib import Path
++
++import yaml
++
++from vheatm_control.module_router import _load_document, _registry_root, validate_module_repository
++
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def _copy_repo(tmp_path: Path) -> Path:
++    for name in ["SKILL.md", "manifests", "schemas", "modules"]:
++        source = ROOT / name
++        target = tmp_path / name
++        if source.is_dir():
++            shutil.copytree(source, target)
++        else:
++            shutil.copy2(source, target)
++    return tmp_path
++
++
++def _validate(root: Path):
++    return validate_module_repository(
++        root,
++        _load_document(root / "manifests" / "vheatm-v17.yaml"),
++        module_schema=_load_document(root / "schemas" / "module-contract.schema.json"),
++        registry_schema=_load_document(root / "schemas" / "module-registry.schema.json"),
++    )[0]
++
++
++def test_duplicate_gate_owner_is_rejected(tmp_path):
++    root = _copy_repo(tmp_path)
++    module_path = root / "modules" / "auditor-defense" / "module.yaml"
++    document = yaml.safe_load(module_path.read_text())
++    document["gate_coverage"] = ["HG-G"]
++    module_path.write_text(yaml.safe_dump(document, sort_keys=False))
++
++    registry_path = root / "modules" / "registry.yaml"
++    registry = yaml.safe_load(registry_path.read_text())
++    entry = next(item for item in registry["modules"] if item["id"] == "MOD-AUDITOR-DEFENSE")
++    entry["sha256"] = hashlib.sha256(module_path.read_bytes()).hexdigest()
++    registry_path.write_text(yaml.safe_dump(registry, sort_keys=False))
++
++    issues = _validate(root)
++    assert any(
++        issue.source == "modules/registry.yaml"
++        and "gate HG-G has multiple authoritative owners" in issue.message
++        for issue in issues
++    )
++
++
++def test_registry_root_binds_legacy_source_fingerprint():
++    registry = _load_document(ROOT / "modules" / "registry.yaml")
++    baseline = _registry_root(registry)
++    mutated = copy.deepcopy(registry)
++    mutated["legacy_source"]["sha256"] = "0" * 64
++    assert _registry_root(mutated) != baseline
