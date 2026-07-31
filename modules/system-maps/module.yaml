@@ -1,0 +1,67 @@
+schema_version: 1.0.0
+id: MOD-SYSTEM-MAPS
+version: 0.1.0
+status: experimental
+kind: core
+title: System and boundary maps
+summary: Builds evidence-backed system, delta, ownership, and boundary maps for the selected audit scope.
+gate_coverage:
+- HG-V
+phase_coverage:
+- V
+selection:
+  policy: any_active_gate
+  priority: 20
+  dependencies:
+  - MOD-CONTEXT-CONTRACT
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - context_mode
+    - mode
+    artifact_classes:
+    - repository
+    - audit_context
+    - architecture_documentation
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: system_map
+    required: true
+    description: Component, dependency, data-flow, and external-boundary map with evidence anchors.
+  - id: delta_map
+    required: true
+    description: Change-surface map separating current behavior, intended change, and unaffected scope.
+  - id: ownership_map
+    required: true
+    description: Ownership and handoff map for components and trust boundaries in scope.
+  evidence:
+    required_kinds:
+    - document
+    - code
+    - configuration
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[V] Vision
+    - VHEATM-v16.1.1.skill::SKILL.md#Phase Quick Reference
+  runtime:
+    tool_classes:
+    - read
+    sandbox_required: false
+    network_required: false
+  disclosure:
+    router_summary: Build evidence-backed system, delta, ownership, and trust-boundary maps before generation
+      work.
+    instruction_path: instructions.md
+    instruction_sha256: 1a376a8be90226c3b0542f3d77c2088a50b756ee2ba6af1dc67d67625054c366
+    token_budget: 1024
