@@ -1,11 +1,11 @@
 schema_version: 1.0.0
 id: MOD-EXECUTION-FIDELITY
-version: 0.1.0
+version: 0.2.0
 status: experimental
 kind: meta
 title: Execution fidelity
-summary: Reconciles selected modules, outputs, evidence, findings, lifecycle, and
-  gate results before completion.
+summary: Reconciles selected modules, outputs, evidence, findings, lifecycle, and gate results before
+  completion.
 gate_coverage:
 - HG-EF
 phase_coverage:
@@ -41,15 +41,15 @@ contract:
     claims_required: true
     sources_required: true
     legacy_refs:
-    - v16.1.1 HG-EF execution fidelity meta-defense
+    - VHEATM-v16.1.1.skill::references/29-execution-fidelity.md#[M.EF] Execution Checklist (HG-EF gate)
   runtime:
     tool_classes:
     - read
     sandbox_required: false
     network_required: false
   disclosure:
-    router_summary: Reconciles selected modules, outputs, evidence, findings, lifecycle,
-      and gate results before completion.
+    router_summary: Reconciles selected modules, outputs, evidence, findings, lifecycle, and gate results
+      before completion.
     instruction_path: instructions.md
     instruction_sha256: 9293319d8ca343185580c6611f9933cd8e3baa866567865a6a405e13c2f9abd9
     token_budget: 512
