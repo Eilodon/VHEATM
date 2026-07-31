@@ -1,0 +1,64 @@
+schema_version: 1.0.0
+id: MOD-TRANSFORMATION-VERIFICATION
+version: 0.1.0
+status: experimental
+kind: core
+title: Transformation verification
+summary: Proves that the implemented transformation satisfies its governing decision through a relevant
+  red-green or equivalent before-and-after check.
+gate_coverage:
+- HG-T
+phase_coverage:
+- T
+selection:
+  policy: any_active_gate
+  priority: 10
+  dependencies:
+  - MOD-ARCHITECTURE-DECISIONS
+  conflicts: []
+contract:
+  inputs:
+    required_context_fields:
+    - mode
+    artifact_classes:
+    - architecture_decision_records
+    - change_set
+    - test_plan
+    - test_results
+  outputs:
+  - id: module_decision
+    required: true
+    description: Decision-bearing module result with gate trace and evidence references.
+  - id: transformation_verification_record
+    required: true
+    description: Before-and-after verification tied to the governing decision, changed surface, invariant,
+      result, and rollback condition.
+  evidence:
+    required_kinds:
+    - code
+    - configuration
+    - test
+    minimum_sources: 1
+    freshness_required: true
+  failure:
+    on_missing_input: block
+    on_tool_denied: block
+    produces_unknown: true
+  provenance:
+    claims_required: true
+    sources_required: true
+    legacy_refs:
+    - VHEATM-v16.1.1.skill::references/01-phase-guide.md#[T] Transformation (unchanged from 9.0)
+    - VHEATM-v16.1.1.skill::references/09-fix-verification.md#Test-as-Proof (when applicable)
+  runtime:
+    tool_classes:
+    - read
+    - execute
+    sandbox_required: true
+    network_required: false
+  disclosure:
+    router_summary: Prove the transformation with a relevant red-green or equivalent before-and-after
+      verification tied to the governing ADR.
+    instruction_path: instructions.md
+    instruction_sha256: 8f86b8717bae237517ae90a775126a9c31485b22cebcb4b4e0d3ea19576d4376
+    token_budget: 512

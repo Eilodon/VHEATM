@@ -23,6 +23,11 @@ EXPECTED_MODULES = {
     "MOD-PATTERN-GLOBALIZATION",
     "MOD-AUDITOR-DEFENSE",
     "MOD-EVIDENCE-ANCHORS",
+    "MOD-HYBRID-VERIFICATION",
+    "MOD-ARCHITECTURE-DECISIONS",
+    "MOD-TRANSFORMATION-VERIFICATION",
+    "MOD-FIX-VERIFICATION",
+    "MOD-ADVERSARIAL-PASS",
     "MOD-EXECUTION-FIDELITY",
 }
 
@@ -158,3 +163,44 @@ def test_invalid_activation_state_fails_closed():
     plan = _plan({"HG-P": "banana"})
     with pytest.raises(ModuleRoutingError, match="invalid activation_state"):
         load_and_route(ROOT, plan)
+
+
+def test_fix_verification_closes_the_decision_chain():
+    result = load_and_route(ROOT, _plan({"HG-FV": "active"}))
+    assert [item["id"] for item in result["selected_modules"]] == [
+        "MOD-CONTEXT-CONTRACT",
+        "MOD-SYSTEM-MAPS",
+        "MOD-COMPOUND-DECOMPOSITION",
+        "MOD-HYPOTHESIS-GENERATION",
+        "MOD-PATTERN-GLOBALIZATION",
+        "MOD-EVIDENCE-ANCHORS",
+        "MOD-ARCHITECTURE-DECISIONS",
+        "MOD-TRANSFORMATION-VERIFICATION",
+        "MOD-FIX-VERIFICATION",
+    ]
+
+
+def test_hybrid_verification_branches_from_evidence():
+    result = load_and_route(ROOT, _plan({"HG-HV": "active"}))
+    ids = [item["id"] for item in result["selected_modules"]]
+    assert ids[:6] == [
+        "MOD-CONTEXT-CONTRACT",
+        "MOD-SYSTEM-MAPS",
+        "MOD-COMPOUND-DECOMPOSITION",
+        "MOD-HYPOTHESIS-GENERATION",
+        "MOD-PATTERN-GLOBALIZATION",
+        "MOD-EVIDENCE-ANCHORS",
+    ]
+    assert ids[-1] == "MOD-HYBRID-VERIFICATION"
+
+
+def test_adversarial_pass_depends_on_verified_fixes():
+    result = load_and_route(ROOT, _plan({"HG-AP": "active"}))
+    ids = [item["id"] for item in result["selected_modules"]]
+    assert ids[-5:] == [
+        "MOD-EVIDENCE-ANCHORS",
+        "MOD-ARCHITECTURE-DECISIONS",
+        "MOD-TRANSFORMATION-VERIFICATION",
+        "MOD-FIX-VERIFICATION",
+        "MOD-ADVERSARIAL-PASS",
+    ]

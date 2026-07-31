@@ -12,6 +12,11 @@ required_gate_coverage:
 - HG-AS
 - HG-AD
 - HG-EF
+- HG-A
+- HG-T
+- HG-FV
+- HG-HV
+- HG-AP
 modules:
 - id: MOD-CONTEXT-CONTRACT
   path: modules/context-contract/module.yaml
@@ -37,6 +42,21 @@ modules:
 - id: MOD-EVIDENCE-ANCHORS
   path: modules/evidence-anchors/module.yaml
   sha256: 140257d10d18c6652016c7bc5d87471e39229e39208406167fee2a72f7e3c3be
+- id: MOD-HYBRID-VERIFICATION
+  path: modules/hybrid-verification/module.yaml
+  sha256: 5d35c4aff3bd87bae460fd7bebefc6e54f56313fa5655eaede421c82727b319a
+- id: MOD-ARCHITECTURE-DECISIONS
+  path: modules/architecture-decisions/module.yaml
+  sha256: 45fb77a59f56b8c3c34efe7f34fda395ce949180fe960f1bba051c5ebb197f32
+- id: MOD-TRANSFORMATION-VERIFICATION
+  path: modules/transformation-verification/module.yaml
+  sha256: e88b288e70816937d84f4d7db0e30ca526415b2b1da20c406fee931ae6e7e059
+- id: MOD-FIX-VERIFICATION
+  path: modules/fix-verification/module.yaml
+  sha256: 411585bf981d5c0c8e072317cdeef4e9846b4358a4a914bc798b6335b1b9e0dc
+- id: MOD-ADVERSARIAL-PASS
+  path: modules/adversarial-pass/module.yaml
+  sha256: 2fa681041ba7f1a306f9ef6c81221a8a3e30f0c31ab7e45ae140a1e403e18418
 - id: MOD-EXECUTION-FIDELITY
   path: modules/execution-fidelity/module.yaml
   sha256: 099fd0d77dd888e71b9fa0aa6e44605fdb7b0adba8374ae4be041a84ce2cb755
