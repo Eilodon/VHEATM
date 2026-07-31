@@ -1,0 +1,104 @@
+st: Mapping[str, Any], scope: PurePosixPath
++    ) -> tuple[bool, str, tuple[str, ...]]:
++        del scope
++        secret_name = request.get("secret_name")
++        if secret_name not in self.capabilities.known_secret_names:
++            return False, "secret name is not registered with the broker", ("secrets:named-secret",)
++        if request.get("least_privilege") is not True:
++            return False, "secret requests must assert least-privilege use", ("secrets:least-privilege",)
++        if request.get("no_model_echo") is not True:
++            return False, "secret requests must prohibit model echo", ("secrets:no-model-echo",)
++        return True, "secret request satisfies named-secret and non-disclosure controls", (
++            "secrets:named-secret",
++            "secrets:least-privilege",
++            "secrets:no-model-echo",
++        )
++
++    def _verify_approval(
++        self,
++        request: Mapping[str, Any],
++        approval_token: Mapping[str, Any] | None,
++        now: datetime,
++    ) -> tuple[str | None, str]:
++        if approval_token is None:
++            return None, "tool class requires an explicit approval token"
++        errors = self._schema_errors(approval_token, self.schemas.approval_token)
++        if errors:
++            return None, f"approval token schema validation failed: {errors[0]}"
++
++        if approval_token["requester"] != request["requester"]:
++            return None, "approval token requester does not match the tool request"
++        if approval_token["tool_class"] != request["tool_class"]:
++            return None, "approval token tool class does not match the tool request"
++        if approval_token["exact_scope"] != request["scope"]:
++            return None, "approval token scope does not exactly match the tool request"
++
++        try:
++            issued_at = _parse_datetime(approval_token["issued_at"])
++            expires_at = _parse_datetime(approval_token["expires_at"])
++        except (TypeError, ValueError) as exc:
++            return None, f"approval token timestamp is invalid: {exc}"
++        if issued_at > now:
++            return None, "approval token was issued in the future"
++        if expires_at <= issued_at:
++            return None, "approval token expiry must be after issuance"
++        if expires_at <= now:
++            return None, "approval token has expired"
++
++        signature = approval_token["signature"]
++        key_id = signature["key_id"]
++        key = self.keyring.get(key_id)
++        if key is None:
++            return None, "approval token signing key is unknown"
++        expected = hmac.new(key, approval_signing_payload(approval_token), hashlib.sha256).hexdigest()
++        if not hmac.compare_digest(expected, signature["value"]):
++            return None, "approval token signature is invalid"
++        return str(approval_token["token_id"]), "approval verified"
++
++    def _validate_configuration(self) -> None:
++        if self.policy.get("default_decision") != "unknown":
++            raise BrokerConfigurationError("runtime policy default_decision must remain unknown")
++        if self.policy.get("fail_safe") is not True:
++            raise BrokerConfigurationError("runtime policy must enable fail_safe")
++        if self.policy.get("tools", {}).get("default") != "deny":
++            raise BrokerConfigurationError("runtime policy tools.default must be deny")
++        if self.policy.get("egress", {}).get("default") != "deny":
++            raise BrokerConfigurationError("runtime policy egress.default must be deny")
++        if self.policy.get("human_approval", {}).get("reusable") is not False:
++            raise BrokerConfigurationError("approval tokens must be single-use")
++        for schema in (
++            self.schemas.runtime_policy,
++            self.schemas.tool_request,
++            self.schemas.approval_token,
++            self.schemas.policy_decision,
++        ):
++            Draft202012Validator.check_schema(schema)
++        policy_errors = self._schema_errors(self.policy, self.schemas.runtime_policy)
++        if policy_errors:
++            raise BrokerConfigurationError(f"runtime policy schema validation failed: {policy_errors[0]}")
++
++    def _schema_errors(self, instance: Any, schema: Mapping[str, Any]) -> list[str]:
++        validator = Draft202012Validator(schema, format_checker=self._format_checker)
++        errors: list[str] = []
++        for error in sorted(validator.iter_errors(instance), key=lambda item: list(item.absolute_path)):
++            location = ".".join(str(part) for part in error.absolute_path) or "<root>"
++            errors.append(f"{location}: {error.message}")
++        return errors
++
++    def _decision(
++        self,
++        *,
++        request_id: str,
++        allowed: bool,
++        reason: str,
++        controls: tuple[str, ...],
++        evaluated_at: datetime,
++        approval_token_id: str | None = None,
++    ) -> dict[str, Any]:
++        decision = {
++            "schema_version": "1.0.0",
++            "request_id": request_id,
++            "decision": "allow" if allowed else "deny",
++            "reason": reason,
++            "controls": list(dict.fromkeys(controls)),
++ 
