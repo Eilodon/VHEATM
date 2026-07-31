@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/provenance-registry.schema.json",
+  "title": "VHEATM provenance registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources", "claims"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "sources": {
+      "type": "array",
+      "items": {"$ref": "https://vheatm.dev/schemas/provenance-record.schema.json"}
+    },
+    "claims": {
+      "type": "array",
+      "items": {"$ref": "https://vheatm.dev/schemas/claim.schema.json"}
+    }
+  }
+}
