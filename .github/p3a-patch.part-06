@@ -1,0 +1,77 @@
+d_scope), hashlib.sha256).hexdigest()  # type: ignore[index]
++    assert broker.evaluate(request, bad_scope)["decision"] == "deny"
++
++    expired = _token(request, token_id="APR-3333333333333333")
++    expired["expires_at"] = (NOW - timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
++    expired["signature"]["value"] = hmac.new(KEY, approval_signing_payload(expired), hashlib.sha256).hexdigest()  # type: ignore[index]
++    assert broker.evaluate(request, expired)["decision"] == "deny"
++
++
++def test_verified_token_is_consumed_even_when_command_control_denies(tmp_path: Path) -> None:
++    broker = _broker(tmp_path, commands={"pytest -q"})
++    request = _request(
++        "execute",
++        sandboxed=True,
++        command="pytest -q tests",
++        network_enabled=False,
++        inherit_secrets=False,
++    )
++    token = _token(request, token_id="APR-6666666666666666")
++    first = broker.evaluate(request, token)
++    assert first["decision"] == "deny"
++    assert "not present" in first["reason"]
++    second = broker.evaluate(request, token)
++    assert second["decision"] == "deny"
++    assert "already been consumed" in second["reason"]
++
++
++def test_write_paths_must_remain_within_exact_scope(tmp_path: Path) -> None:
++    broker = _broker(tmp_path)
++    valid = _request("write", diff_paths=["src/a.py", "src/pkg/b.py"], rollback_plan="git revert the scoped diff")
++    assert broker.evaluate(valid, _token(valid))["decision"] == "allow"
++
++    escaped = _request("write", diff_paths=["tests/a.py"], rollback_plan="revert")
++    decision = broker.evaluate(escaped, _token(escaped, token_id="APR-4444444444444444"))
++    assert decision["decision"] == "deny"
++    assert "escapes" in decision["reason"]
++
++
++def test_network_is_denied_while_policy_destination_allowlist_is_empty(tmp_path: Path) -> None:
++    broker = _broker(tmp_path)
++    request = _request(
++        "network",
++        destination="https://example.com",
++        data_classes=["public"],
++        redacted=True,
++    )
++    decision = broker.evaluate(request, _token(request))
++    assert decision["decision"] == "deny"
++    assert "not allowlisted" in decision["reason"]
++
++
++def test_secret_request_requires_registered_name_and_non_disclosure_controls(tmp_path: Path) -> None:
++    broker = _broker(tmp_path, secrets={"ci-read-token"})
++    request = _request(
++        "secrets",
++        secret_name="ci-read-token",
++        least_privilege=True,
++        no_model_echo=True,
++    )
++    assert broker.evaluate(request, _token(request))["decision"] == "allow"
++
++    unknown = copy.deepcopy(request)
++    unknown["secret_name"] = "production-root"
++    assert broker.evaluate(unknown, _token(unknown, token_id="APR-5555555555555555"))["decision"] == "deny"
++
++
++def test_all_decisions_match_canonical_schema(tmp_path: Path) -> None:
++    broker = _broker(tmp_path)
++    decisions = [
++        broker.evaluate(_request("read", secret_expansion=False, contains_secrets=False)),
++        broker.evaluate(_request("execute", sandboxed=True, command="pytest -q", network_enabled=False, inherit_secrets=False)),
++        broker.evaluate({"unexpected": True}),
++    ]
++    schema = json.loads((PROJECT_ROOT / "schemas" / "policy-decision.schema.json").read_text(encoding="utf-8"))
++    validator = Draft202012Validator(schema, format_checker=FormatChecker())
++    for decision in decisions:
++        assert not list(validator.iter_errors(decision))
