@@ -27,9 +27,9 @@ The registry remains `pilot`. Batch 2 expands validated coverage to fourteen gat
 
 ## Integrity
 
-The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
+The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, multiple authoritative owners for one gate, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
 
-The registry records the reviewed legacy archive fingerprint, but the archive remains outside the runtime repository. Its fingerprint is therefore a migration-review assertion rather than a CI rehash of the omitted source bundle.
+The emitted `registry_root` commits to the schema and framework versions, coverage mode, disclosure budget, required gate coverage, module identity and digests, and the reviewed legacy archive fingerprint. The archive remains outside the runtime repository, so CI validates that declared source identity and the migrated digest chain but does not independently rehash the omitted source bundle.
 
 ## Routing semantics
 
