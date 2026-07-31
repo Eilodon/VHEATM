@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/gate-plan.schema.json",
+  "title": "VHEATM gate activation plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "framework_version", "context", "summary", "gates"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "context": {"$ref": "https://vheatm.dev/schemas/audit-context.schema.json"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active", "inactive", "unknown", "total", "completion_blocked"],
+      "properties": {
+        "active": {"type": "integer", "minimum": 0},
+        "inactive": {"type": "integer", "minimum": 0},
+        "unknown": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 1},
+        "completion_blocked": {"type": "boolean"}
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "layer", "phase", "activation", "activation_state", "unknown_references", "reason"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^HG-[A-Z]+$"},
+          "layer": {"enum": ["core", "triggered", "meta"]},
+          "phase": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]},
+          "activation": {"type": "string", "minLength": 1},
+          "activation_state": {"enum": ["active", "inactive", "unknown"]},
+          "unknown_references": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+          },
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

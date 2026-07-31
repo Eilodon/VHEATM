@@ -10,6 +10,7 @@ import yaml
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
+from .activation import ActivationError, compile_activation
 from .models import Manifest
 
 
@@ -47,6 +48,49 @@ def _validate_schema(instance: Any, schema: dict[str, Any], registry: Registry, 
     return issues
 
 
+def _activation_fields(context_schema: dict[str, Any]) -> set[str]:
+    properties = context_schema.get("properties", {})
+    fields = set(properties) - {"schema_version", "declarations"}
+    declaration_properties = properties.get("declarations", {}).get("properties", {})
+    fields.update(declaration_properties)
+    return fields
+
+
+def _validate_activations(parsed: Manifest, context_schema: dict[str, Any]) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    allowed_fields = _activation_fields(context_schema)
+    declared_defaults = set(parsed.defaults.declarations)
+
+    for gate in parsed.gates.items:
+        try:
+            compiled = compile_activation(gate.activation)
+        except ActivationError as exc:
+            issues.append(ValidationIssue(f"manifest gate {gate.id}", f"invalid activation: {exc}"))
+            continue
+        unknown_fields = sorted(compiled.references - allowed_fields)
+        if unknown_fields:
+            issues.append(
+                ValidationIssue(
+                    f"manifest gate {gate.id}",
+                    f"activation references fields absent from audit-context schema: {unknown_fields}",
+                )
+            )
+        declaration_refs = compiled.references & set(
+            context_schema.get("properties", {}).get("declarations", {}).get("properties", {})
+        )
+        missing_defaults = sorted(declaration_refs - declared_defaults)
+        if missing_defaults:
+            issues.append(
+                ValidationIssue(
+                    f"manifest gate {gate.id}",
+                    f"security declaration references lack explicit unknown defaults: {missing_defaults}",
+                )
+            )
+        if gate.layer == "core" and gate.activation.strip() != "always":
+            issues.append(ValidationIssue(f"manifest gate {gate.id}", "core gates must activate with 'always'"))
+    return issues
+
+
 def validate_repository(root: Path) -> list[ValidationIssue]:
     root = root.resolve()
     schema_dir = root / "schemas"
@@ -63,6 +107,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     policy = _load_yaml(policy_path)
     manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
     policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
+    context_schema = _load_json(schema_dir / "audit-context.schema.json")
 
     issues = []
     issues.extend(_validate_schema(manifest, manifest_schema, registry, str(manifest_path.relative_to(root))))
@@ -78,6 +123,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
             unknown_phase_gates = [gate.id for gate in parsed.gates.items if gate.phase not in phase_ids]
             if unknown_phase_gates:
                 issues.append(ValidationIssue("manifest", f"gates reference unknown phases: {unknown_phase_gates}"))
+            issues.extend(_validate_activations(parsed, context_schema))
 
     issues.extend(_validate_runtime_policy_invariants(policy))
     return issues

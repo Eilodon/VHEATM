@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/audit-context.schema.json",
+  "title": "VHEATM audit context",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "mode": {"enum": ["fast", "standard", "full"]},
+    "target_tier": {"enum": [1, 2, 3]},
+    "context_mode": {"enum": ["single", "enterprise"]},
+    "mandatory_findings": {"type": "integer", "minimum": 0},
+    "blast_radius": {"type": "integer", "minimum": 0, "maximum": 5},
+    "write_chain_components": {"type": "integer", "minimum": 0},
+    "declarations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "self_audit": {"enum": ["yes", "no", "unknown"]},
+        "ai_integrated": {"enum": ["yes", "no", "unknown"]},
+        "ai_executor": {"enum": ["yes", "no", "unknown"]},
+        "async_worker": {"enum": ["yes", "no", "unknown"]},
+        "safety_critical": {"enum": ["yes", "no", "unknown"]},
+        "financial_path": {"enum": ["yes", "no", "unknown"]}
+      }
+    }
+  }
+}

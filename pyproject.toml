@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vheatm-control"
-version = "0.1.0"
+version = "0.2.0"
 description = "Machine-validated control plane for the VHEATM audit framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,7 @@ dev = [
 
 [project.scripts]
 vheatm-validate = "vheatm_control.validator:main"
+vheatm-evaluate = "vheatm_control.evaluator:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

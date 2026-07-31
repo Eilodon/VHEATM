@@ -14,7 +14,9 @@
 - Version authority: `manifests/vheatm-v17.yaml` only.
 - Output contracts: JSON Schema 2020-12, not illustrative YAML containing placeholders or emoji-prefixed keys.
 - Defaults: security-relevant declarations begin at `unknown`, not `no`.
+- Activation rules: parsed restricted DSL with explicit three-valued semantics, never prose interpretation or `eval`.
+- Evidence lineage: content-addressed source and claim IDs instead of free-form anchors alone.
 
 ## Migration rule
 
-No legacy section becomes runtime-authoritative merely by being copied. Each module must declare inputs, outputs, activation conditions, evidence requirements, failure behavior, and tests before entering the executable path.
+No legacy section becomes runtime-authoritative merely by being copied. Each module must declare inputs, outputs, activation conditions, evidence requirements, failure behavior, provenance expectations, and tests before entering the executable path.

@@ -1,0 +1,14 @@
+schema_version: "1.0.0"
+mode: standard
+target_tier: 2
+context_mode: single
+mandatory_findings: 0
+blast_radius: 1
+write_chain_components: 1
+declarations:
+  self_audit: "no"
+  ai_integrated: "no"
+  ai_executor: "no"
+  async_worker: "no"
+  safety_critical: "no"
+  financial_path: "no"
