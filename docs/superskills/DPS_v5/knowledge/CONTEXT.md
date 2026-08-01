@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 6 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 7 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -12,6 +12,7 @@
 - **Typed authorization failure:** a blocked or unknown adapter record representing authorization failure without inventing a deny receipt or claiming transport/execution occurred. <!-- from ADR: ADR-9 -->
 - **Non-authoritative migration archive:** preserved legacy implementation material outside the runtime package, retained for comparison and provenance but prohibited from producing policy decisions. <!-- from ADR: ADR-10 -->
 - **Evaluator evidence boundary:** the shared schema-and-format validation step that every release-evidence entry point must pass before cryptographic verification can contribute metrics. <!-- from ADR: ADR-11 -->
+- **Qualification sample basis:** the canonical population semantics for a measurement, distinguishing private case trials from repeated evaluations and other private observations. <!-- from ADR: ADR-12 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -23,6 +24,7 @@
 - Every brokered action adapter must use the shared decision contract; completed provider runs require an allowed, content-valid receipt, while pre-authorization failures remain typed blocked/unknown records. <!-- from ADR: ADR-9 -->
 - Runtime policy has one authority: compatibility surfaces may re-export the canonical broker or fail explicitly, but may not implement an alternate authorization engine. <!-- from ADR: ADR-10 -->
 - A valid evidence signature does not establish schema validity; direct evaluator APIs and CLI ingestion must share the same schema/format boundary before any metric is trusted. <!-- from ADR: ADR-11 -->
+- Critical qualification sample counts must be bounded by the verified private receipt population, while determinism may use repeated evaluations; signed counts and threshold predicates do not establish physical metric domains by themselves. <!-- from ADR: ADR-12 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -34,3 +36,4 @@
 - [2026-08] Tightening a receipt schema breaks synthetic pilot fixtures that bypass the real network request | Make fixtures construct the same canonical request, decision, and receipt chain as production. <!-- from ADR: ADR-9 -->
 - [2026-08] A deprecated policy module can remain executable even after a newer broker is adopted | Move legacy code to non-runtime migration text and make the compatibility import surface expose only the canonical broker. <!-- from ADR: ADR-10 -->
 - [2026-08] A signed release document can still contain undeclared fields or invalid formats | Validate canonical JSON Schema with a format checker at every evaluator entry point, then leave qualification unknown or RG-13 blocked. <!-- from ADR: ADR-11 -->
+- [2026-08] A signed sample count can exceed the private corpus or use an impossible rate value | Bind metric-specific sample basis and domains to the verified receipt before deriving release metrics. <!-- from ADR: ADR-12 -->

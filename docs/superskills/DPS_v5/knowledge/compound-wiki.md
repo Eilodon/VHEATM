@@ -123,3 +123,26 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFIC
 - Every evaluator entry point must schema/format validate before cryptographic metric derivation: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-12 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: qualification-population-and-domain-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Qualification sample basis: added ✅
+
+### Bug Patterns
+- Signed sample count was not bound to the private corpus population: observed and fixed with receipt case-count enforcement; no PATTERN-DEBT entry (first occurrence).
+- Threshold predicates accepted physically impossible bounded metric values: observed and fixed with canonical metric domains; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A signed count is not population coverage: added to CONTEXT.md Domain Gotchas ✅
+- Determinism and critical case trials require different sample bases: added to CONTEXT.md Architectural Decisions ✅
+
+### Architectural Decisions Promoted
+- Critical qualification metrics must reference the verified private receipt and remain within its population; domain bounds are enforced before RG derivation: added to CONTEXT.md ✅
+
+---
