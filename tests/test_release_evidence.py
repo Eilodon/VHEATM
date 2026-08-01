@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
-from vheatm_control.evaluation import evaluate_release_gates
+from vheatm_control.evaluation import EvaluationError, evaluate_release_gates
 from vheatm_control.judge import build_blind_packet, expected_verdict_id
 from vheatm_control.qualification import (
     build_private_time_slice_manifest,
@@ -31,6 +32,17 @@ from vheatm_control.supply_chain import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_release_evaluator_rejects_non_rfc3339_evaluated_at() -> None:
+    with pytest.raises(EvaluationError, match="evaluated_at"):
+        evaluate_release_gates("17.0.0-dev.1", {"metrics": {}}, evaluated_at="not-a-timestamp")
+
+
+def test_release_report_id_binds_evaluation_timestamp() -> None:
+    first = evaluate_release_gates("17.0.0-dev.1", {"metrics": {}}, evaluated_at="2026-08-01T00:00:00Z")
+    second = evaluate_release_gates("17.0.0-dev.1", {"metrics": {}}, evaluated_at="2026-08-01T00:00:01Z")
+    assert first["report_id"] != second["report_id"]
 
 
 def test_release_gates_keep_missing_evidence_unknown_and_block_ga() -> None:

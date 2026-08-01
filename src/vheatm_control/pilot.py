@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .evaluation import EvaluationError, evaluate_release_gates, expected_release_report_id
+from .evaluation import EvaluationError, evaluate_release_gates, validate_release_report
 from .providers import ProviderAdapterError, verify_provider_run
 
 
@@ -54,14 +54,11 @@ def prepare_pilot(
         raise PilotError("session_root must be a lowercase SHA-256 digest")
     if not isinstance(plan_id, str) or not plan_id.startswith("PLN-"):
         raise PilotError("plan_id must be content-addressed")
-    report_id = release_report.get("report_id")
-    if not isinstance(report_id, str) or len(report_id) != 68 or not report_id.startswith("RGR-"):
-        raise PilotError("release report must have a content-addressed report_id")
-    if expected_release_report_id(release_report) != report_id:
-        raise PilotError("release report identity does not match its content")
-    gates = release_report.get("gates")
-    if not isinstance(gates, list) or len(gates) != 16 or any(item.get("status") not in {"pass", "fail", "unknown"} for item in gates if isinstance(item, Mapping)) or any(not isinstance(item, Mapping) for item in gates):
-        raise PilotError("release report must contain all 16 typed release gates")
+    try:
+        release_report = validate_release_report(release_report, schema_root=schema_root)
+    except EvaluationError as exc:
+        raise PilotError(f"pilot requires a schema-valid release report: {exc}") from exc
+    gates = release_report["gates"]
     if release_report.get("summary", {}).get("ga_eligible") is not True and profile == "canary":
         raise PilotError("canary requires every release gate to pass")
     if profile == "canary":

@@ -129,8 +129,11 @@ def test_sandbox_rejects_schema_invalid_policy_decision_before_action() -> None:
 
 
 def test_executor_requires_digest_bound_backend(tmp_path: Path) -> None:
+    backend = Path("/usr/bin/bwrap")
+    if not backend.is_file():
+        pytest.skip("bubblewrap is unavailable")
     with pytest.raises(SandboxConfigurationError, match="digest"):
-        SandboxExecutor(backend_path=Path("/usr/bin/bwrap"), backend_sha256=None)
+        SandboxExecutor(backend_path=backend, backend_sha256=None)
 
 
 def test_executor_rejects_workspace_escape_before_backend(tmp_path: Path) -> None:

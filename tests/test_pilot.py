@@ -60,6 +60,35 @@ def test_canary_rejects_self_declared_all_pass_release_report() -> None:
         )
 
 
+def test_shadow_rejects_schema_invalid_release_report() -> None:
+    report = _report()
+    report.pop("evaluated_at")
+    report["report_id"] = expected_release_report_id(report)
+    with pytest.raises(PilotError, match="schema-valid release report"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=report,
+            drills=_drills(),
+            rollback_plan="rollback",
+        )
+
+
+def test_shadow_rejects_duplicate_release_gate_ids() -> None:
+    report = _report()
+    report["gates"] = [dict(gate) for gate in report["gates"]]
+    report["gates"][1]["gate_id"] = report["gates"][0]["gate_id"]
+    report["report_id"] = expected_release_report_id(report)
+    with pytest.raises(PilotError, match="canonical order"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=report,
+            drills=_drills(),
+            rollback_plan="rollback",
+        )
+
+
 def test_shadow_completion_requires_real_read_only_observation() -> None:
     pilot = prepare_pilot(session_root="b" * 64, plan_id="PLN-" + "c" * 64, release_report=_report(), drills=_drills(), rollback_plan="rollback")
     network_request = {

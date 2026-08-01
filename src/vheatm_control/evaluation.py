@@ -68,6 +68,7 @@ _RELEASE_RULES: dict[str, dict[str, tuple[str, float | bool]]] = {
     "RG-14": {"experimental_selected_count": ("eq", 0), "p0_p1_open_count": ("eq", 0)},
     "RG-15": {"scope_limitations_present": ("bool", True), "unknown_risks_present": ("bool", True), "certification_claims_absent": ("bool", True)},
 }
+_RELEASE_GATE_IDS = tuple(_RELEASE_RULES)
 
 _SUPPLY_CHAIN_METRICS = frozenset(
     {
@@ -117,6 +118,14 @@ def _key_id(key_ids: Mapping[str, str] | None, name: str) -> str | None:
 
 def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
     bindings: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(kind: str, identifier: str) -> None:
+        key = (kind, identifier)
+        if key not in seen:
+            seen.add(key)
+            bindings.append({"kind": kind, "id": identifier})
+
     for kind, field in (
         ("qualification_manifest", "manifest_id"),
         ("private_corpus_receipt", "receipt_id"),
@@ -128,29 +137,81 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
         value = evidence.get(kind)
         identifier = value.get(field) if isinstance(value, Mapping) else None
         if isinstance(identifier, str) and identifier:
-            bindings.append({"kind": kind, "id": identifier})
+            add(kind, identifier)
     verdicts = evidence.get("independent_judge_verdicts")
     if isinstance(verdicts, list):
         for verdict in verdicts:
             identifier = verdict.get("verdict_id") if isinstance(verdict, Mapping) else None
             if isinstance(identifier, str) and identifier:
-                bindings.append({"kind": "independent_judge_verdict", "id": identifier})
+                add("independent_judge_verdict", identifier)
     packets = evidence.get("independent_judge_packets")
     if isinstance(packets, list):
         for packet in packets:
             identifier = packet.get("packet_id") if isinstance(packet, Mapping) else None
             if isinstance(identifier, str) and identifier:
-                bindings.append({"kind": "independent_judge_packet", "id": identifier})
+                add("independent_judge_packet", identifier)
     return bindings
 
 
 def expected_release_report_id(report: Mapping[str, Any]) -> str:
     identity = {
         key: report[key]
-        for key in ("framework_version", "evidence_digest", "evidence_bindings", "gates", "summary")
+        for key in ("schema_version", "framework_version", "evidence_digest", "evidence_bindings", "gates", "summary", "evaluated_at")
         if key in report
     }
     return "RGR-" + _digest(identity).upper()
+
+
+def _release_timestamp(value: str | None = None) -> str:
+    timestamp = value or datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    if not isinstance(timestamp, str) or not FormatChecker().conforms(timestamp, "date-time"):
+        raise EvaluationError("release report evaluated_at must be an RFC 3339 date-time")
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise EvaluationError("release report evaluated_at must be an RFC 3339 date-time") from exc
+    if parsed.tzinfo is None:
+        raise EvaluationError("release report evaluated_at must include a timezone")
+    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def validate_release_report(report: Mapping[str, Any], *, schema_root: Path | None = None) -> dict[str, Any]:
+    """Validate a release report before it can authorize a pilot.
+
+    A report ID proves only that selected report fields are internally
+    content-addressed. This boundary additionally requires the canonical
+    schema, the complete ordered RG-00…RG-15 set, and a summary derived from
+    those gate statuses.
+    """
+
+    if not isinstance(report, Mapping):
+        raise EvaluationError("release report must be an object")
+    root = resolve_control_root(schema_root)
+    try:
+        schema = load_json((root / "schemas" / "release-gate-report.schema.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise EvaluationError(f"release report schema is unavailable: {exc}") from exc
+    errors = sorted(
+        Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(report),
+        key=lambda error: list(error.absolute_path),
+    )
+    if errors:
+        location = ".".join(str(part) for part in errors[0].absolute_path) or "<root>"
+        raise EvaluationError(f"release report is not schema-valid at {location}: {errors[0].message}")
+    if report.get("report_id") != expected_release_report_id(report):
+        raise EvaluationError("release report identity does not match its content")
+    gate_ids = tuple(item["gate_id"] for item in report["gates"])
+    if gate_ids != _RELEASE_GATE_IDS:
+        raise EvaluationError("release report must contain each RG-00 through RG-15 exactly once in canonical order")
+    expected_summary = {
+        "pass": sum(item["status"] == "pass" for item in report["gates"]),
+        "fail": sum(item["status"] == "fail" for item in report["gates"]),
+        "unknown": sum(item["status"] == "unknown" for item in report["gates"]),
+        "ga_eligible": all(item["status"] == "pass" for item in report["gates"]),
+    }
+    if report["summary"] != expected_summary:
+        raise EvaluationError("release report summary is not derived from its gate statuses")
+    return dict(report)
 
 
 _TYPED_EVIDENCE_SCHEMAS = {
@@ -579,8 +640,10 @@ def evaluate_release_gates(
         "gates": gate_results,
         "summary": summary,
     }
-    timestamp = evaluated_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    return {"schema_version": "1.0.0", "report_id": expected_release_report_id(identity), **identity, "evaluated_at": timestamp}
+    timestamp = _release_timestamp(evaluated_at)
+    report = {"schema_version": "1.0.0", **identity, "evaluated_at": timestamp}
+    report["report_id"] = expected_release_report_id(report)
+    return validate_release_report(report, schema_root=validation_root)
 
 
 def main() -> int:
