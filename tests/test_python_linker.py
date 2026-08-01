@@ -42,7 +42,8 @@ def wrapper():
     assert calls[("service.run", "<module>")]["state"] == "candidate"
     assert calls[("service.run", "<module>")]["targets"][0]["qualified_name"] == "pkg.service.run"
     assert calls[("execute", "<module>")]["state"] == "candidate"
-    assert calls[("service.run", "wrapper")]["reason"] == "lexical_shadowing_not_modeled"
+    assert calls[("service.run", "wrapper")]["state"] == "candidate"
+    assert calls[("service.run", "wrapper")]["reason"] == "unique_lexical_binding"
 
 
 def test_resolves_relative_imports(tmp_path: Path) -> None:
@@ -177,3 +178,154 @@ def test_canonical_validator_requires_probe_contracts() -> None:
         "structural-probe.schema.json",
         "python-linkage.schema.json",
     } <= validator.REQUIRED_SCHEMA_FILES
+
+
+def test_resolves_function_scope_import_and_rejects_parameter_shadow(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def accepted():
+    run()
+
+def shadowed(run):
+    run()
+""",
+    )
+    linkage = link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)
+    calls = {(item["caller"], item["callee"]): item for item in linkage["calls"] if item["source_path"] == "src/app.py"}
+    assert calls[("accepted", "run")]["state"] == "candidate"
+    assert calls[("accepted", "run")]["targets"][0]["qualified_name"] == "lib.run"
+    assert calls[("shadowed", "run")]["state"] == "unresolved"
+    assert calls[("shadowed", "run")]["reason"] == "parameter_binding"
+
+
+def test_function_locality_applies_before_later_assignment(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def execute():
+    run()
+    run = replacement
+""",
+    )
+    call = next(item for item in link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)["calls"] if item["source_path"] == "src/app.py")
+    assert call["state"] == "unresolved"
+    assert call["reason"] == "local_before_binding"
+    assert call["targets"] == []
+
+
+def test_resolves_simple_alias_chain_with_binding_evidence(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def execute():
+    first = run
+    second = first
+    second()
+""",
+    )
+    linkage = link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)
+    call = next(item for item in linkage["calls"] if item["source_path"] == "src/app.py")
+    assert call["state"] == "candidate"
+    assert call["reason"] == "unique_alias_binding"
+    assert call["targets"][0]["qualified_name"] == "lib.run"
+    assert [item["name"] for item in call["binding_chain"]] == ["second", "first", "run"]
+    second_binding = next(item for item in linkage["bindings"] if item["name"] == "second")
+    assert second_binding["state"] == "candidate"
+    assert second_binding["reason"] == "unique_alias_binding"
+
+
+def test_conditional_rebinding_remains_ambiguous(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def execute(flag):
+    if flag:
+        target = run
+    target()
+""",
+    )
+    call = next(item for item in link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)["calls"] if item["source_path"] == "src/app.py")
+    assert call["state"] == "ambiguous"
+    assert call["reason"] == "control_dependent_rebinding"
+
+
+def test_closure_binding_requires_a_unique_outer_event(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def stable_outer():
+    target = run
+    def inner():
+        target()
+    return inner
+
+def rebound_outer():
+    target = run
+    target = replacement
+    def inner():
+        target()
+    return inner
+""",
+    )
+    calls = {(item["caller"], item["callee"]): item for item in link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)["calls"] if item["source_path"] == "src/app.py"}
+    assert calls[("stable_outer.inner", "target")]["state"] == "candidate"
+    assert calls[("rebound_outer.inner", "target")]["state"] == "ambiguous"
+    assert calls[("rebound_outer.inner", "target")]["reason"] == "enclosing_rebinding_not_proven"
+
+
+def test_global_and_nonlocal_declarations_follow_declared_scope(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "lib.py", "def run():\n    pass\n")
+    _write(
+        tmp_path / "src" / "app.py",
+        """from lib import run
+
+def global_user():
+    global run
+    run()
+
+def outer():
+    def helper():
+        pass
+    def inner():
+        nonlocal helper
+        helper()
+    return inner
+""",
+    )
+    calls = {(item["caller"], item["callee"]): item for item in link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)["calls"] if item["source_path"] == "src/app.py"}
+    assert calls[("global_user", "run")]["targets"][0]["qualified_name"] == "lib.run"
+    assert calls[("outer.inner", "helper")]["targets"][0]["qualified_name"] == "app.outer.helper"
+
+
+def test_local_nested_definition_is_a_lexical_candidate(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "src" / "app.py",
+        """def outer():
+    def inner():
+        pass
+    inner()
+""",
+    )
+    call = link_probe_bundle(_probe(tmp_path), ["src"], generated_at=CAPTURED_AT)["calls"][0]
+    assert call["state"] == "candidate"
+    assert call["targets"][0]["qualified_name"] == "app.outer.inner"
+
+
+def test_binding_tampering_is_detected_against_probe(tmp_path: Path) -> None:
+    _write(tmp_path / "src" / "app.py", "def run():\n    pass\nrun()\n")
+    probe = _probe(tmp_path)
+    linkage = link_probe_bundle(probe, ["src"], generated_at=CAPTURED_AT)
+    linkage["bindings"][0]["reason"] = "dynamic_rebinding"
+    with pytest.raises(LinkerError):
+        verify_linkage_bundle(linkage, probe)

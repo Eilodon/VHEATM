@@ -4,14 +4,34 @@
   "title": "VHEATM read-only Python structural probe bundle",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "probe_id", "probe_type", "workspace", "requested_paths", "status", "generated_at", "limits", "summary", "files", "errors", "root_hash"],
+  "required": [
+    "schema_version",
+    "probe_id",
+    "probe_type",
+    "workspace",
+    "requested_paths",
+    "status",
+    "generated_at",
+    "limits",
+    "summary",
+    "files",
+    "errors",
+    "root_hash"
+  ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{16}$"},
     "probe_type": {"const": "python_ast_v1"},
     "workspace": {"const": "workspace:"},
-    "requested_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-    "status": {"enum": ["complete", "blocked"]},
+    "requested_paths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "status": {
+      "enum": ["complete", "blocked"]
+    },
     "generated_at": {"type": "string", "format": "date-time"},
     "limits": {
       "type": "object",
@@ -26,14 +46,16 @@
     "summary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["discovered_files", "parsed_files", "symbols", "imports", "calls", "errors"],
+      "required": ["discovered_files", "parsed_files", "scopes", "symbols", "imports", "bindings", "calls", "errors"],
       "properties": {
         "discovered_files": {"type": "integer", "minimum": 0},
         "parsed_files": {"type": "integer", "minimum": 0},
         "symbols": {"type": "integer", "minimum": 0},
         "imports": {"type": "integer", "minimum": 0},
         "calls": {"type": "integer", "minimum": 0},
-        "errors": {"type": "integer", "minimum": 0}
+        "errors": {"type": "integer", "minimum": 0},
+        "scopes": {"type": "integer", "minimum": 0},
+        "bindings": {"type": "integer", "minimum": 0}
       }
     },
     "files": {
@@ -41,20 +63,40 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["path", "language", "source", "ast_digest", "ast_nodes", "symbols", "imports", "calls"],
+        "required": ["path", "language", "source", "ast_digest", "ast_nodes", "scopes", "symbols", "imports", "bindings", "calls"],
         "properties": {
           "path": {"type": "string", "minLength": 1},
           "language": {"const": "python"},
           "source": {"$ref": "https://vheatm.dev/schemas/provenance-record.schema.json"},
           "ast_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "ast_nodes": {"type": "integer", "minimum": 1},
-          "symbols": {"type": "array", "items": {"$ref": "#/$defs/symbol"}},
-          "imports": {"type": "array", "items": {"$ref": "#/$defs/import"}},
-          "calls": {"type": "array", "items": {"$ref": "#/$defs/call"}}
+          "symbols": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/symbol"}
+          },
+          "imports": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/import"}
+          },
+          "calls": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/call"}
+          },
+          "scopes": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/scope"}
+          },
+          "bindings": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/binding"}
+          }
         }
       }
     },
-    "errors": {"type": "array", "items": {"$ref": "#/$defs/error"}},
+    "errors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/error"}
+    },
     "root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
   },
   "$defs": {
@@ -74,8 +116,12 @@
       "required": ["name", "kind", "annotation", "has_default"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
-        "kind": {"enum": ["positional_only", "positional", "var_positional", "keyword_only", "var_keyword"]},
-        "annotation": {"type": ["string", "null"]},
+        "kind": {
+          "enum": ["positional_only", "positional", "var_positional", "keyword_only", "var_keyword"]
+        },
+        "annotation": {
+          "type": ["string", "null"]
+        },
         "has_default": {"type": "boolean"}
       }
     },
@@ -87,13 +133,26 @@
           "additionalProperties": false,
           "required": ["kind", "name", "qualified_name", "decorators", "line", "column", "end_line", "end_column"],
           "properties": {
-            "kind": {"enum": ["class", "function", "async_function", "method", "async_method"]},
+            "kind": {
+              "enum": ["class", "function", "async_function", "method", "async_method"]
+            },
             "name": {"type": "string", "minLength": 1},
             "qualified_name": {"type": "string", "minLength": 1},
-            "decorators": {"type": "array", "items": {"type": "string"}},
-            "bases": {"type": "array", "items": {"type": "string"}},
-            "parameters": {"type": "array", "items": {"$ref": "#/$defs/parameter"}},
-            "returns": {"type": ["string", "null"]},
+            "decorators": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "bases": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "parameters": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/parameter"}
+            },
+            "returns": {
+              "type": ["string", "null"]
+            },
             "line": {"type": "integer", "minimum": 1},
             "column": {"type": "integer", "minimum": 0},
             "end_line": {"type": "integer", "minimum": 1},
@@ -108,17 +167,26 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "module", "name", "alias", "level", "line", "column", "end_line", "end_column"],
+          "required": ["kind", "module", "name", "alias", "level", "scope_id", "line", "column", "end_line", "end_column"],
           "properties": {
-            "kind": {"enum": ["import", "from"]},
-            "module": {"type": ["string", "null"]},
-            "name": {"type": ["string", "null"]},
-            "alias": {"type": ["string", "null"]},
+            "kind": {
+              "enum": ["import", "from"]
+            },
+            "module": {
+              "type": ["string", "null"]
+            },
+            "name": {
+              "type": ["string", "null"]
+            },
+            "alias": {
+              "type": ["string", "null"]
+            },
             "level": {"type": "integer", "minimum": 0},
             "line": {"type": "integer", "minimum": 1},
             "column": {"type": "integer", "minimum": 0},
             "end_line": {"type": "integer", "minimum": 1},
-            "end_column": {"type": "integer", "minimum": 0}
+            "end_column": {"type": "integer", "minimum": 0},
+            "scope_id": {"type": "string", "minLength": 1}
           }
         }
       ]
@@ -129,9 +197,25 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["callee", "dynamic", "caller", "positional_arguments", "keyword_arguments", "has_star_arguments", "has_star_keywords", "line", "column", "end_line", "end_column"],
+          "required": [
+            "callee",
+            "dynamic",
+            "caller",
+            "scope_id",
+            "control_context",
+            "positional_arguments",
+            "keyword_arguments",
+            "has_star_arguments",
+            "has_star_keywords",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
           "properties": {
-            "callee": {"type": ["string", "null"]},
+            "callee": {
+              "type": ["string", "null"]
+            },
             "dynamic": {"type": "boolean"},
             "caller": {"type": "string", "minLength": 1},
             "positional_arguments": {"type": "integer", "minimum": 0},
@@ -141,7 +225,12 @@
             "line": {"type": "integer", "minimum": 1},
             "column": {"type": "integer", "minimum": 0},
             "end_line": {"type": "integer", "minimum": 1},
-            "end_column": {"type": "integer", "minimum": 0}
+            "end_column": {"type": "integer", "minimum": 0},
+            "scope_id": {"type": "string", "minLength": 1},
+            "control_context": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            }
           }
         }
       ]
@@ -152,9 +241,142 @@
       "required": ["path", "code", "message"],
       "properties": {
         "path": {"type": "string", "minLength": 1},
-        "code": {"enum": ["not_found", "no_python_files", "unsupported_extension", "unsupported_path", "symlink_rejected", "limit_exceeded", "syntax_error", "probe_error"]},
+        "code": {
+          "enum": [
+            "not_found",
+            "no_python_files",
+            "unsupported_extension",
+            "unsupported_path",
+            "symlink_rejected",
+            "limit_exceeded",
+            "syntax_error",
+            "probe_error"
+          ]
+        },
         "message": {"type": "string", "minLength": 1}
       }
+    },
+    "scope": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope_id",
+            "kind",
+            "qualified_name",
+            "parent_scope",
+            "lookup_parent_scope",
+            "global_names",
+            "nonlocal_names",
+            "local_names",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "scope_id": {"type": "string", "minLength": 1},
+            "kind": {
+              "enum": ["module", "class", "function", "async_function", "lambda", "comprehension"]
+            },
+            "qualified_name": {"type": "string", "minLength": 1},
+            "parent_scope": {
+              "type": ["string", "null"]
+            },
+            "lookup_parent_scope": {
+              "type": ["string", "null"]
+            },
+            "global_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "nonlocal_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "local_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "binding": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope_id",
+            "name",
+            "kind",
+            "declaration",
+            "value",
+            "dynamic",
+            "runtime_binding",
+            "target_qualified_name",
+            "control_context",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "scope_id": {"type": "string", "minLength": 1},
+            "name": {"type": "string", "minLength": 1},
+            "kind": {
+              "enum": [
+                "parameter",
+                "import",
+                "function",
+                "async_function",
+                "class",
+                "assignment",
+                "annotated_assignment",
+                "annotation",
+                "augmented_assignment",
+                "named_expression",
+                "delete",
+                "for_target",
+                "with_target",
+                "except_target",
+                "pattern_capture",
+                "comprehension_target"
+              ]
+            },
+            "declaration": {
+              "enum": ["local", "global", "nonlocal"]
+            },
+            "value": {
+              "type": ["string", "null"]
+            },
+            "dynamic": {"type": "boolean"},
+            "runtime_binding": {"type": "boolean"},
+            "target_qualified_name": {
+              "type": ["string", "null"]
+            },
+            "control_context": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
     }
   }
 }

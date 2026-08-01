@@ -16,7 +16,9 @@
     "summary",
     "modules",
     "module_collisions",
+    "scopes",
     "imports",
+    "bindings",
     "calls",
     "errors",
     "root_hash"
@@ -33,7 +35,9 @@
       "uniqueItems": true,
       "items": {"type": "string", "minLength": 1}
     },
-    "status": {"enum": ["complete", "blocked"]},
+    "status": {
+      "enum": ["complete", "blocked"]
+    },
     "generated_at": {"type": "string", "format": "date-time"},
     "summary": {
       "type": "object",
@@ -41,10 +45,16 @@
       "required": [
         "modules",
         "module_collisions",
+        "scopes",
         "imports",
         "internal_imports",
         "ambiguous_imports",
         "external_imports",
+        "bindings",
+        "candidate_bindings",
+        "ambiguous_bindings",
+        "unresolved_bindings",
+        "rebound_names",
         "calls",
         "candidate_calls",
         "ambiguous_calls",
@@ -62,7 +72,13 @@
         "candidate_calls": {"type": "integer", "minimum": 0},
         "ambiguous_calls": {"type": "integer", "minimum": 0},
         "unresolved_calls": {"type": "integer", "minimum": 0},
-        "errors": {"type": "integer", "minimum": 0}
+        "errors": {"type": "integer", "minimum": 0},
+        "scopes": {"type": "integer", "minimum": 0},
+        "bindings": {"type": "integer", "minimum": 0},
+        "candidate_bindings": {"type": "integer", "minimum": 0},
+        "ambiguous_bindings": {"type": "integer", "minimum": 0},
+        "unresolved_bindings": {"type": "integer", "minimum": 0},
+        "rebound_names": {"type": "integer", "minimum": 0}
       }
     },
     "modules": {
@@ -85,7 +101,15 @@
       "type": "array",
       "items": {"$ref": "#/$defs/error"}
     },
-    "root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+    "root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "scopes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scope"}
+    },
+    "bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/binding_record"}
+    }
   },
   "$defs": {
     "location": {
@@ -115,14 +139,24 @@
       "additionalProperties": false,
       "required": ["kind", "module", "symbol", "qualified_name", "path", "source_id", "definition_line", "definition_column"],
       "properties": {
-        "kind": {"enum": ["module", "symbol"]},
+        "kind": {
+          "enum": ["module", "symbol"]
+        },
         "module": {"type": "string", "minLength": 1},
-        "symbol": {"type": ["string", "null"]},
+        "symbol": {
+          "type": ["string", "null"]
+        },
         "qualified_name": {"type": "string", "minLength": 1},
         "path": {"type": "string", "minLength": 1},
         "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"},
-        "definition_line": {"type": ["integer", "null"], "minimum": 1},
-        "definition_column": {"type": ["integer", "null"], "minimum": 0}
+        "definition_line": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "definition_column": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
       }
     },
     "collision": {
@@ -148,6 +182,7 @@
           "required": [
             "source_module",
             "source_path",
+            "source_scope",
             "kind",
             "requested",
             "binding",
@@ -161,19 +196,15 @@
           "properties": {
             "source_module": {"type": "string", "minLength": 1},
             "source_path": {"type": "string", "minLength": 1},
-            "kind": {"enum": ["import", "from"]},
+            "kind": {
+              "enum": ["import", "from"]
+            },
             "requested": {"type": "string", "minLength": 1},
-            "binding": {"type": ["string", "null"]},
+            "binding": {
+              "type": ["string", "null"]
+            },
             "state": {
-              "enum": [
-                "internal_module",
-                "internal_symbol",
-                "ambiguous",
-                "external",
-                "unresolved_relative",
-                "unresolved_internal",
-                "wildcard"
-              ]
+              "enum": ["internal_module", "internal_symbol", "ambiguous", "external", "unresolved_relative", "unresolved_internal", "wildcard"]
             },
             "targets": {
               "type": "array",
@@ -182,7 +213,8 @@
             "line": {"type": "integer", "minimum": 1},
             "column": {"type": "integer", "minimum": 0},
             "end_line": {"type": "integer", "minimum": 1},
-            "end_column": {"type": "integer", "minimum": 0}
+            "end_column": {"type": "integer", "minimum": 0},
+            "source_scope": {"type": "string", "minLength": 1}
           }
         }
       ]
@@ -196,11 +228,14 @@
           "required": [
             "source_module",
             "source_path",
+            "scope_id",
             "caller",
             "callee",
+            "control_context",
             "state",
             "reason",
             "targets",
+            "binding_chain",
             "line",
             "column",
             "end_line",
@@ -210,19 +245,36 @@
             "source_module": {"type": "string", "minLength": 1},
             "source_path": {"type": "string", "minLength": 1},
             "caller": {"type": "string", "minLength": 1},
-            "callee": {"type": ["string", "null"]},
-            "state": {"enum": ["candidate", "ambiguous", "unresolved"]},
+            "callee": {
+              "type": ["string", "null"]
+            },
+            "state": {
+              "enum": ["candidate", "ambiguous", "unresolved"]
+            },
             "reason": {
               "enum": [
-                "unique_structural_candidate",
+                "unique_lexical_binding",
+                "unique_alias_binding",
                 "mixed_internal_external_bindings",
                 "multiple_internal_targets",
                 "dynamic_callee",
-                "lexical_shadowing_not_modeled",
                 "wildcard_import_scope",
                 "external_target",
                 "internal_target_not_found",
-                "unknown_binding"
+                "unknown_binding",
+                "unknown_scope",
+                "parameter_binding",
+                "local_before_binding",
+                "dynamic_rebinding",
+                "control_dependent_rebinding",
+                "deleted_binding",
+                "annotation_only_binding",
+                "nonlocal_binding_not_found",
+                "import_pattern_mismatch",
+                "alias_cycle",
+                "enclosing_rebinding_not_proven",
+                "module_not_callable",
+                "attribute_target_not_modeled"
               ]
             },
             "targets": {
@@ -232,7 +284,16 @@
             "line": {"type": "integer", "minimum": 1},
             "column": {"type": "integer", "minimum": 0},
             "end_line": {"type": "integer", "minimum": 1},
-            "end_column": {"type": "integer", "minimum": 0}
+            "end_column": {"type": "integer", "minimum": 0},
+            "scope_id": {"type": "string", "minLength": 1},
+            "control_context": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "binding_chain": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/binding_ref"}
+            }
           }
         }
       ]
@@ -244,15 +305,181 @@
       "properties": {
         "path": {"type": "string", "minLength": 1},
         "code": {
-          "enum": [
-            "input_probe_blocked",
-            "unmapped_file",
-            "unimportable_module",
-            "empty_source_root"
-          ]
+          "enum": ["input_probe_blocked", "unmapped_file", "unimportable_module", "empty_source_root"]
         },
         "message": {"type": "string", "minLength": 1}
       }
+    },
+    "binding_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_id", "name", "kind", "declaration", "line", "column"],
+      "properties": {
+        "scope_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "declaration": {
+          "enum": ["local", "global", "nonlocal"]
+        },
+        "line": {"type": "integer", "minimum": 1},
+        "column": {"type": "integer", "minimum": 0}
+      }
+    },
+    "scope": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_module",
+            "source_path",
+            "scope_id",
+            "kind",
+            "qualified_name",
+            "parent_scope",
+            "lookup_parent_scope",
+            "global_names",
+            "nonlocal_names",
+            "local_names",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "source_module": {"type": "string", "minLength": 1},
+            "source_path": {"type": "string", "minLength": 1},
+            "scope_id": {"type": "string", "minLength": 1},
+            "kind": {
+              "enum": ["module", "class", "function", "async_function", "lambda", "comprehension"]
+            },
+            "qualified_name": {"type": "string", "minLength": 1},
+            "parent_scope": {
+              "type": ["string", "null"]
+            },
+            "lookup_parent_scope": {
+              "type": ["string", "null"]
+            },
+            "global_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "nonlocal_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "local_names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "binding_record": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_module",
+            "source_path",
+            "scope_id",
+            "name",
+            "kind",
+            "declaration",
+            "value",
+            "dynamic",
+            "runtime_binding",
+            "target_qualified_name",
+            "control_context",
+            "pattern",
+            "targets",
+            "state",
+            "reason",
+            "binding_chain",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "source_module": {"type": "string", "minLength": 1},
+            "source_path": {"type": "string", "minLength": 1},
+            "scope_id": {"type": "string", "minLength": 1},
+            "name": {"type": "string", "minLength": 1},
+            "kind": {"type": "string", "minLength": 1},
+            "declaration": {
+              "enum": ["local", "global", "nonlocal"]
+            },
+            "value": {
+              "type": ["string", "null"]
+            },
+            "dynamic": {"type": "boolean"},
+            "runtime_binding": {"type": "boolean"},
+            "target_qualified_name": {
+              "type": ["string", "null"]
+            },
+            "control_context": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "pattern": {
+              "type": ["string", "null"]
+            },
+            "targets": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/target"}
+            },
+            "state": {
+              "enum": ["candidate", "ambiguous", "unresolved"]
+            },
+            "reason": {
+              "enum": [
+                "unique_lexical_binding",
+                "unique_alias_binding",
+                "mixed_internal_external_bindings",
+                "multiple_internal_targets",
+                "dynamic_callee",
+                "wildcard_import_scope",
+                "external_target",
+                "internal_target_not_found",
+                "unknown_binding",
+                "unknown_scope",
+                "parameter_binding",
+                "local_before_binding",
+                "dynamic_rebinding",
+                "control_dependent_rebinding",
+                "deleted_binding",
+                "annotation_only_binding",
+                "nonlocal_binding_not_found",
+                "import_pattern_mismatch",
+                "alias_cycle",
+                "enclosing_rebinding_not_proven",
+                "module_not_callable",
+                "attribute_target_not_modeled"
+              ]
+            },
+            "binding_chain": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/binding_ref"}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
     }
   }
 }
