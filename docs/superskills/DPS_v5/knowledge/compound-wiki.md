@@ -55,3 +55,28 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFIC
 - Malformed authorization fails closed before backend launch: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-9 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: shared-provider-authorization-receipts
+
+### New Domain Terms Added to CONTEXT.md
+- Shared decision contract: added ✅
+- Typed authorization failure: added ✅
+
+### Bug Patterns
+- Shared receipt builder accepted incomplete broker decisions: observed and fixed with one semantic guard used by sandbox/provider boundaries; no PATTERN-DEBT entry (first occurrence).
+- Provider authorization failure could escape as an untyped exception or transport path: observed and fixed with a blocked run and null receipt; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Null receipt means no authorization event, not deny evidence: added to CONTEXT.md Domain Gotchas ✅
+- Synthetic fixtures must preserve the complete request→decision→receipt chain: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- All brokered action adapters share semantic decision validation: added to CONTEXT.md Architectural Decisions ✅
+- Completed provider outcomes require an allowed content-valid network receipt: added to CONTEXT.md Architectural Decisions ✅
+
+---
