@@ -30,7 +30,9 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "policy-decision.schema.json",
         "provenance-record.schema.json",
         "provenance-registry.schema.json",
+        "python-linkage.schema.json",
         "runtime-policy.schema.json",
+        "structural-probe.schema.json",
         "tool-request.schema.json",
         "vheatm-manifest.schema.json",
     }
