@@ -43,6 +43,23 @@ def test_canary_and_failed_drill_block() -> None:
         rollback_pilot(pilot, reason="provider outage")
 
 
+def test_canary_rejects_self_declared_all_pass_release_report() -> None:
+    report = _report()
+    report["gates"] = [{**gate, "status": "pass", "missing_metrics": [], "failed_metrics": [], "rationale": "self-declared"} for gate in report["gates"]]
+    report["summary"] = {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
+    report["evidence_bindings"] = [{"kind": "qualification_evidence", "id": "QEV-" + "A" * 64}]
+    report["report_id"] = expected_release_report_id(report)
+    with pytest.raises(PilotError, match="re-verified release evidence"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=report,
+            profile="canary",
+            drills=_drills(),
+            rollback_plan="rollback",
+        )
+
+
 def test_shadow_completion_requires_real_read_only_observation() -> None:
     pilot = prepare_pilot(session_root="b" * 64, plan_id="PLN-" + "c" * 64, release_report=_report(), drills=_drills(), rollback_plan="rollback")
     network_request = {

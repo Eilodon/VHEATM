@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .evaluation import expected_release_report_id
+from .evaluation import EvaluationError, evaluate_release_gates, expected_release_report_id
 from .providers import ProviderAdapterError, verify_provider_run
 
 
@@ -41,6 +42,11 @@ def prepare_pilot(
     drills: Sequence[Mapping[str, Any]],
     rollback_plan: str,
     created_at: str | None = None,
+    release_evidence: Mapping[str, Any] | None = None,
+    verification_keys: Mapping[str, Any] | None = None,
+    verification_key_ids: Mapping[str, str] | None = None,
+    expected_bundle_root: str | None = None,
+    schema_root: Path | None = None,
 ) -> dict[str, Any]:
     if profile not in {"shadow", "canary"}:
         raise PilotError("pilot profile must be shadow or canary")
@@ -62,6 +68,28 @@ def prepare_pilot(
         summary = release_report.get("summary", {})
         if summary.get("pass") != 16 or summary.get("fail") != 0 or summary.get("unknown") != 0 or any(item.get("status") != "pass" for item in gates) or not release_report.get("evidence_bindings"):
             raise PilotError("canary requires a fully evidenced release report")
+        if (
+            not isinstance(release_evidence, Mapping)
+            or not isinstance(verification_keys, Mapping)
+            or not verification_keys
+            or not isinstance(expected_bundle_root, str)
+            or not isinstance(release_report.get("framework_version"), str)
+        ):
+            raise PilotError("canary requires re-verified release evidence")
+        try:
+            verified_report = evaluate_release_gates(
+                str(release_report["framework_version"]),
+                release_evidence,
+                evaluated_at=str(release_report.get("evaluated_at", "")),
+                expected_bundle_root=expected_bundle_root,
+                verification_keys=verification_keys,
+                verification_key_ids=verification_key_ids,
+                schema_root=schema_root,
+            )
+        except (EvaluationError, TypeError, ValueError) as exc:
+            raise PilotError(f"canary release evidence re-verification failed: {exc}") from exc
+        if verified_report != dict(release_report):
+            raise PilotError("canary release report does not match re-verified release evidence")
     if not str(rollback_plan).strip():
         raise PilotError("pilot requires a non-empty rollback plan")
     normalized_drills = []
