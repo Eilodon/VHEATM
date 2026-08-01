@@ -13,12 +13,13 @@
     "provider_version": {"type": "string", "minLength": 1},
     "config_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "network_receipt": {"type": "object", "additionalProperties": false, "required": ["id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"], "properties": {"id": {"type": "string", "minLength": 1}, "request_id": {"type": "string", "minLength": 1}, "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "tool_class": {"const": "network"}, "decision": {"enum": ["allow", "deny"]}, "action_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "recorded_at": {"type": "string", "format": "date-time"}, "approval_token_id": {"type": ["string", "null"]}}},
+    "network_receipt": {"type": ["object", "null"], "additionalProperties": false, "required": ["id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"], "properties": {"id": {"type": "string", "minLength": 1}, "request_id": {"type": "string", "minLength": 1}, "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "tool_class": {"const": "network"}, "decision": {"enum": ["allow", "deny"]}, "action_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "recorded_at": {"type": "string", "format": "date-time"}, "approval_token_id": {"type": ["string", "null"]}}},
     "status": {"enum": ["completed", "blocked", "unknown"]},
     "epistemic_status": {"enum": ["candidate", "unknown"]},
     "response_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "response": {"type": ["object", "null"]},
     "error": {"type": "string", "minLength": 1},
     "generated_at": {"type": "string", "format": "date-time"}
-  }
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]}, "then": {"properties": {"network_receipt": {"type": "object", "properties": {"decision": {"const": "allow"}}}}, "required": ["network_receipt"]}}]
 }

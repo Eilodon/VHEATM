@@ -42,6 +42,7 @@ def test_lifecycle_document_matches_contract() -> None:
 def test_approval_and_decision_match_contracts() -> None:
     key = b"test-key"
     request = {
+        "schema_version": "1.0.0",
         "request_id": "REQ-1",
         "requester": "agent",
         "tool_class": "write",

@@ -61,7 +61,7 @@ def test_completed_sandbox_run_binds_policy_decision_and_tool_receipt() -> None:
         "reason": "approved",
         "controls": ["approval:verified", "execute:sandbox"],
         "evaluated_at": "2026-08-01T00:00:00Z",
-        "approval_token_id": None,
+        "approval_token_id": "APR-" + "A" * 64,
     }
     receipt = build_tool_receipt(_request(), decision, recorded_at="2026-08-01T00:00:00Z")
     run = build_sandbox_run(
@@ -101,16 +101,17 @@ def test_completed_sandbox_run_cannot_claim_execution_without_authorization() ->
 
 
 def test_sandbox_rejects_schema_invalid_policy_decision_before_action() -> None:
-    decision = {
+    valid_decision = {
         "schema_version": "1.0.0",
         "request_id": "REQ-sandbox",
         "decision": "allow",
         "reason": "approved",
-        "controls": [],
+        "controls": ["approval:verified"],
         "evaluated_at": "2026-08-01T00:00:00Z",
-        "approval_token_id": None,
+        "approval_token_id": "APR-" + "A" * 64,
     }
-    receipt = build_tool_receipt(_request(), decision, recorded_at="2026-08-01T00:00:00Z")
+    decision = {**valid_decision, "controls": []}
+    receipt = build_tool_receipt(_request(), valid_decision, recorded_at="2026-08-01T00:00:00Z")
     with pytest.raises(SandboxExecutionError, match="policy decision"):
         build_sandbox_run(
             request=_request(),
@@ -167,7 +168,7 @@ def test_executor_blocks_when_host_cannot_provide_required_namespace() -> None:
                 "reason": "test policy",
                 "controls": ["test:allow"],
                 "evaluated_at": "2026-08-01T00:00:00Z",
-                "approval_token_id": None,
+                "approval_token_id": "APR-" + "A" * 64,
             }
 
     digest = hashlib.sha256(backend.read_bytes()).hexdigest()

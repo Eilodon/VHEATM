@@ -9,6 +9,7 @@ from vheatm_control.evaluation import evaluate_release_gates, expected_release_r
 from vheatm_control.pilot import PilotError, complete_pilot, prepare_pilot, rollback_pilot
 from vheatm_control.providers import build_provider_run
 from vheatm_control.serialization import load_json
+from vheatm_control.tool_broker import build_tool_receipt
 
 
 def _report(eligible: bool = False):
@@ -44,13 +45,24 @@ def test_canary_and_failed_drill_block() -> None:
 
 def test_shadow_completion_requires_real_read_only_observation() -> None:
     pilot = prepare_pilot(session_root="b" * 64, plan_id="PLN-" + "c" * 64, release_report=_report(), drills=_drills(), rollback_plan="rollback")
-    request = {"request_id": "ANR-" + "a" * 64, "network_request_id": "NET-" + "b" * 64}
+    network_request = {
+        "schema_version": "1.0.0", "request_id": "NET-" + "b" * 64, "requester": "local.python",
+        "tool_class": "network", "scope": "workspace:", "destination": "https://provider.example.test/analyze",
+        "data_classes": ["source_digests"], "redacted": True,
+    }
+    request = {"request_id": "ANR-" + "a" * 64, "network_request_id": network_request["request_id"], "network_request": network_request}
+    decision = {
+        "schema_version": "1.0.0", "request_id": network_request["request_id"], "decision": "allow",
+        "reason": "test approval", "controls": ["approval:verified"], "evaluated_at": "2026-08-01T00:00:00Z",
+        "approval_token_id": "APR-" + "A" * 64,
+    }
+    receipt = build_tool_receipt(network_request, decision, recorded_at="2026-08-01T00:00:00Z")
     provider_run = build_provider_run(
         request=request,
         provider_id="local.python",
         provider_version="1.0.0",
         config_digest="c" * 64,
-        network_receipt={"request_id": request["network_request_id"], "decision": "allow"},
+        network_receipt=receipt,
         status="completed",
         response={"candidate": True},
         error=None,

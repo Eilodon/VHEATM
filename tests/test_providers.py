@@ -21,12 +21,13 @@ class FakeBroker:
     def evaluate(self, request, approval_token=None):  # noqa: ANN001
         self.calls += 1
         return {
+            "schema_version": "1.0.0",
             "request_id": request["request_id"],
             "decision": "allow" if self.allow else "deny",
             "reason": "test decision",
-            "controls": ["test"],
+            "controls": ["test", "approval:verified"] if self.allow else ["test"],
             "evaluated_at": "2026-08-01T00:00:00Z",
-            "approval_token_id": None,
+            "approval_token_id": "APR-" + "A" * 64 if self.allow else None,
         }
 
 
@@ -98,6 +99,33 @@ def test_external_provider_identity_mismatch_is_unknown() -> None:
     result = _provider(broker, transport).run(_request())
     assert result["status"] == "unknown"
     assert "mismatch" in result["error"]
+
+
+def test_malformed_provider_policy_decision_fails_closed_without_transport() -> None:
+    class MalformedBroker:
+        def evaluate(self, request, approval_token=None):  # noqa: ANN001
+            return {
+                "request_id": request["request_id"],
+                "decision": "allow",
+                "reason": "test decision",
+                "controls": ["test"],
+                "evaluated_at": "2026-08-01T00:00:00Z",
+                "approval_token_id": "APR-" + "A" * 64,
+            }
+
+    called = False
+
+    def transport(payload):
+        nonlocal called
+        called = True
+        return payload
+
+    result = _provider(MalformedBroker(), transport).run(_request())
+    assert result["status"] == "blocked"
+    assert result["network_receipt"] is None
+    assert called is False
+    schema = json.loads((ROOT / "schemas" / "provider-run.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(result)
 
 
 def test_provider_defaults_to_bounded_https_transport(monkeypatch) -> None:

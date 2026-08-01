@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import resource
 import selectors
 import shlex
@@ -16,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
-from .tool_broker import ToolBroker, action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest
+from .tool_broker import ToolBroker, action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest, validate_policy_decision
 
 
 class SandboxConfigurationError(ValueError):
@@ -43,27 +42,6 @@ def _timestamp(value: str) -> str:
     if parsed.tzinfo is None:
         raise SandboxExecutionError("sandbox timestamps must include a timezone")
     return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _validate_policy_decision(decision: Mapping[str, Any], request: Mapping[str, Any]) -> None:
-    if decision.get("schema_version") != "1.0.0":
-        raise SandboxExecutionError("sandbox policy decision schema version is invalid")
-    if decision.get("request_id") != request.get("request_id"):
-        raise SandboxExecutionError("sandbox policy decision is not bound to the request")
-    if decision.get("decision") not in {"allow", "deny"}:
-        raise SandboxExecutionError("sandbox policy decision value is invalid")
-    if not isinstance(decision.get("reason"), str) or not decision["reason"].strip():
-        raise SandboxExecutionError("sandbox policy decision reason is invalid")
-    controls = decision.get("controls")
-    if not isinstance(controls, list) or not controls or len(controls) != len(set(controls)) or any(not isinstance(item, str) or not item for item in controls):
-        raise SandboxExecutionError("sandbox policy decision controls are invalid")
-    try:
-        _timestamp(decision.get("evaluated_at"))
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise SandboxExecutionError("sandbox policy decision timestamp is invalid") from exc
-    approval_token_id = decision.get("approval_token_id")
-    if approval_token_id is not None and (not isinstance(approval_token_id, str) or not re.fullmatch(r"APR-[A-F0-9]{64}", approval_token_id)):
-        raise SandboxExecutionError("sandbox policy decision approval token is invalid")
 
 
 def expected_sandbox_run_id(run: Mapping[str, Any]) -> str:
@@ -100,7 +78,10 @@ def build_sandbox_run(
     if policy_decision is not None or tool_receipt is not None:
         if not isinstance(policy_decision, Mapping) or not isinstance(tool_receipt, Mapping):
             raise SandboxExecutionError("sandbox authorization evidence must include a policy decision and tool receipt")
-        _validate_policy_decision(policy_decision, request)
+        try:
+            validate_policy_decision(policy_decision, request)
+        except Exception as exc:
+            raise SandboxExecutionError(f"sandbox policy decision is invalid: {exc}") from exc
         if tool_receipt.get("request_id") != request.get("request_id") or tool_receipt.get("request_digest") != request_digest(request):
             raise SandboxExecutionError("sandbox tool receipt is not bound to the request")
         if tool_receipt.get("tool_class") != request.get("tool_class") or tool_receipt.get("decision") != policy_decision.get("decision"):
@@ -343,7 +324,7 @@ class SandboxExecutor:
         except Exception as exc:  # a failed policy boundary must not become host execution
             return self._blocked(request, argv, f"policy broker unavailable: {exc}", started, controls=("broker:error",))
         try:
-            _validate_policy_decision(decision, request)
+            validate_policy_decision(decision, request)
             authorization_receipt = build_tool_receipt(request, decision, recorded_at=started)
         except Exception as exc:  # a malformed authorization boundary must not become host execution
             return self._blocked(request, argv, f"authorization receipt unavailable: {exc}", started, controls=("authorization:receipt-failed",))

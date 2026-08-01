@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Mapping
 
 from .analyzers import snapshot_digest
-from .tool_broker import build_tool_receipt, request_digest
+from .tool_broker import action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest, validate_policy_decision
 
 
 class ProviderAdapterError(ValueError):
@@ -105,7 +105,7 @@ def build_provider_run(
     provider_id: str,
     provider_version: str,
     config_digest: str,
-    network_receipt: Mapping[str, Any],
+    network_receipt: Mapping[str, Any] | None,
     status: str,
     response: Mapping[str, Any] | None,
     error: str | None,
@@ -115,8 +115,38 @@ def build_provider_run(
         raise ProviderAdapterError("provider status is invalid")
     if len(config_digest) != 64 or any(char not in "0123456789abcdef" for char in config_digest):
         raise ProviderAdapterError("provider config_digest must be lowercase SHA-256")
-    if network_receipt.get("request_id") != request.get("network_request_id"):
-        raise ProviderAdapterError("provider network receipt is not bound to the request")
+    if network_receipt is None:
+        if status == "completed":
+            raise ProviderAdapterError("completed provider run requires an authorization receipt")
+    else:
+        if network_receipt.get("request_id") != request.get("network_request_id"):
+            raise ProviderAdapterError("provider network receipt is not bound to the request")
+        if network_receipt.get("tool_class") != "network" or network_receipt.get("decision") not in {"allow", "deny"}:
+            raise ProviderAdapterError("provider network receipt has an invalid tool binding")
+        if network_receipt.get("id") != expected_tool_receipt_id(network_receipt):
+            raise ProviderAdapterError("provider network receipt identity is invalid")
+        network_request = request.get("network_request")
+        if not isinstance(network_request, Mapping):
+            raise ProviderAdapterError("provider network receipt requires the original network request")
+        try:
+            validate_policy_decision(
+                {
+                    "schema_version": "1.0.0",
+                    "request_id": network_receipt.get("request_id"),
+                    "decision": network_receipt.get("decision"),
+                    "reason": "receipt-bound decision",
+                    "controls": ["receipt:validated"],
+                    "evaluated_at": network_receipt.get("recorded_at"),
+                    "approval_token_id": network_receipt.get("approval_token_id"),
+                },
+                network_request,
+            )
+        except Exception as exc:
+            raise ProviderAdapterError(f"provider network receipt decision binding is invalid: {exc}") from exc
+        if network_receipt.get("request_digest") != request_digest(network_request) or network_receipt.get("action_digest") != action_digest(network_request):
+            raise ProviderAdapterError("provider network receipt digest binding is invalid")
+        if status == "completed" and network_receipt.get("decision") != "allow":
+            raise ProviderAdapterError("completed provider run requires an allowed network receipt")
     response_copy = deepcopy(dict(response)) if isinstance(response, Mapping) else None
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
@@ -125,7 +155,7 @@ def build_provider_run(
         "provider_version": provider_version,
         "config_digest": config_digest,
         "request_digest": request_digest(request),
-        "network_receipt": deepcopy(dict(network_receipt)),
+        "network_receipt": deepcopy(dict(network_receipt)) if isinstance(network_receipt, Mapping) else None,
         "status": status,
         "epistemic_status": "candidate" if status == "completed" else "unknown",
         "response_digest": _digest(response_copy),
@@ -199,13 +229,22 @@ class ExternalAnalyzerProvider:
             "data_classes": ["source_digests"],
             "redacted": True,
         }
-        decision = self.broker.evaluate(network_request, approval_token)
-        receipt = build_tool_receipt(network_request, decision, recorded_at=str(decision.get("evaluated_at", datetime.now(UTC).isoformat().replace("+00:00", "Z"))))
         request = {
             **dict(analyzer_request),
             "network_request_id": network_request["request_id"],
             "network_request": network_request,
         }
+        generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        try:
+            decision = self.broker.evaluate(network_request, approval_token)
+            generated_at = str(decision.get("evaluated_at", generated_at))
+            receipt = build_tool_receipt(network_request, decision, recorded_at=generated_at)
+        except Exception as exc:  # authorization boundary failures are typed blocked outcomes
+            return build_provider_run(
+                request=request, provider_id=self.provider_id, provider_version=self.provider_version,
+                config_digest=self.config_digest, network_receipt=None, status="blocked", response=None,
+                error=f"provider authorization unavailable: {exc}", generated_at=generated_at,
+            )
         if decision.get("decision") != "allow":
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,

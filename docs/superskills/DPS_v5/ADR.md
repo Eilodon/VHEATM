@@ -573,3 +573,71 @@ Start the next cycle when a qualified host reference monitor and the remaining e
 - A sandbox status is not execution evidence until the authorization decision and exact action are content-addressed together.
 - Schema validity and semantic binding are separate controls; both are required at the reference-monitor boundary.
 - Fail-closed local behavior can close a proof gap without pretending that unavailable host or external qualification exists.
+
+## ADR-9 — Every brokered action adapter must validate the shared decision contract
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `tool-broker` `provider` `receipt` `schema-boundary` `fail-closed`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-01 — or earlier when external provider qualification is available.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local broker/provider receipt behavior; `NOT_PRODUCTION_QUALIFIED` for external provider identity, availability, and host enforcement.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `SPECIALIST REVIEW`
+**VOLATILITY:** `WATCHFUL` — provider policy and external transport allowlists remain deployment-specific.
+
+### Context
+
+The sandbox had a local semantic decision guard, but the shared receipt builder accepted a broker-like mapping without checking the canonical decision schema, request schema version, or approval binding. The external analyzer adapter could therefore accept malformed authorization and proceed to its transport, or raise an untyped exception instead of producing a blocked provider record. This violated the roadmap's single broker/receipt boundary and made RG-08/RG-09 evidence inconsistent across action adapters.
+
+### Decision
+
+Centralize semantic policy-decision validation in `tool_broker.validate_policy_decision` and require `build_tool_receipt` to invoke it. A non-read `allow` decision must carry a valid approval-token identity; every decision must bind schema version, request ID, decision value, reason, controls, and timestamp. The sandbox reuses this guard. Provider runs validate the original network request, receipt identity, request/action digests, and allow status before a completed outcome; authorization failures return a typed `blocked` run with a null receipt, never a transport call or fabricated authorization event. The tool-request schema now requires `schema_version`.
+
+### Options Considered
+
+- Keep per-adapter decision checks: rejected because drift already existed between sandbox and provider boundaries.
+- Treat a malformed provider decision as provider outage after sending the request: rejected because authorization failure must precede transport and must not be conflated with remote outage.
+- Invent a deny receipt when the broker returned no valid decision: rejected because a receipt is evidence of an observed authorization event; pre-authorization failure is represented as a null receipt and blocked status.
+
+### Impact
+
+Schemas changed: `tool-request.schema.json` requires canonical versioning; `provider-run.schema.json` permits null receipts only for blocked/unknown authorization paths and requires an allowed object receipt for completed runs.
+Components changed: shared tool broker receipt guard, sandbox adapter, external provider adapter, and provider/pilot contract fixtures.
+Breaking change: YES — custom broker callbacks must return the complete canonical decision shape, and completed provider runs must include a content-valid network receipt.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `broker decision → shared semantic guard → content-addressed receipt → adapter action`; all current receipt-producing action boundaries now share the same guard. External provider qualification remains an independent prerequisite.
+Cascade Review: ✅ Done — broker, sandbox, analyzer, provider, pilot, schema, and malformed-callback tests were inspected and exercised.
+
+### Consequences
+
+- A malformed or incomplete broker callback cannot authorize provider transport or sandbox execution.
+- Provider authorization outages are distinguishable from remote provider outages and preserve `blocked`/`unknown` semantics without false evidence.
+- The legacy `policy.py` implementation remains a separate authority surface and is now an explicitly tracked next blocker for migration to the canonical broker.
+
+### Evidence
+
+- [verified 2026-08-01] RED tests failed for missing tool-request schema version and malformed provider decision before the shared guard and nullable blocked receipt existed.
+- [verified 2026-08-01] Targeted broker/sandbox/provider/analyzer/pilot verification passed at 32 tests; full repository verification passed at 236 tests.
+- [verified 2026-08-01] Repository validation passed; malformed provider authorization did not call transport and emitted schema-valid blocked evidence.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Next local debt is removal or non-authoritative migration of the legacy `src/vheatm_control/policy.py` authority surface. External debt remains provider qualification, private corpus/judge, key custody, vulnerability feed, host namespace capability, shadow/canary observations, and UX research.
+
+### Next Cycle Trigger
+
+Start the next cycle by routing all remaining policy callers through `ToolBroker`, preserving legacy API material only as an explicit non-authoritative compatibility/migration surface. Then rerun the full RG-00…RG-15 contract suite and retain external blockers as `unknown`/`blocked`.
+
+### Cycle Retrospective
+
+- A shared receipt helper is a real trust boundary only when it validates the decision semantics, not just request ID and allow/deny.
+- Authorization failure must have a typed outcome that cannot be confused with a provider outage or a valid deny receipt.
+- Globalizing the guard across sandbox and provider adapters exposed the duplicate legacy policy authority as the next architectural blocker.

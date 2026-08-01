@@ -234,6 +234,15 @@ def test_all_decisions_match_canonical_schema(tmp_path: Path) -> None:
         assert not list(validator.iter_errors(decision))
 
 
+def test_tool_request_requires_canonical_schema_version(tmp_path: Path) -> None:
+    broker = _broker(tmp_path)
+    request = _request("read", secret_expansion=False, contains_secrets=False)
+    request.pop("schema_version")
+    decision = broker.evaluate(request)
+    assert decision["decision"] == "deny"
+    assert "schema validation" in decision["reason"]
+
+
 def test_approval_and_receipt_bind_full_request_and_action() -> None:
     request = _request("execute", sandboxed=True, command="pytest -q", network_enabled=False, inherit_secrets=False)
     token = _token(request)

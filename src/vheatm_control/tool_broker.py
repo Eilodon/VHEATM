@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -51,13 +52,48 @@ def expected_tool_receipt_id(receipt: Mapping[str, Any]) -> str:
     return "TRC-" + _canonical_digest(body).upper()
 
 
-def build_tool_receipt(
-    request: Mapping[str, Any], decision: Mapping[str, Any], *, recorded_at: str
-) -> dict[str, Any]:
+def validate_policy_decision(decision: Mapping[str, Any], request: Mapping[str, Any]) -> None:
+    """Validate the semantic decision contract at every action boundary.
+
+    The broker's own schema validation is necessary but not sufficient when a
+    caller injects a broker-like callback (provider adapters and the sandbox
+    are both such boundaries). Keep the shared guard here so a shape-compatible
+    but unrelated decision cannot mint an authorization receipt.
+    """
+
+    if not isinstance(request, Mapping) or request.get("schema_version") != "1.0.0":
+        raise BrokerConfigurationError("tool request schema version is invalid")
+    tool_class = request.get("tool_class")
+    if tool_class not in {"read", "execute", "write", "network", "secrets"}:
+        raise BrokerConfigurationError("tool request tool class is invalid")
+    if not isinstance(decision, Mapping) or decision.get("schema_version") != "1.0.0":
+        raise BrokerConfigurationError("tool decision schema version is invalid")
     if decision.get("request_id") != request.get("request_id"):
         raise BrokerConfigurationError("tool decision request_id does not match request")
     if decision.get("decision") not in {"allow", "deny"}:
         raise BrokerConfigurationError("tool decision must be allow or deny")
+    if not isinstance(decision.get("reason"), str) or not decision["reason"].strip():
+        raise BrokerConfigurationError("tool decision reason is invalid")
+    controls = decision.get("controls")
+    if not isinstance(controls, list) or not controls or any(not isinstance(item, str) or not item for item in controls):
+        raise BrokerConfigurationError("tool decision controls are invalid")
+    if len(controls) != len(set(controls)):
+        raise BrokerConfigurationError("tool decision controls are invalid")
+    try:
+        _parse_datetime(decision.get("evaluated_at"))
+    except (AttributeError, TypeError, ValueError, BrokerConfigurationError) as exc:
+        raise BrokerConfigurationError("tool decision timestamp is invalid") from exc
+    approval_token_id = decision.get("approval_token_id")
+    if approval_token_id is not None and (not isinstance(approval_token_id, str) or not re.fullmatch(r"APR-[A-F0-9]{64}", approval_token_id)):
+        raise BrokerConfigurationError("tool decision approval token is invalid")
+    if decision.get("decision") == "allow" and tool_class != "read" and approval_token_id is None:
+        raise BrokerConfigurationError("allowed non-read tool decision requires an approval token")
+
+
+def build_tool_receipt(
+    request: Mapping[str, Any], decision: Mapping[str, Any], *, recorded_at: str
+) -> dict[str, Any]:
+    validate_policy_decision(decision, request)
     try:
         timestamp = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
     except ValueError as exc:
