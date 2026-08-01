@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Mapping
 
 from .analyzers import snapshot_digest
+from .provider_policy import ProviderPolicyError, provider_descriptor
 from .tool_broker import action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest, validate_policy_decision
 
 
@@ -219,6 +220,10 @@ def verify_provider_run(run: Mapping[str, Any]) -> None:
         raise ProviderAdapterError("provider run provider_id is invalid")
     if not isinstance(run.get("provider_version"), str) or not run["provider_version"].strip():
         raise ProviderAdapterError("provider run provider_version is invalid")
+    try:
+        provider_descriptor(provider_id, str(run["provider_version"]))
+    except ProviderPolicyError as exc:
+        raise ProviderAdapterError(str(exc)) from exc
     for field in ("config_digest", "request_digest", "response_digest"):
         value = run.get(field)
         if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
@@ -310,6 +315,14 @@ class ExternalAnalyzerProvider:
             "network_request": network_request,
         }
         generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        try:
+            provider_descriptor(self.provider_id, self.provider_version)
+        except ProviderPolicyError as exc:
+            return build_provider_run(
+                request=request, provider_id=self.provider_id, provider_version=self.provider_version,
+                config_digest=self.config_digest, network_receipt=None, status="blocked", response=None,
+                error=f"provider authorization unavailable: {exc}", generated_at=generated_at,
+            )
         try:
             decision = self.broker.evaluate(network_request, approval_token)
             generated_at = str(decision.get("evaluated_at", generated_at))

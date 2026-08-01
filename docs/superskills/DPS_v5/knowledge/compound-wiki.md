@@ -342,3 +342,25 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
 - Every pilot lifecycle transition must recompute the content-addressed pilot identity before consuming its fields: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-22 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: provider-allowlist-and-qualification-state
+
+### New Domain Terms Added to CONTEXT.md
+- Provider qualification state: added ✅
+
+### Bug Patterns
+- A valid broker receipt allowed a syntactically valid but unallowlisted provider run into pilot completion: observed and fixed with canonical allowlist and canary qualification-state enforcement; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Request authorization is not provider qualification: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Only allowlisted provider descriptors may produce pilot evidence, and only externally qualified entries may cross canary: added to CONTEXT.md ✅
+
+---

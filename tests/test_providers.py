@@ -7,6 +7,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from vheatm_control.analyzers import snapshot_digest
+from vheatm_control.provider_policy import ProviderPolicyError, provider_descriptor
 from vheatm_control.providers import ExternalAnalyzerProvider, ProviderAdapterError, https_json_transport
 
 
@@ -56,6 +57,21 @@ def _provider(broker: FakeBroker, transport):  # noqa: ANN001
         config={"model": "fixed", "temperature": 0},
         transport=transport,
     )
+
+
+def test_provider_allowlist_is_canonical_and_untrusted_descriptors_block() -> None:
+    assert provider_descriptor("remote.test", "1.0.0")["qualification_state"] == "pending"
+    with pytest.raises(ProviderPolicyError, match="not allowlisted"):
+        provider_descriptor("untrusted.vendor", "1.0.0")
+
+
+def test_revoked_provider_is_not_runtime_usable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "vheatm_control.provider_policy._load_policy",
+        lambda root=None: {"providers": [{"provider_id": "remote.test", "provider_versions": ["1.0.0"], "qualification_state": "revoked"}]},
+    )
+    with pytest.raises(ProviderPolicyError, match="revoked"):
+        provider_descriptor("remote.test", "1.0.0")
 
 
 def test_external_provider_is_brokered_and_metadata_only() -> None:

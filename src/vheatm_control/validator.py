@@ -71,6 +71,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "semantic-profiles.schema.json",
         "qualification-methods.schema.json",
         "supply-chain-evidence.schema.json",
+        "provider-allowlist.schema.json",
         "supply-chain-attestation.schema.json",
         "standards-baseline.schema.json",
         "tool-request.schema.json",
@@ -194,12 +195,13 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     semantic_profiles_path = root / "policies" / "semantic-profiles.yaml"
     qualification_methods_path = root / "policies" / "qualification-methods.yaml"
     supply_chain_evidence_path = root / "policies" / "supply-chain-evidence.yaml"
+    provider_allowlist_path = root / "policies" / "provider-allowlist.yaml"
     dependency_lock_path = root / "uv.lock"
     eval_corpus_path = root / "evals" / "cases.yaml"
     module_registry_path = root / "modules" / "registry.yaml"
     skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, semantic_profiles_path, qualification_methods_path, supply_chain_evidence_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
+    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, semantic_profiles_path, qualification_methods_path, supply_chain_evidence_path, provider_allowlist_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -217,6 +219,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         semantic_profiles = _load_yaml(semantic_profiles_path)
         qualification_methods = _load_yaml(qualification_methods_path)
         supply_chain_evidence = _load_yaml(supply_chain_evidence_path)
+        provider_allowlist = _load_yaml(provider_allowlist_path)
         eval_corpus = _load_yaml(eval_corpus_path)
         manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
         policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
@@ -227,6 +230,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         semantic_profiles_schema = _load_json(schema_dir / "semantic-profiles.schema.json")
         qualification_methods_schema = _load_json(schema_dir / "qualification-methods.schema.json")
         supply_chain_evidence_schema = _load_json(schema_dir / "supply-chain-evidence.schema.json")
+        provider_allowlist_schema = _load_json(schema_dir / "provider-allowlist.schema.json")
         eval_corpus_schema = _load_json(schema_dir / "eval-corpus.schema.json")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return [ValidationIssue("canonical", str(exc))]
@@ -239,6 +243,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(_validate_schema(semantic_profiles, semantic_profiles_schema, registry, str(semantic_profiles_path.relative_to(root))))
     issues.extend(_validate_schema(qualification_methods, qualification_methods_schema, registry, str(qualification_methods_path.relative_to(root))))
     issues.extend(_validate_schema(supply_chain_evidence, supply_chain_evidence_schema, registry, str(supply_chain_evidence_path.relative_to(root))))
+    issues.extend(_validate_schema(provider_allowlist, provider_allowlist_schema, registry, str(provider_allowlist_path.relative_to(root))))
     issues.extend(ValidationIssue("policies/standards-baseline.yaml", issue) for issue in _validate_standards_baseline(manifest, standards_baseline))
     from .capability_ledger import validate_capability_ledger
     issues.extend(ValidationIssue("policies/capability-ledger.yaml", issue) for issue in validate_capability_ledger(root, capability_ledger, capability_ledger_schema))
@@ -247,6 +252,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(ValidationIssue("evals/cases.yaml", issue) for issue in validate_eval_corpus(eval_corpus, eval_corpus_schema))
     issues.extend(ValidationIssue("policies/qualification-methods.yaml", issue) for issue in _validate_qualification_methods(manifest, qualification_methods))
     issues.extend(ValidationIssue("policies/supply-chain-evidence.yaml", issue) for issue in _validate_supply_chain_evidence(manifest, supply_chain_evidence))
+    issues.extend(ValidationIssue("policies/provider-allowlist.yaml", issue) for issue in _validate_provider_allowlist(manifest, provider_allowlist))
     try:
         bundle = build_bundle(root)
         issues.extend(_validate_schema(bundle, bundle_schema, registry, "control-bundle"))
@@ -354,6 +360,21 @@ def _validate_supply_chain_evidence(manifest: dict[str, Any], policy: dict[str, 
     required_roles = {"supply_chain", "vulnerability", "provenance"}
     if not isinstance(roles, list) or set(roles) != required_roles or len(roles) != len(required_roles):
         issues.append("distinct_signing_key_roles must cover supply_chain, vulnerability, and provenance exactly once")
+    return issues
+
+
+def _validate_provider_allowlist(manifest: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    if policy.get("framework_version") != manifest.get("framework", {}).get("version"):
+        issues.append("framework_version must match canonical manifest")
+    providers = policy.get("providers")
+    if not isinstance(providers, list) or not providers:
+        return issues + ["providers must contain at least one entry"]
+    identities = [(item.get("provider_id"), version) for item in providers if isinstance(item, dict) for version in item.get("provider_versions", [])]
+    if len(identities) != len(set(identities)):
+        issues.append("provider_id/provider_version entries must be unique")
+    if any(item.get("qualification_state") not in {"pending", "qualified", "revoked"} for item in providers if isinstance(item, dict)):
+        issues.append("provider qualification_state is invalid")
     return issues
 
 

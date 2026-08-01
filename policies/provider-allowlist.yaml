@@ -1,0 +1,11 @@
+schema_version: "1.0.0"
+policy_id: vheatm-provider-allowlist
+policy_version: "1.0.0"
+framework_version: "17.0.0-dev.1"
+providers:
+  - provider_id: local.python
+    provider_versions: ["1.0.0"]
+    qualification_state: pending
+  - provider_id: remote.test
+    provider_versions: ["1.0.0"]
+    qualification_state: pending

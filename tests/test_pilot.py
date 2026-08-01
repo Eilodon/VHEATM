@@ -6,7 +6,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from vheatm_control.evaluation import evaluate_release_gates, expected_release_report_id
-from vheatm_control.pilot import PilotError, complete_pilot, prepare_pilot, rollback_pilot
+from vheatm_control.pilot import PilotError, complete_pilot, expected_pilot_id, prepare_pilot, rollback_pilot
 from vheatm_control.providers import build_provider_run, expected_provider_run_id
 from vheatm_control.serialization import load_json
 from vheatm_control.tool_broker import build_tool_receipt
@@ -124,6 +124,22 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     with pytest.raises(PilotError, match="identity"):
         complete_pilot(
             tampered_pilot,
+            observations=[{**observation, "read_only_confirmed": False}],
+            provider_runs=[provider_run],
+        )
+    untrusted_run = {**provider_run, "provider_id": "untrusted.vendor"}
+    untrusted_run["run_id"] = expected_provider_run_id(untrusted_run)
+    with pytest.raises(PilotError, match="allowlisted"):
+        complete_pilot(
+            pilot,
+            observations=[{**observation, "provider_id": "untrusted.vendor", "provider_run_refs": [untrusted_run["run_id"]]}],
+            provider_runs=[untrusted_run],
+        )
+    pending_canary = {**pilot, "profile": "canary", "read_only": False, "tools_enabled": True}
+    pending_canary["pilot_id"] = expected_pilot_id(pending_canary)
+    with pytest.raises(PilotError, match="qualified allowlisted provider"):
+        complete_pilot(
+            pending_canary,
             observations=[{**observation, "read_only_confirmed": False}],
             provider_runs=[provider_run],
         )

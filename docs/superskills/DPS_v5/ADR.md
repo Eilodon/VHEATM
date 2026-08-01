@@ -1510,3 +1510,76 @@ Start the next cycle when pilot records become externally persisted/signed or wh
 - A content-addressed creation record is not immutable unless every later transition revalidates its identity.
 - Status checks are authorization state, not record integrity.
 - Shared identity projection prevents completion and rollback from drifting into separate trust models.
+
+## ADR-22 — Enforce provider allowlist and qualification state at execution and pilot boundaries
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `providers` `allowlist` `pilot` `qualification` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when an external provider, endpoint, version, configuration, or qualification authority is added.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local descriptor/qualification-state enforcement; `NOT_PRODUCTION_QUALIFIED` because both allowlisted entries are intentionally `pending` and no external provider qualification is claimed.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `VOLATILE` — provider identity, versions, endpoints, and qualification status are release-bound external inputs.
+
+### Context
+
+The provider adapter bound request, receipt, response, and config digests, but the descriptor itself was only shape-validated. Any syntactically valid provider ID/version could therefore produce a completed provider run when the broker allowed its network request. Pilot completion consumed that run without checking whether the provider was allowlisted or independently qualified. A valid receipt proved authorization for a request, not release eligibility of the provider implementation.
+
+### Decision
+
+Add `policies/provider-allowlist.yaml` and `schemas/provider-allowlist.schema.json` as canonical, manifest-bound policy. Each provider/version entry has an explicit `qualification_state` (`pending`, `qualified`, or `revoked`). Provider execution and persisted-run verification reject descriptors absent from the allowlist. Shadow completion may consume an allowlisted `pending` provider for contract observation; canary completion requires `qualified`, so the current local entries cannot authorize canary. No local fixture is marked qualified.
+
+### Options Considered
+
+- Treat a broker allow receipt as provider qualification: rejected because request authorization and provider trust are different claims.
+- Allow every provider ID while relying on endpoint HTTPS: rejected because transport security does not establish provider identity, version, or evaluation authority.
+- Mark local/test providers `qualified` to keep canary fixtures green: rejected because it would fabricate external qualification evidence.
+- Hard-code provider IDs in Python: rejected because allowlist and qualification changes must be canonical policy mutations with bundle binding.
+
+### Impact
+
+Schemas changed: `schemas/provider-allowlist.schema.json`.
+Canonical policy changed: `policies/provider-allowlist.yaml`.
+Components changed: provider policy loader, adapter, persisted provider-run verifier, pilot completion, validator, bundle/package inventory, and provider/pilot tests.
+Breaking change: **YES** for provider runs whose descriptor is absent, version-mismatched, or revoked; canary is additionally blocked for `pending` providers.
+
+IMPACT RADIUS: **CRITICAL**
+Cascades: `provider policy → adapter/persisted-run verification → pilot observation → canary authorization`.
+Cascade Review: ✅ Done — untrusted-provider RED regression, policy/schema/manifest binding tests, shadow-pending acceptance, canary-pending rejection, and full provider/pilot verification cover the changed boundary.
+
+### Consequences
+
+- A valid network receipt cannot promote an unallowlisted provider into pilot evidence.
+- Shadow remains useful for local read-only contract observation without being mislabeled as provider qualification.
+- Canary remains fail-closed until an external authority changes a canonical entry to `qualified` and supplies corresponding evidence; this change does not do that.
+- Policy loading adds a small schema/I/O cost at provider and persisted-run boundaries; any future cache must bind the canonical bundle root and policy identity.
+
+### Evidence
+
+- [verified 2026-08-01] RED pilot regression showed a syntactically valid `untrusted.vendor` run could complete with an allowed receipt.
+- [verified 2026-08-01] GREEN tests reject unallowlisted descriptors and block canary use of the pending contract provider.
+- [verified 2026-08-01] Both canonical providers remain `pending`; no external provider qualification or canary success was fabricated.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External provider allowlisting/qualification authority, endpoint identity, host enforcement, key custody, private/time-sliced qualification, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a real provider is proposed or a provider entry changes state; bind endpoint/config identity, qualification evidence, revocation/rotation rules, and rerun provider/pilot/release gates before setting `qualified`.
+
+### Cycle Retrospective
+
+- A network authorization receipt answers “may this request run?”; it does not answer “is this provider qualified for canary?”.
+- Allowlist identity and qualification state need one canonical policy, while shadow and canary require different states.
+- Keeping local provider entries pending preserves useful contract tests without laundering them into external evidence.

@@ -27,6 +27,7 @@ _EXACT_PATHS = (
     "policies/semantic-profiles.yaml",
     "policies/qualification-methods.yaml",
     "policies/supply-chain-evidence.yaml",
+    "policies/provider-allowlist.yaml",
     "uv.lock",
     "modules/registry.yaml",
 )

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .evaluation import EvaluationError, evaluate_release_gates, validate_release_report
+from .provider_policy import ProviderPolicyError, provider_descriptor
 from .providers import ProviderAdapterError, verify_provider_run
 
 
@@ -161,6 +162,12 @@ def complete_pilot(
             verify_provider_run(run)
         except ProviderAdapterError as exc:
             raise PilotError(f"pilot receipt authorization chain is invalid: {exc}") from exc
+        try:
+            provider_entry = provider_descriptor(str(run.get("provider_id")), str(run.get("provider_version")))
+        except ProviderPolicyError as exc:
+            raise PilotError(f"pilot provider is not allowlisted: {exc}") from exc
+        if pilot.get("profile") == "canary" and provider_entry.get("qualification_state") != "qualified":
+            raise PilotError("canary requires a qualified allowlisted provider")
         if run.get("status") != "completed":
             raise PilotError("pilot completion cannot use blocked or unknown provider runs")
         receipt = run.get("network_receipt")

@@ -39,6 +39,16 @@ def test_supply_chain_evidence_policy_is_manifest_bound() -> None:
     assert any("must cover" in issue for issue in _validate_supply_chain_evidence(manifest, policy))
 
 
+def test_provider_allowlist_is_manifest_bound() -> None:
+    manifest = yaml.safe_load((ROOT / "manifests" / "vheatm-v17.yaml").read_text())
+    policy = yaml.safe_load((ROOT / "policies" / "provider-allowlist.yaml").read_text())
+    from vheatm_control.validator import _validate_provider_allowlist
+
+    assert _validate_provider_allowlist(manifest, policy) == []
+    policy["framework_version"] = "16.0.0"
+    assert any("canonical manifest" in issue for issue in _validate_provider_allowlist(manifest, policy))
+
+
 def test_unknown_activation_identifier_is_rejected() -> None:
     raw = yaml.safe_load((ROOT / "manifests" / "vheatm-v17.yaml").read_text())
     raw["gates"]["items"][9]["activation"] = "typo_mode == full"

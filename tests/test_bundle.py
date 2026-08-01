@@ -27,6 +27,7 @@ def test_control_bundle_is_complete_deterministic_and_schema_valid() -> None:
     assert "policies/standards-baseline.yaml" in paths
     assert "policies/qualification-methods.yaml" in paths
     assert "policies/supply-chain-evidence.yaml" in paths
+    assert "policies/provider-allowlist.yaml" in paths
     assert "modules/registry.yaml" in paths
     assert "schemas/audit-context.schema.json" in paths
     assert "src/vheatm_control/evaluator.py" in paths
