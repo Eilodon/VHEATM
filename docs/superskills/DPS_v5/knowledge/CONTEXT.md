@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 25 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 26 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -39,6 +39,7 @@
 - **Qualification bundle replay:** reuse of valid time-sliced qualification evidence against a different control bundle; release evaluation must reject it even when the framework version is unchanged. <!-- from ADR: ADR-31 -->
 - **Trusted key-registry handoff:** an externally authority-signed `KRG-*` record that binds release evidence roles to public keys, key IDs, framework, bundle, validity, and revocation state before metrics may contribute. <!-- from ADR: ADR-32 -->
 - **External authority root:** the deployment-supplied public key used to verify a trusted key registry; it is an external trust input, never a local fixture or self-declared release fact. <!-- from ADR: ADR-32 -->
+- **Candidate scanner evidence:** a real scanner result that is content-addressed for investigation but remains non-qualifying until trusted scanner provenance, role-key custody, and a bundle-bound authority registry verify it. <!-- from ADR: ADR-34 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -74,6 +75,7 @@
 - Independent judge packets must bind provider version, endpoint, adapter profile, and configuration digest to the canonical provider policy; a pending local descriptor proves identity only and cannot establish external qualification. <!-- from ADR: ADR-33 -->
 - Private qualification evidence must bind its content address and signature to the current control-bundle root; release evaluation requires the caller to supply that root and leaves metrics unavailable when it is absent or mismatched. <!-- from ADR: ADR-31 -->
 - Signed release evidence must resolve role keys through an externally signed trusted key registry; direct caller-supplied role keys fail closed, and the registry identity is part of the release report binding. <!-- from ADR: ADR-32 -->
+- A zero-finding scanner result and an installed host capability are observations, not release authority; external provenance and exact enforcement preflight must be verified before RG-13/RG-09 can change from `unknown`. <!-- from ADR: ADR-34 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -109,3 +111,4 @@
 - [2026-08] A judge provider/model label and config digest could remain structurally valid while pointing to an unallowlisted implementation | Include version, exact endpoint, adapter profile, and policy-bound config in packet identity, then revalidate the packet downstream. <!-- from ADR: ADR-33 -->
 - [2026-08] A signed private time slice identifies the population but not the runtime bytes that produced its metrics | Include the current bundle root in the evidence identity and require the release evaluator to supply the expected root; a self-declared root is not a trust anchor. <!-- from ADR: ADR-31 -->
 - [2026-08] A valid signature proves document integrity but not signer authority | Require a separately signed, bundle/framework/time-bound role-key registry and keep its external authority root explicit; missing or unverifiable registry data remains unknown. <!-- from ADR: ADR-32 -->
+- [2026-08] A zero-finding scanner report can still be untrusted, and an installed sandbox binary can still lack namespace capability | Bind scanner output to trusted provenance/registry and record the exact host preflight result; never promote either observation alone to RG-13/RG-09. <!-- from ADR: ADR-34 -->

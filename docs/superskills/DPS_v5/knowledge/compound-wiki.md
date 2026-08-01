@@ -614,3 +614,25 @@ modules: [MOD-INDEPENDENT-JUDGE, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
 - Independent judge packets must resolve their implementation identity through the canonical provider descriptor; pending local fixtures remain non-qualifying: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-34 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-INDEPENDENT-JUDGE]
+---
+
+## Cycle: external-prerequisite-probe
+
+### New Domain Terms Added to CONTEXT.md
+- Candidate scanner evidence: added ✅
+
+### Bug Patterns
+- A fresh zero-finding scanner report or installed sandbox binary could be mistaken for trusted release evidence: observed and prevented by retaining `unknown`/`blocked` until provenance/authority and exact preflight verification exist; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Scanner cleanliness does not establish signer authority, and binary presence does not establish namespace enforcement: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Candidate evidence remains non-qualifying until a bundle-bound external trust handoff verifies its provenance and role authority: added to CONTEXT.md Architectural Decisions ✅
+
+---
