@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
+import re
 from datetime import UTC, datetime
 from typing import Any, Mapping, Sequence
 
@@ -67,6 +69,8 @@ def _validate_measurements(measurements: Sequence[Mapping[str, Any]]) -> dict[st
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if not isinstance(value, bool):
                 raise QualificationError("qualification metric values must be numeric or boolean")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isfinite(float(value)):
+            raise QualificationError("qualification metric values must be finite")
         if not isinstance(raw.get("sample_count"), int) or raw["sample_count"] < 1:
             raise QualificationError("qualification measurements require positive sample counts")
         lower = raw.get("confidence_lower")
@@ -137,6 +141,13 @@ def verify_manifest(manifest: Mapping[str, Any], *, public_key: Ed25519PublicKey
         raise QualificationError("qualification manifest schema or visibility is invalid")
     if not isinstance(manifest.get("private_locator"), str) or not manifest["private_locator"].strip():
         raise QualificationError("private qualification locator is required")
+    time_slice = manifest.get("time_slice")
+    if not isinstance(time_slice, Mapping):
+        raise QualificationError("private qualification manifest requires a time slice")
+    start = _timestamp(str(time_slice.get("start", "")))
+    end = _timestamp(str(time_slice.get("end", "")))
+    if datetime.fromisoformat(end.replace("Z", "+00:00")) <= datetime.fromisoformat(start.replace("Z", "+00:00")):
+        raise QualificationError("qualification time slice must have a positive duration")
     if manifest.get("manifest_id") != expected_manifest_id(manifest):
         raise QualificationError("manifest identity does not match content")
     if manifest.get("case_count") != len(manifest.get("case_digests", [])) or manifest.get("corpus_digest") != _digest(manifest.get("case_digests", [])):
@@ -158,6 +169,7 @@ def build_qualification_evidence(
     evaluator_id: str,
     evaluator_version: str,
     independent_judge_id: str,
+    judge_verdict_refs: Sequence[str],
     measurements: Sequence[Mapping[str, Any]],
     generated_at: str,
 ) -> dict[str, Any]:
@@ -167,6 +179,9 @@ def build_qualification_evidence(
         raise QualificationError("qualification evaluator and independent judge identities are required")
     if evaluator_id == independent_judge_id:
         raise QualificationError("qualification evaluator and independent judge must be independent identities")
+    normalized_judge_refs = sorted(set(str(ref) for ref in judge_verdict_refs))
+    if not normalized_judge_refs or any(not re.fullmatch(r"JVR-[A-F0-9]{64}", ref) for ref in normalized_judge_refs):
+        raise QualificationError("qualification evidence requires content-addressed independent judge verdict references")
     normalized = [dict(item) for item in measurements]
     if not normalized:
         raise QualificationError("qualification evidence requires at least one measurement")
@@ -178,6 +193,7 @@ def build_qualification_evidence(
         "evaluator_id": evaluator_id,
         "evaluator_version": evaluator_version,
         "independent_judge_id": independent_judge_id,
+        "judge_verdict_refs": normalized_judge_refs,
         "measurements": normalized,
         "metrics": metrics,
         "evidence_state": "unverified",
@@ -214,6 +230,9 @@ def verify_qualification_evidence(
         raise QualificationError("qualification evidence manifest digest does not match the verified manifest")
     if evidence.get("evaluator_id") == evidence.get("independent_judge_id"):
         raise QualificationError("qualification evaluator and independent judge are not independent")
+    judge_refs = evidence.get("judge_verdict_refs")
+    if not isinstance(judge_refs, list) or not judge_refs or any(not isinstance(ref, str) or not re.fullmatch(r"JVR-[A-F0-9]{64}", ref) for ref in judge_refs):
+        raise QualificationError("qualification evidence requires content-addressed independent judge verdict references")
     measurements = evidence.get("measurements")
     if not isinstance(measurements, list) or not measurements:
         raise QualificationError("qualification evidence requires measurements")

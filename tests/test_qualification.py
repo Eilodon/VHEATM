@@ -7,6 +7,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
+from vheatm_control.judge import expected_verdict_id
 from vheatm_control.qualification import (
     QualificationError,
     build_private_time_slice_manifest,
@@ -33,8 +34,15 @@ def test_private_time_sliced_manifest_and_measurements_are_signed_and_bound() ->
         generated_at="2026-08-01T00:00:00Z",
     )
     verified_manifest = verify_manifest(sign_manifest(manifest, private_key=key, key_id="gold-key"), public_key=key.public_key(), key_id="gold-key")
+    judge_verdict = {
+        "schema_version": "1.0.0", "packet_id": "JPK-" + "a" * 64, "request_id": "JDR-" + "b" * 64,
+        "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
+        "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
+        "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
+    }
+    judge_verdict["verdict_id"] = expected_verdict_id(judge_verdict)
     measurements = [{"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 100, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": ["vault://evidence/1"]}]
-    evidence = build_qualification_evidence(manifest=verified_manifest, evaluator_id="eval:v17", evaluator_version="1.0.0", independent_judge_id="judge:v17", measurements=measurements, generated_at="2026-08-01T00:00:00Z")
+    evidence = build_qualification_evidence(manifest=verified_manifest, evaluator_id="eval:v17", evaluator_version="1.0.0", independent_judge_id="judge:v17", judge_verdict_refs=[judge_verdict["verdict_id"]], measurements=measurements, generated_at="2026-08-01T00:00:00Z")
     signed = sign_qualification_evidence(evidence, private_key=key, key_id="evidence-key")
     verified = verify_qualification_evidence(signed, manifest=verified_manifest, public_key=key.public_key(), key_id="evidence-key")
     assert verified["evidence_state"] == "verified"
@@ -47,7 +55,7 @@ def test_qualification_requires_verified_manifest_and_rejects_tampering() -> Non
     key = Ed25519PrivateKey.generate()
     manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator="vault://gold", time_slice_start="2026-07-01T00:00:00Z", time_slice_end="2026-08-01T00:00:00Z", case_digests=["a" * 64], generated_at="2026-08-01T00:00:00Z")
     with pytest.raises(QualificationError, match="verified private manifest"):
-        build_qualification_evidence(manifest=manifest, evaluator_id="eval", evaluator_version="1", independent_judge_id="judge", measurements=[], generated_at="2026-08-01T00:00:00Z")
+        build_qualification_evidence(manifest=manifest, evaluator_id="eval", evaluator_version="1", independent_judge_id="judge", judge_verdict_refs=[], measurements=[], generated_at="2026-08-01T00:00:00Z")
     tampered = dict(sign_manifest(manifest, private_key=key, key_id="gold-key"))
     tampered["case_count"] = 2
     with pytest.raises(QualificationError):

@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
 from vheatm_control.evaluation import evaluate_release_gates
+from vheatm_control.judge import expected_verdict_id
 from vheatm_control.qualification import (
     build_private_time_slice_manifest,
     build_qualification_evidence,
@@ -65,6 +66,13 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     )
     signed_manifest = sign_manifest(manifest, private_key=key, key_id="qualification-key")
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
+    judge_verdict = {
+        "schema_version": "1.0.0", "packet_id": "JPK-" + "a" * 64, "request_id": "JDR-" + "b" * 64,
+        "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
+        "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
+        "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
+    }
+    judge_verdict["verdict_id"] = expected_verdict_id(judge_verdict)
     values = {
         "mutation_rejection_rate": 1, "route_equivalence_rate": 1, "determinism_runs": 1000,
         "plan_digest_stability_rate": 1, "selection_digest_stability_rate": 1, "false_inactive_count": 0,
@@ -87,6 +95,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
         independent_judge_id="judge:v17",
+        judge_verdict_refs=[judge_verdict["verdict_id"]],
         measurements=measurements,
         generated_at="2026-08-01T00:00:00Z",
     )
@@ -128,6 +137,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     evidence = {
         "qualification_manifest": signed_manifest,
         "qualification_evidence": sign_qualification_evidence(qualification, private_key=key, key_id="qualification-key"),
+        "independent_judge_verdicts": [judge_verdict],
         "supply_chain_attestation": attestation,
         "vulnerability_scan": sign_vulnerability_scan(scan, private_key=key, key_id="vulnerability-key"),
         "provenance_statement": sign_provenance_statement(provenance, private_key=key, key_id="provenance-key"),

@@ -53,11 +53,14 @@ def prepare_pilot(
         raise PilotError("release report must have a content-addressed report_id")
     if expected_release_report_id(release_report) != report_id:
         raise PilotError("release report identity does not match its content")
+    gates = release_report.get("gates")
+    if not isinstance(gates, list) or len(gates) != 16 or any(item.get("status") not in {"pass", "fail", "unknown"} for item in gates if isinstance(item, Mapping)) or any(not isinstance(item, Mapping) for item in gates):
+        raise PilotError("release report must contain all 16 typed release gates")
     if release_report.get("summary", {}).get("ga_eligible") is not True and profile == "canary":
         raise PilotError("canary requires every release gate to pass")
     if profile == "canary":
         summary = release_report.get("summary", {})
-        if summary.get("pass") != 16 or summary.get("fail") != 0 or summary.get("unknown") != 0 or not release_report.get("evidence_bindings"):
+        if summary.get("pass") != 16 or summary.get("fail") != 0 or summary.get("unknown") != 0 or any(item.get("status") != "pass" for item in gates) or not release_report.get("evidence_bindings"):
             raise PilotError("canary requires a fully evidenced release report")
     if not str(rollback_plan).strip():
         raise PilotError("pilot requires a non-empty rollback plan")
@@ -149,6 +152,8 @@ def complete_pilot(
             raise PilotError("pilot observation requires evidence_refs")
         if pilot.get("read_only") is True and raw.get("read_only_confirmed") is not True:
             raise PilotError("shadow pilot observation must confirm read-only execution")
+        if pilot.get("read_only") is not True and raw.get("read_only_confirmed") is not False:
+            raise PilotError("canary pilot observation must confirm tools were enabled")
         seen.add(observation_id)
         normalized.append(
             {

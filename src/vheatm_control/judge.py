@@ -191,6 +191,34 @@ def _build_verdict(packet: Mapping[str, Any], raw: Any) -> dict[str, Any]:
     return {"schema_version": "1.0.0", "verdict_id": _content_id("JVR", identity), **identity, "generated_at": _timestamp()}
 
 
+def expected_verdict_id(verdict: Mapping[str, Any]) -> str:
+    identity = {
+        key: verdict[key]
+        for key in ("packet_id", "request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest", "status", "epistemic_status", "decisions")
+        if key in verdict
+    }
+    return _content_id("JVR", identity)
+
+
+def validate_verdict_identity(verdict: Mapping[str, Any]) -> None:
+    required = {"schema_version", "verdict_id", "packet_id", "request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest", "status", "epistemic_status", "decisions", "generated_at"}
+    if not isinstance(verdict, Mapping) or verdict.get("schema_version") != "1.0.0" or not required.issubset(verdict):
+        raise JudgeError("independent judge verdict is incomplete")
+    if verdict.get("verdict_id") != expected_verdict_id(verdict):
+        raise JudgeError("independent judge verdict identity does not match its content")
+    decisions = verdict.get("decisions")
+    if not isinstance(decisions, list) or not decisions:
+        raise JudgeError("independent judge verdict requires decisions")
+    seen: set[str] = set()
+    for decision in decisions:
+        if not isinstance(decision, Mapping) or not isinstance(decision.get("item_id"), str) or decision["item_id"] in seen or decision.get("label") not in {"yes", "no", "unknown"} or not isinstance(decision.get("confidence"), (int, float)) or isinstance(decision.get("confidence"), bool) or not 0 <= decision["confidence"] <= 1:
+            raise JudgeError("independent judge verdict decision is malformed")
+        seen.add(decision["item_id"])
+    expected_status = "unknown" if any(item["label"] == "unknown" for item in decisions) else "complete"
+    if verdict.get("status") != expected_status or verdict.get("epistemic_status") != ("independent_candidate" if expected_status == "complete" else "unknown"):
+        raise JudgeError("independent judge verdict status is inconsistent with its decisions")
+
+
 def compare_verdicts(first: Mapping[str, Any], second: Mapping[str, Any]) -> dict[str, Any]:
     if first.get("packet_id") != second.get("packet_id"):
         raise JudgeError("cannot compare verdicts from different packets")

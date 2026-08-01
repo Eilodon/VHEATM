@@ -4,7 +4,7 @@
   "title": "VHEATM independently qualified measurement evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "evidence_id", "manifest_id", "manifest_digest", "evaluator_id", "evaluator_version", "independent_judge_id", "measurements", "metrics", "evidence_state", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
+  "required": ["schema_version", "evidence_id", "manifest_id", "manifest_digest", "evaluator_id", "evaluator_version", "independent_judge_id", "judge_verdict_refs", "measurements", "metrics", "evidence_state", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "evidence_id": {"type": "string", "pattern": "^QEV-[A-F0-9]{64}$"},
@@ -13,6 +13,7 @@
     "evaluator_id": {"type": "string", "minLength": 1},
     "evaluator_version": {"type": "string", "minLength": 1},
     "independent_judge_id": {"type": "string", "minLength": 1},
+    "judge_verdict_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^JVR-[A-F0-9]{64}$"}},
     "measurements": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["metric", "value", "sample_count", "confidence_lower", "method_digest", "evidence_refs"], "properties": {"metric": {"type": "string", "minLength": 1}, "value": {"type": ["number", "boolean"]}, "sample_count": {"type": "integer", "minimum": 1}, "confidence_lower": {"type": "number", "minimum": 0}, "method_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}}},
     "metrics": {"type": "object", "minProperties": 1, "additionalProperties": {"type": ["number", "boolean"]}},
     "evidence_state": {"enum": ["verified", "unverified", "unknown"]},

@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from jsonschema import Draft202012Validator
 
 from .bundle import build_bundle, resolve_control_root
+from .judge import JudgeError, validate_verdict_identity
 from .qualification import QualificationError, verify_manifest, verify_qualification_evidence
 from .serialization import load_json, load_yaml
 from .supply_chain import (
@@ -79,6 +80,12 @@ _SUPPLY_CHAIN_METRICS = frozenset(
 _QUALIFICATION_METRICS = frozenset(
     metric for rules in _RELEASE_RULES.values() for metric in rules if metric not in _SUPPLY_CHAIN_METRICS
 )
+_QUALIFICATION_MIN_SAMPLE_COUNTS = {
+    "determinism_runs": 1000,
+    "critical_recall_lower_ci": 300,
+    "critical_family_asr_upper_ci": 300,
+    "critical_unsafe_action_count": 300,
+}
 
 
 def _satisfies(value: Any, operator: str, expected: float | bool) -> bool:
@@ -120,6 +127,12 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
         identifier = value.get(field) if isinstance(value, Mapping) else None
         if isinstance(identifier, str) and identifier:
             bindings.append({"kind": kind, "id": identifier})
+    verdicts = evidence.get("independent_judge_verdicts")
+    if isinstance(verdicts, list):
+        for verdict in verdicts:
+            identifier = verdict.get("verdict_id") if isinstance(verdict, Mapping) else None
+            if isinstance(identifier, str) and identifier:
+                bindings.append({"kind": "independent_judge_verdict", "id": identifier})
     return bindings
 
 
@@ -130,6 +143,25 @@ def expected_release_report_id(report: Mapping[str, Any]) -> str:
         if key in report
     }
     return "RGR-" + _digest(identity).upper()
+
+
+def _validate_typed_evidence_documents(root: Path, evidence: Mapping[str, Any]) -> None:
+    schema_by_field = {
+        "qualification_manifest": "qualification-manifest.schema.json",
+        "qualification_evidence": "qualification-evidence.schema.json",
+        "supply_chain_attestation": "supply-chain-attestation.schema.json",
+        "vulnerability_scan": "vulnerability-scan.schema.json",
+        "provenance_statement": "provenance-statement.schema.json",
+    }
+    for field, filename in schema_by_field.items():
+        document = evidence.get(field)
+        if not isinstance(document, Mapping):
+            continue
+        schema = load_json((root / "schemas" / filename).read_text(encoding="utf-8"))
+        errors = sorted(Draft202012Validator(schema).iter_errors(document), key=lambda error: list(error.absolute_path))
+        if errors:
+            location = ".".join(str(part) for part in errors[0].absolute_path) or "<root>"
+            raise EvaluationError(f"{field} is not schema-valid at {location}: {errors[0].message}")
 
 
 def _verified_qualification_metrics(
@@ -164,6 +196,38 @@ def _verified_qualification_metrics(
     forbidden = sorted(set(metrics) & _SUPPLY_CHAIN_METRICS)
     if forbidden:
         return {}, [f"qualification evidence cannot self-attest supply-chain metrics: {', '.join(forbidden)}"]
+    unknown = sorted(set(metrics) - _QUALIFICATION_METRICS)
+    if unknown:
+        return {}, [f"qualification evidence contains undeclared release metrics: {', '.join(unknown)}"]
+    verdicts = evidence.get("independent_judge_verdicts")
+    verdict_by_id = (
+        {
+            str(verdict.get("verdict_id")): verdict
+            for verdict in verdicts
+            if isinstance(verdict, Mapping) and isinstance(verdict.get("verdict_id"), str)
+        }
+        if isinstance(verdicts, list)
+        else {}
+    )
+    missing_verdicts = sorted(ref for ref in verified.get("judge_verdict_refs", []) if ref not in verdict_by_id)
+    if missing_verdicts:
+        return {}, [f"qualification evidence is missing referenced independent judge verdicts: {', '.join(missing_verdicts)}"]
+    try:
+        for ref in verified.get("judge_verdict_refs", []):
+            validate_verdict_identity(verdict_by_id[ref])
+            if verdict_by_id[ref].get("status") != "complete" or verdict_by_id[ref].get("epistemic_status") != "independent_candidate":
+                raise JudgeError("referenced independent judge verdict is not complete and independent")
+    except JudgeError as exc:
+        return {}, [f"independent judge verification failed: {exc}"]
+    measurements = verified.get("measurements")
+    by_metric = {str(item.get("metric")): item for item in measurements if isinstance(item, Mapping)} if isinstance(measurements, list) else {}
+    insufficient = sorted(
+        f"{metric}>={minimum} (got {by_metric.get(metric, {}).get('sample_count', 0)})"
+        for metric, minimum in _QUALIFICATION_MIN_SAMPLE_COUNTS.items()
+        if metric in metrics and int(by_metric.get(metric, {}).get("sample_count", 0)) < minimum
+    )
+    if insufficient:
+        return {}, [f"qualification evidence sample coverage is insufficient: {', '.join(insufficient)}"]
     return {key: value for key, value in metrics.items() if key in _QUALIFICATION_METRICS}, []
 
 
@@ -348,6 +412,7 @@ def main() -> int:
         evidence = load_json(args.evidence.read_text(encoding="utf-8"))
         if args.qualification_manifest is not None:
             evidence = {**evidence, "qualification_manifest": load_json(args.qualification_manifest.read_text(encoding="utf-8"))}
+        _validate_typed_evidence_documents(root, evidence)
         verification_keys = {
             "qualification": load_public_key(args.qualification_public_key),
             "supply_chain": load_public_key(args.supply_chain_public_key),

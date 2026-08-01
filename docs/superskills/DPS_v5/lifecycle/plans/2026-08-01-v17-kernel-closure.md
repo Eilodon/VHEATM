@@ -24,6 +24,7 @@
 - Ed25519-bound supply-chain, vulnerability, provenance, private/time-sliced qualification, external-provider, and pilot-completion records; verified typed evidence now takes precedence over raw release metric shortcuts.
 - Release-gate evaluation now ignores caller-supplied metric shortcuts, verifies qualification and supply-chain signatures at the trust boundary, and binds the report digest to the content-addressed evidence IDs.
 - External providers now have a bounded HTTPS transport with TLS, redirect refusal, timeout/response caps, metadata-only payloads, and broker-before-network ordering; pilot completion requires content-addressed completed provider runs.
+- Qualification evidence now binds to content-addressed independent-judge verdicts, rejects undeclared metrics, enforces critical sample floors, and validates typed evidence schemas at CLI ingest.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 
 ## Verification gates
