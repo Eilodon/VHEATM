@@ -782,3 +782,77 @@ Start the next cycle when a new typed release-evidence schema/field is added or 
 - CLI-only validation is not a trust boundary when the library exposes a direct evaluator API.
 - Schema-invalid local fixtures surfaced immediately once the direct boundary used the same uppercase content-addressed ID rules as the canonical schemas.
 - Fail-closed reports are more useful than exceptions for malformed supply evidence because they preserve explicit RG-13 failure semantics.
+
+## ADR-12 — Bind critical qualification trials to private corpus populations
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `private-corpus` `release-gates` `measurement-integrity`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when a new critical metric, sample basis, or private qualification feed is introduced.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local population-binding behavior; `NOT_PRODUCTION_QUALIFIED` for the statistical validity and provenance of unavailable external gold data.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `REPLAY`
+**VOLATILITY:** `WATCHFUL` — metric populations and preregistered statistical methods must remain explicit as RG definitions evolve.
+
+### Context
+
+The signed qualification evidence schema carried a `sample_count`, but the evaluator trusted that number without checking what population the samples represented. A one-case private receipt could therefore carry a signed claim of 300 critical recall, ASR, or unsafe-action trials and satisfy the release sample floor. A signature and content-addressed identity preserve integrity of the claim; they do not prove population coverage.
+
+### Decision
+
+Add canonical `sample_basis` semantics to every qualification measurement. Determinism uses `repeated_evaluation`; critical recall, critical miss count, critical-family ASR, and critical unsafe-action metrics use `private_case_trials`; other measurements use `private_corpus_observation`. The evaluator requires every measurement to use its canonical basis, reference the verified private receipt, and, for private-case metrics, have `sample_count` no greater than the receipt's verified `case_count`. Known bounded rates/CI values must remain in `[0, 1]`, counts/timings must remain non-negative, integer metrics must remain integer counts, and confidence lower bounds must remain in `[0, 1]`. Violations discard all qualification metrics and leave affected gates `unknown`. This binds population coverage without claiming that a local fixture or receipt proves independence, statistical method correctness, or production qualification.
+
+### Options Considered
+
+- Trust signed `sample_count` as sufficient: rejected because signed self-assertion does not establish the sampled population.
+- Require every metric to equal private `case_count`: rejected because determinism and performance metrics legitimately use repeated evaluations rather than distinct private cases.
+- Use public seeded replay to fill private population gaps: rejected because public replay remains `public_seeded`/`unverified` and cannot satisfy private gold evidence.
+
+### Impact
+
+Schemas changed: `qualification-evidence.schema.json` adds required `sample_basis` and bounds `confidence_lower` to `[0, 1]`.
+Components changed: qualification builder/verifier, release evaluator, private-corpus binding, release-evidence fixtures/tests, lifecycle record.
+Breaking change: **YES** for qualification evidence that omits sample population semantics or overstates critical private-case coverage.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `private receipt.case_count → measurement.sample_basis/sample_count → verified qualification metrics → RG-00…RG-15`.
+Cascade Review: ✅ Done — RED/GREEN oversize-claim test, full suite, validator, package/schema boundary, and seeded replay checks cover the changed path.
+
+### Consequences
+
+- A small private corpus can no longer satisfy a large critical trial floor by declaration alone.
+- The measurement contract makes repeated-evaluation versus private-case populations visible and reviewable.
+- The check is population binding, not an independent statistical qualification; external gold provenance, judge independence, and preregistered CI computation remain required.
+- Existing local mechanism fixtures now use 300 private cases for critical release metrics and remain test fixtures, not production evidence.
+
+### Evidence
+
+- [verified 2026-08-01] RED test showed a one-case receipt with signed 300-trial critical metrics could pass RG-05; the corrected evaluator returns `unknown` with a population-binding diagnostic.
+- [verified 2026-08-01] RED test showed signed `critical_recall_lower_ci=2.0` could pass RG-05; the corrected qualification verifier rejects out-of-domain metric values before derivation.
+- [verified 2026-08-01] `.venv/bin/vheatm-validate --root .` passed and `.venv/bin/pytest -q -o addopts=''` passed with 232 tests.
+- [verified 2026-08-01] Qualification, private receipt, release-gate, and schema contract tests pass; public seeded replay remains explicitly `public_seeded`/`unverified`.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Remaining qualification debt is external private gold provenance, independent adjudication, statistical CI computation, signing custody, and operational pilot evidence.
+
+### Next Cycle Trigger
+
+Start the next cycle when a new critical RG metric/sample basis is added or an external private qualification feed is connected; require its population rule, boundary regression, and complete RG-00…RG-15 verification before accepting metrics.
+
+### Cycle Retrospective
+
+- A signed sample count is still only a claim until its population is bound to an immutable receipt.
+- Different metrics need different population semantics; applying one corpus-count rule to determinism would be incorrect.
+- Threshold predicates do not define physical metric domains; bounded rates/CI and non-negative count/timing rules must be frozen separately.
+- The smallest useful regression is a one-case receipt with an oversized critical claim because it directly exercises the false-assurance path.
+- Population binding narrows the blocker but deliberately does not pretend to prove independent sampling or confidence-interval correctness.
