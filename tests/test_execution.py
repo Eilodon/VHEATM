@@ -227,3 +227,43 @@ def test_provider_bound_runner_emits_and_validates_typed_module_run() -> None:
     assert result["run"]["id"].startswith("RUN-")
     assert len(result["run"]["id"].split("-", 1)[1]) == 64
     assert len(result["artifacts"]) == 1
+
+
+def test_execution_rejects_non_string_evidence_and_artifact_references() -> None:
+    _, _, _, contract, value = _fixture()
+
+    def provider(invocation):
+        return {
+            "status": "completed",
+            "result": {"gate_trace": ["HG-P"], "state": "pass", "evidence_refs": [None]},
+            "outputs": [{
+                "output_id": "module_decision",
+                "schema_ref": "https://vheatm.dev/schemas/module-decision.schema.json",
+                "payload": {
+                    "module_id": contract["id"], "module_run_id": "provider-filled", "gate_trace": ["HG-P"],
+                    "state": "pass", "evidence_refs": [None],
+                },
+                "taint_state": "validated",
+            }],
+        }
+
+    with pytest.raises(ExecutionError, match="evidence_refs"):
+        run_module(
+            contract,
+            module_digest="a" * 64,
+            instruction_digest=contract["contract"]["disclosure"]["instruction_sha256"],
+            context={"mode": "standard"},
+            validation_receipts={value["receipt"]["id"]: value["receipt"]},
+            provider=provider,
+            started_at="2026-08-01T03:00:00Z",
+            finished_at="2026-08-01T03:00:01Z",
+        )
+    with pytest.raises(ExecutionError, match="source_refs"):
+        build_artifact_envelope(
+            producer_module_id=contract["id"],
+            producer_run_id="RUN-" + "A" * 64,
+            output_id="module_decision",
+            schema_ref="https://vheatm.dev/schemas/module-decision.schema.json",
+            payload={"state": "unknown"},
+            source_refs=[None],  # type: ignore[list-item]
+        )

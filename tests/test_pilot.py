@@ -45,6 +45,25 @@ def test_pilot_requires_provider_outage_drill_and_evidence_refs() -> None:
             drills=empty_evidence,
             rollback_plan="rollback",
         )
+    non_string_evidence = _drills()
+    non_string_evidence[0] = {**non_string_evidence[0], "evidence_refs": [None]}
+    with pytest.raises(PilotError, match="evidence_refs"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=_report(),
+            drills=non_string_evidence,
+            rollback_plan="rollback",
+        )
+    with pytest.raises(PilotError, match="timestamp"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=_report(),
+            drills=_drills(),
+            rollback_plan="rollback",
+            created_at=1,  # type: ignore[arg-type]
+        )
 
 
 def test_pilot_schema_binds_profile_and_terminal_state_payloads() -> None:
@@ -136,7 +155,7 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
         "tool_class": "network", "scope": "workspace:", "destination": "https://provider.example.test/analyze",
         "data_classes": ["source_digests"], "redacted": True,
     }
-    request = {"request_id": "ANR-" + "a" * 64, "network_request_id": network_request["request_id"], "network_request": network_request}
+    request = {"request_id": "ANR-" + "a" * 64, "network_request_id": network_request["request_id"], "network_request": network_request, "session_root": "b" * 64}
     decision = {
         "schema_version": "1.0.0", "request_id": network_request["request_id"], "decision": "allow",
         "reason": "test approval", "controls": ["approval:verified"], "evaluated_at": "2026-08-01T00:00:00Z",
@@ -161,6 +180,27 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     assert complete["pilot_id"] != pilot["pilot_id"]
     schema = load_json((Path("schemas") / "pilot-run.schema.json").read_text())
     Draft202012Validator(schema).validate(complete)
+    other_session_run = build_provider_run(
+        request={**request, "session_root": "e" * 64},
+        provider_id="remote.test",
+        provider_version="1.0.0",
+        config_digest=provider_config_digest({"model": "fixed", "temperature": 0}),
+        adapter_profile="remote-json-v1",
+        network_receipt=receipt,
+        status="completed",
+        response={"candidate": True},
+        error=None,
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    other_session_observation = {**observation, "provider_run_refs": [other_session_run["run_id"]]}
+    with pytest.raises(PilotError, match="session"):
+        complete_pilot(pilot, observations=[other_session_observation], provider_runs=[other_session_run])
+    non_string_observation = {**observation, "evidence_refs": [None]}
+    with pytest.raises(PilotError, match="evidence_refs"):
+        complete_pilot(pilot, observations=[non_string_observation], provider_runs=[provider_run])
+    non_string_observation_id = {**observation, "observation_id": None}
+    with pytest.raises(PilotError, match="observation ID"):
+        complete_pilot(pilot, observations=[non_string_observation_id], provider_runs=[provider_run])
     tampered_pilot = {**pilot, "read_only": False, "tools_enabled": True}
     with pytest.raises(PilotError, match="identity"):
         complete_pilot(

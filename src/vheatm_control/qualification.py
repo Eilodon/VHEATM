@@ -133,7 +133,12 @@ def _validate_measurements(measurements: Sequence[Mapping[str, Any]]) -> dict[st
         if not isinstance(method_digest, str) or len(method_digest) != 64 or any(char not in "0123456789abcdef" for char in method_digest):
             raise QualificationError("qualification measurements require a lowercase SHA-256 method digest")
         refs = raw.get("evidence_refs")
-        if not isinstance(refs, Sequence) or isinstance(refs, (str, bytes)) or not refs or any(not str(ref).strip() for ref in refs):
+        if (
+            not isinstance(refs, Sequence)
+            or isinstance(refs, (str, bytes, bytearray))
+            or not refs
+            or any(not isinstance(ref, str) or not ref.strip() for ref in refs)
+        ):
             raise QualificationError("qualification measurements require evidence references")
         metrics[metric] = value
     return metrics

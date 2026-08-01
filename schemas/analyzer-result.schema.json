@@ -4,7 +4,7 @@
   "title": "VHEATM brokered analyzer result",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "result_id", "request_id", "analyzer_id", "provider_id", "provider_version", "operation", "session_root", "input_snapshot_digest", "status", "epistemic_status", "output_digest", "source_refs", "tool_receipt", "generated_at", "output"],
+  "required": ["schema_version", "result_id", "request_id", "analyzer_id", "provider_id", "provider_version", "operation", "session_root", "input_snapshot_digest", "status", "epistemic_status", "output_digest", "source_refs", "tool_request", "tool_receipt", "generated_at", "output"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "result_id": {"type": "string", "pattern": "^ANZ-[A-F0-9]{64}$"},
@@ -19,6 +19,7 @@
     "epistemic_status": {"enum": ["candidate", "unknown"]},
     "output_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "source_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}},
+    "tool_request": {"type": "object", "additionalProperties": false, "required": ["schema_version", "request_id", "requester", "tool_class", "scope", "secret_expansion", "contains_secrets"], "properties": {"schema_version": {"const": "1.0.0"}, "request_id": {"type": "string", "minLength": 1}, "requester": {"type": "string", "minLength": 1}, "tool_class": {"const": "read"}, "scope": {"type": "string", "pattern": "^workspace:$"}, "secret_expansion": {"const": false}, "contains_secrets": {"const": false}}},
     "tool_receipt": {"$ref": "https://vheatm.dev/schemas/tool-receipt.schema.json"},
     "generated_at": {"type": "string", "format": "date-time"},
     "output": {"type": ["object", "null"]},

@@ -206,3 +206,28 @@ def test_qualification_requires_verified_manifest_and_rejects_tampering() -> Non
     tampered["case_count"] = 2
     with pytest.raises(QualificationError):
         verify_manifest(tampered, public_key=key.public_key(), key_id="gold-key")
+
+
+def test_qualification_rejects_non_string_measurement_evidence_refs(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, receipt, _ = _private_fixture(tmp_path, key)
+    verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="gold-key")
+    with pytest.raises(QualificationError, match="evidence references"):
+        build_qualification_evidence(
+            manifest=verified_manifest,
+            bundle_root=build_bundle(ROOT)["bundle_root"],
+            private_corpus_receipt_id=receipt["receipt_id"],
+            evaluator_id="eval:v17",
+            evaluator_version="1.0.0",
+            independent_judge_id="judge:v17",
+            judge_verdict_refs=["JVR-" + "A" * 64],
+            measurements=[{
+                "metric": "mutation_rejection_rate",
+                "value": 1.0,
+                "sample_count": 1,
+                "confidence_lower": 1.0,
+                "method_digest": expected_method_digest("mutation_rejection_rate"),
+                "evidence_refs": [None],
+            }],
+            generated_at="2026-08-02T00:00:00Z",
+        )

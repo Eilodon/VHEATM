@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Callable, Mapping, Sequence
@@ -214,6 +215,10 @@ def build_artifact_envelope(
     source_refs: Sequence[str] = (),
     validation_receipt_refs: Sequence[str] = (),
 ) -> dict[str, Any]:
+    if any(not isinstance(ref, str) or not re.fullmatch(r"SRC-[A-F0-9]{64}", ref) for ref in source_refs):
+        raise ExecutionError("artifact source_refs must be content-addressed source IDs")
+    if any(not isinstance(ref, str) or not re.fullmatch(r"VRF-[A-F0-9]{64}", ref) for ref in validation_receipt_refs):
+        raise ExecutionError("artifact validation_receipt_refs must be content-addressed validation receipt IDs")
     envelope: dict[str, Any] = {
         "schema_ref": schema_ref,
         "producer_module_id": producer_module_id,
@@ -259,6 +264,17 @@ def _validate_artifact(artifact: Mapping[str, Any], receipts: Mapping[str, Mappi
         raise ExecutionError(f"artifact id does not match its content: {supplied_id}")
     if not isinstance(artifact.get("payload"), Mapping):
         raise ExecutionError("artifact payload must be an object")
+    for field, pattern in (
+        ("source_refs", r"SRC-[A-F0-9]{64}"),
+        ("validation_receipt_refs", r"VRF-[A-F0-9]{64}"),
+    ):
+        refs = artifact.get(field, [])
+        if (
+            not isinstance(refs, list)
+            or any(not isinstance(ref, str) or not re.fullmatch(pattern, ref) for ref in refs)
+            or len(refs) != len(set(refs))
+        ):
+            raise ExecutionError(f"artifact {field} must contain typed unique references")
     receipt_refs = artifact.get("validation_receipt_refs", [])
     if artifact.get("taint_state") in {"validated", "human_approved"} and not receipt_refs:
         raise ExecutionError("validated or human-approved artifact outputs require a validation receipt")
@@ -359,7 +375,12 @@ def validate_module_run(
             raise ExecutionError("module result requires a non-empty gate_trace")
         if not all(isinstance(gate_id, str) and gate_id.startswith("HG-") for gate_id in result["gate_trace"]):
             raise ExecutionError("module result gate_trace contains an invalid gate id")
-        if not isinstance(result.get("evidence_refs"), list) or len(result["evidence_refs"]) != len(set(result["evidence_refs"])):
+        evidence_refs = result.get("evidence_refs")
+        if (
+            not isinstance(evidence_refs, list)
+            or any(not isinstance(ref, str) or not re.fullmatch(r"(?:SRC|CLM|VRF|ART)-[A-F0-9]{64}", ref) for ref in evidence_refs)
+            or len(evidence_refs) != len(set(evidence_refs))
+        ):
             raise ExecutionError("module result evidence_refs must be a unique array")
         if result.get("state") not in {"pass", "fail", "unknown"}:
             raise ExecutionError("module result has an invalid state")

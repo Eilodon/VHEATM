@@ -10,9 +10,10 @@ from vheatm_control.analyzers import (
     build_analyzer_request,
     snapshot_from_probe,
     snapshot_digest,
+    expected_analyzer_result_id,
     verify_analyzer_result,
 )
-from vheatm_control.tool_broker import ToolBroker
+from vheatm_control.tool_broker import ToolBroker, action_digest, expected_tool_receipt_id, request_digest
 from vheatm_control.structural_probe import probe_workspace
 
 
@@ -37,9 +38,58 @@ def test_probe_is_brokered_snapshot_bound_and_keeps_sources_tainted(tmp_path) ->
     assert result["status"] == "complete"
     assert result["tool_receipt"]["decision"] == "allow"
     assert all(item["source"]["taint_state"] == "tainted" for item in result["output"]["files"])
+
+
+def test_analyzer_result_verifier_rejects_scope_or_source_reference_drift(tmp_path) -> None:
+    source = tmp_path / "sample.py"
+    source.write_text("def hello():\n    return 1\n", encoding="utf-8")
+    baseline = probe_workspace(tmp_path, ["sample.py"], captured_at="2026-08-01T00:00:00Z")
+    request = build_analyzer_request(
+        analyzer_id="python.structural", provider_id="local.python", provider_version="1.0.0", operation="probe",
+        workspace_path=tmp_path, requested_paths=["sample.py"], source_snapshot=snapshot_from_probe(baseline),
+        session_root="a" * 64, captured_at="2026-08-01T00:00:00Z",
+    )
+    result = _provider().run(request)
+    drifted_scope = {**result, "session_root": "f" * 64}
+    with pytest.raises(AnalyzerError, match="identity"):
+        verify_analyzer_result(drifted_scope)
+    drifted_refs = {**result, "source_refs": ["SRC-" + "0" * 64]}
+    drifted_refs["result_id"] = expected_analyzer_result_id(drifted_refs)
+    with pytest.raises(AnalyzerError, match="source references"):
+        verify_analyzer_result(drifted_refs)
+    detached_request = {
+        "schema_version": "1.0.0", "request_id": result["request_id"], "requester": result["provider_id"],
+        "tool_class": "read", "scope": "workspace:other", "secret_expansion": False, "contains_secrets": False,
+    }
+    detached_receipt = {**result["tool_receipt"], "request_digest": request_digest(detached_request), "action_digest": action_digest(detached_request)}
+    detached_receipt["id"] = expected_tool_receipt_id(detached_receipt)
+    detached_request_result = {**result, "tool_request": detached_request, "tool_receipt": detached_receipt}
+    detached_request_result["result_id"] = expected_analyzer_result_id(detached_request_result)
+    with pytest.raises(AnalyzerError, match="tool request|unsupported"):
+        verify_analyzer_result(detached_request_result)
     receipt = verify_analyzer_result(result)
     assert receipt is not None
     assert all(item["source"]["taint_state"] == "tainted" for item in result["output"]["files"])
+
+
+def test_analyzer_result_verifier_fail_closes_malformed_boundary_values(tmp_path) -> None:
+    source = tmp_path / "sample.py"
+    source.write_text("value = 1\n", encoding="utf-8")
+    baseline = probe_workspace(tmp_path, ["sample.py"], captured_at="2026-08-01T00:00:00Z")
+    request = build_analyzer_request(
+        analyzer_id="python.structural", provider_id="local.python", provider_version="1.0.0", operation="probe",
+        workspace_path=tmp_path, requested_paths=["sample.py"], source_snapshot=snapshot_from_probe(baseline),
+        session_root="d" * 64, captured_at="2026-08-01T00:00:00Z",
+    )
+    result = _provider().run(request)
+    with pytest.raises(AnalyzerError, match="object"):
+        verify_analyzer_result(None)  # type: ignore[arg-type]
+    malformed_refs = {**result, "source_refs": [[]]}
+    with pytest.raises(AnalyzerError, match="source references"):
+        verify_analyzer_result(malformed_refs)
+    malformed_receipt = {**result, "tool_receipt": {**result["tool_receipt"], "request_digest": None}}
+    with pytest.raises(AnalyzerError, match="tool receipt"):
+        verify_analyzer_result(malformed_receipt)
 
 
 def test_probe_blocks_when_workspace_changes_after_snapshot(tmp_path) -> None:

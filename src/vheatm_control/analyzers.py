@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,7 +13,7 @@ from .python_linker import LinkerError, link_probe_bundle, verify_linkage_bundle
 from .provenance import ProvenanceError, build_validation_receipt
 from .serialization import load_json
 from .structural_probe import ProbeError, ProbeLimits, probe_workspace, verify_probe_bundle
-from .tool_broker import ToolBroker, build_tool_receipt, request_digest
+from .tool_broker import ToolBroker, action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest
 
 
 class AnalyzerError(ValueError):
@@ -29,6 +30,28 @@ def _digest(value: Any) -> str:
 
 def _content_id(prefix: str, value: Any) -> str:
     return f"{prefix}-{_digest(value).upper()}"
+
+
+def _analyzer_result_identity(result: Mapping[str, Any]) -> dict[str, Any]:
+    identity = {
+        "request_id": result["request_id"], "analyzer_id": result["analyzer_id"], "provider_id": result["provider_id"],
+        "provider_version": result["provider_version"], "operation": result["operation"], "session_root": result["session_root"],
+        "input_snapshot_digest": result["input_snapshot_digest"], "status": result["status"],
+        "epistemic_status": result["epistemic_status"], "output_digest": result["output_digest"],
+        "source_refs": list(result["source_refs"]),
+        "tool_request": dict(result["tool_request"]),
+        "tool_receipt": {key: value for key, value in result["tool_receipt"].items() if key != "recorded_at"},
+        "output": result["output"],
+    }
+    if "error" in result:
+        identity["error"] = result["error"]
+    return identity
+
+
+def expected_analyzer_result_id(result: Mapping[str, Any]) -> str:
+    """Return the content address for one analyzer result identity."""
+
+    return _content_id("ANZ", _analyzer_result_identity(result))
 
 
 def _timestamp(value: str) -> str:
@@ -197,30 +220,103 @@ def _build_result(
         "output_digest": _digest(result_output), "source_refs": sorted(set(str(ref) for ref in source_refs)),
         # Broker timestamps are audit metadata, not analyzer content identity;
         # excluding them keeps the same immutable snapshot deterministic.
+        "tool_request": deepcopy(dict(request["tool_request"])),
         "tool_receipt": {key: value for key, value in receipt.items() if key != "recorded_at"}, "output": result_output,
     }
     if error:
         result_identity["error"] = error
-    return {
-        "schema_version": "1.0.0", "result_id": _content_id("ANZ", result_identity), **result_identity,
+    result = {
+        "schema_version": "1.0.0", **result_identity,
         "tool_receipt": dict(receipt), "generated_at": str(request["captured_at"]),
     }
+    result["result_id"] = expected_analyzer_result_id(result)
+    return result
 
 
 def verify_analyzer_result(result: Mapping[str, Any], *, verifier_id: str = "vheatm.analyzer-verifier") -> dict[str, Any] | None:
     """Verify candidate output and issue a separate receipt; never clear source taint."""
 
+    if not isinstance(result, Mapping):
+        raise AnalyzerError("analyzer result must be an object")
     if result.get("status") != "complete" or result.get("epistemic_status") != "candidate":
         return None
+    required = {
+        "schema_version", "result_id", "request_id", "analyzer_id", "provider_id", "provider_version", "operation",
+        "session_root", "input_snapshot_digest", "status", "epistemic_status", "output_digest", "source_refs",
+        "tool_request", "tool_receipt", "generated_at", "output",
+    }
+    if result.get("schema_version") != "1.0.0" or not required.issubset(result):
+        raise AnalyzerError("analyzer result is incomplete")
+    if set(result) - required - {"error"}:
+        raise AnalyzerError("analyzer result contains unsupported fields")
+    if not isinstance(result.get("request_id"), str) or not re.fullmatch(r"ANR-[A-Fa-f0-9]{64}", result["request_id"]):
+        raise AnalyzerError("analyzer result request identity is invalid")
+    for field in ("analyzer_id", "provider_id", "provider_version", "operation"):
+        if not isinstance(result.get(field), str) or not result[field].strip():
+            raise AnalyzerError(f"analyzer result {field} is invalid")
+    if not isinstance(result.get("session_root"), str) or not re.fullmatch(r"[a-f0-9]{64}", result["session_root"]):
+        raise AnalyzerError("analyzer result session identity is invalid")
+    tool_request = result.get("tool_request")
+    tool_request_required = {"schema_version", "request_id", "requester", "tool_class", "scope", "secret_expansion", "contains_secrets"}
+    if not isinstance(tool_request, Mapping) or not tool_request_required.issubset(tool_request) or set(tool_request) - tool_request_required:
+        raise AnalyzerError("analyzer result tool request is incomplete")
+    if (
+        tool_request.get("schema_version") != "1.0.0"
+        or tool_request.get("request_id") != result.get("request_id")
+        or not isinstance(tool_request.get("requester"), str)
+        or not tool_request.get("requester", "").strip()
+        or tool_request.get("requester") != result.get("provider_id")
+        or tool_request.get("tool_class") != "read"
+        or tool_request.get("scope") != "workspace:"
+        or tool_request.get("secret_expansion") is not False
+        or tool_request.get("contains_secrets") is not False
+    ):
+        raise AnalyzerError("analyzer result tool request is not bound to the provider read scope")
+    source_refs = result.get("source_refs")
+    if (
+        not isinstance(source_refs, list)
+        or any(not isinstance(ref, str) or not re.fullmatch(r"SRC-[A-F0-9]{64}", ref) for ref in source_refs)
+        or len(source_refs) != len(set(source_refs))
+    ):
+        raise AnalyzerError("analyzer result source references are invalid")
+    receipt = result.get("tool_receipt")
+    receipt_required = {"id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"}
+    if not isinstance(receipt, Mapping) or not receipt_required.issubset(receipt) or set(receipt) - receipt_required:
+        raise AnalyzerError("analyzer result tool receipt is incomplete")
+    if not isinstance(receipt.get("id"), str) or not re.fullmatch(r"TRC-[A-F0-9]{64}", receipt["id"]):
+        raise AnalyzerError("analyzer result tool receipt identity is invalid")
+    if receipt.get("id") != expected_tool_receipt_id(receipt):
+        raise AnalyzerError("analyzer result tool receipt identity is invalid")
+    if (
+        receipt.get("request_id") != result.get("request_id")
+        or not isinstance(receipt.get("request_digest"), str)
+        or not isinstance(receipt.get("action_digest"), str)
+        or receipt.get("tool_class") != "read"
+        or receipt.get("decision") != "allow"
+        or receipt.get("request_digest") != request_digest(tool_request)
+        or receipt.get("action_digest") != action_digest(tool_request)
+        or not re.fullmatch(r"[a-f0-9]{64}", receipt["request_digest"])
+        or not re.fullmatch(r"[a-f0-9]{64}", receipt["action_digest"])
+        or (receipt.get("approval_token_id") is not None and not re.fullmatch(r"APR-[A-F0-9]{64}", str(receipt.get("approval_token_id"))))
+    ):
+        raise AnalyzerError("analyzer result tool receipt is not bound to an allowed read request")
+    if result.get("result_id") != expected_analyzer_result_id(result):
+        raise AnalyzerError("analyzer result identity does not match its content")
+    _timestamp(str(receipt.get("recorded_at")))
+    _timestamp(str(result.get("generated_at")))
     output = result.get("output")
     if not isinstance(output, Mapping) or _digest(output) != result.get("output_digest"):
         raise AnalyzerError("analyzer output digest mismatch")
     if result.get("operation") == "probe":
         verify_probe_bundle(output)
+        expected_source_refs = [str(item["source"]["id"]) for item in output.get("files", [])]
     elif result.get("operation") == "link":
         verify_linkage_bundle(output)
+        expected_source_refs = [str(item["source_id"]) for item in output.get("modules", [])]
     else:
         raise AnalyzerError("unknown analyzer operation")
+    if sorted(set(source_refs)) != sorted(set(expected_source_refs)):
+        raise AnalyzerError("analyzer result source references do not cover the verified output")
     return build_validation_receipt(
         source_refs=result.get("source_refs", []), validator=verifier_id,
         method=f"deterministic:{result['operation']}:bundle-integrity-v1", result="validated",

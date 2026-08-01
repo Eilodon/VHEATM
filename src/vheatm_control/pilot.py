@@ -25,6 +25,8 @@ def _digest(value: Any) -> str:
 
 def _timestamp(value: str | None = None) -> str:
     result = value or datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    if not isinstance(result, str):
+        raise PilotError("pilot timestamp must be RFC 3339")
     try:
         parsed = datetime.fromisoformat(result.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -105,7 +107,7 @@ def prepare_pilot(
             raise PilotError(f"canary release evidence re-verification failed: {exc}") from exc
         if verified_report != dict(release_report):
             raise PilotError("canary release report does not match re-verified release evidence")
-    if not str(rollback_plan).strip():
+    if not isinstance(rollback_plan, str) or not rollback_plan.strip():
         raise PilotError("pilot requires a non-empty rollback plan")
     normalized_drills = []
     seen: set[str] = set()
@@ -122,8 +124,10 @@ def prepare_pilot(
         raw_evidence_refs = raw.get("evidence_refs")
         if not isinstance(raw_evidence_refs, Sequence) or isinstance(raw_evidence_refs, (str, bytes, bytearray)):
             raise PilotError(f"pilot drill {drill_id} requires evidence_refs")
-        evidence_refs = sorted(set(str(ref) for ref in raw_evidence_refs))
-        if not evidence_refs or any(not ref.strip() for ref in evidence_refs):
+        if any(not isinstance(ref, str) or not ref.strip() for ref in raw_evidence_refs):
+            raise PilotError(f"pilot drill {drill_id} requires evidence_refs")
+        evidence_refs = sorted(set(raw_evidence_refs))
+        if not evidence_refs:
             raise PilotError(f"pilot drill {drill_id} requires evidence_refs")
         normalized_drills.append({"drill_id": drill_id, "status": status, "evidence_refs": evidence_refs})
     required_drills = {"incident", "rollback", "evidence_store_outage", "clock_skew", "provider_outage"}
@@ -175,6 +179,8 @@ def complete_pilot(
             verify_provider_run(run)
         except ProviderAdapterError as exc:
             raise PilotError(f"pilot receipt authorization chain is invalid: {exc}") from exc
+        if run.get("session_root") != pilot.get("session_root"):
+            raise PilotError("pilot provider run is not bound to the pilot session")
         try:
             provider_entry = provider_descriptor(str(run.get("provider_id")), str(run.get("provider_version")))
         except ProviderPolicyError as exc:
@@ -197,16 +203,27 @@ def complete_pilot(
     for raw in observations:
         if not isinstance(raw, Mapping):
             raise PilotError("pilot observations must be objects")
-        observation_id = str(raw.get("observation_id", ""))
+        observation_id = raw.get("observation_id")
+        if not isinstance(observation_id, str) or not observation_id.strip():
+            raise PilotError("pilot observation ID must be a non-empty string")
         if not observation_id or observation_id in seen:
             raise PilotError("pilot observation IDs must be unique")
-        status = str(raw.get("status", "unknown"))
+        status = raw.get("status", "unknown")
+        if not isinstance(status, str):
+            raise PilotError("pilot observation status is invalid")
         if status not in {"pass", "fail", "unknown"}:
             raise PilotError("pilot observation status is invalid")
-        provider_id = str(raw.get("provider_id", ""))
-        if not provider_id:
+        provider_id = raw.get("provider_id", "")
+        if not isinstance(provider_id, str) or not provider_id.strip():
             raise PilotError("pilot observation provider_id is required")
-        provider_run_refs = sorted(set(str(ref) for ref in raw.get("provider_run_refs", [])))
+        raw_provider_run_refs = raw.get("provider_run_refs", [])
+        if (
+            not isinstance(raw_provider_run_refs, Sequence)
+            or isinstance(raw_provider_run_refs, (str, bytes, bytearray))
+            or any(not isinstance(ref, str) or not ref.strip() for ref in raw_provider_run_refs)
+        ):
+            raise PilotError("pilot observation requires provider_run_refs")
+        provider_run_refs = sorted(set(raw_provider_run_refs))
         if not provider_run_refs or any(ref not in runs_by_id for ref in provider_run_refs):
             raise PilotError("pilot observation requires resolvable provider run references")
         if any(runs_by_id[ref].get("provider_id") != provider_id for ref in provider_run_refs):
@@ -214,13 +231,23 @@ def complete_pilot(
         sample_count = raw.get("sample_count")
         if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 1:
             raise PilotError("pilot observation sample_count must be positive")
-        refs = sorted(set(str(ref) for ref in raw.get("evidence_refs", [])))
+        raw_evidence_refs = raw.get("evidence_refs", [])
+        if (
+            not isinstance(raw_evidence_refs, Sequence)
+            or isinstance(raw_evidence_refs, (str, bytes, bytearray))
+            or any(not isinstance(ref, str) or not ref.strip() for ref in raw_evidence_refs)
+        ):
+            raise PilotError("pilot observation requires evidence_refs")
+        refs = sorted(set(raw_evidence_refs))
         if not refs:
             raise PilotError("pilot observation requires evidence_refs")
         if pilot.get("read_only") is True and raw.get("read_only_confirmed") is not True:
             raise PilotError("shadow pilot observation must confirm read-only execution")
         if pilot.get("read_only") is not True and raw.get("read_only_confirmed") is not False:
             raise PilotError("canary pilot observation must confirm tools were enabled")
+        observed_at = raw.get("observed_at", completed_at)
+        if observed_at is not None and not isinstance(observed_at, str):
+            raise PilotError("pilot observation observed_at must be RFC 3339")
         seen.add(observation_id)
         normalized.append(
             {
@@ -231,7 +258,7 @@ def complete_pilot(
                 "sample_count": sample_count,
                 "read_only_confirmed": raw.get("read_only_confirmed") is True,
                 "evidence_refs": refs,
-                "observed_at": _timestamp(str(raw.get("observed_at", completed_at))),
+                "observed_at": _timestamp(observed_at),
             }
         )
     if any(item["status"] != "pass" for item in normalized):

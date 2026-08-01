@@ -185,11 +185,15 @@ def build_provider_run(
     _validate_network_request(network_request)
     if request.get("network_request_id") != network_request.get("request_id"):
         raise ProviderAdapterError("provider network_request_id is not bound to the network request")
+    session_root = request.get("session_root")
+    if not isinstance(session_root, str) or not re.fullmatch(r"[a-f0-9]{64}", session_root):
+        raise ProviderAdapterError("provider request session_root must be a lowercase SHA-256 digest")
     _validate_network_receipt(network_request, network_receipt, status=status)
     response_copy = deepcopy(dict(response)) if isinstance(response, Mapping) else None
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
         "request_id": str(request.get("request_id", "")),
+        "session_root": session_root,
         "provider_id": provider_id,
         "provider_version": provider_version,
         "config_digest": config_digest,
@@ -211,7 +215,7 @@ def build_provider_run(
 def verify_provider_run(run: Mapping[str, Any]) -> None:
     """Re-verify a persisted provider run before it can become pilot evidence."""
 
-    required = {"schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "adapter_profile", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
+    required = {"schema_version", "run_id", "request_id", "session_root", "provider_id", "provider_version", "config_digest", "adapter_profile", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
     if not isinstance(run, Mapping) or run.get("schema_version") != "1.0.0" or not required.issubset(run):
         raise ProviderAdapterError("provider run is incomplete")
     if set(run) - required - {"error"}:
@@ -220,6 +224,8 @@ def verify_provider_run(run: Mapping[str, Any]) -> None:
         raise ProviderAdapterError("provider run identity is invalid")
     if not isinstance(run.get("request_id"), str) or not run["request_id"]:
         raise ProviderAdapterError("provider run request_id is invalid")
+    if not isinstance(run.get("session_root"), str) or not re.fullmatch(r"[a-f0-9]{64}", str(run["session_root"])):
+        raise ProviderAdapterError("provider run session_root is invalid")
     provider_id = run.get("provider_id")
     if not isinstance(provider_id, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{2,63}", provider_id):
         raise ProviderAdapterError("provider run provider_id is invalid")

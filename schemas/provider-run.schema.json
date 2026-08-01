@@ -4,11 +4,12 @@
   "title": "VHEATM external provider execution record",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "adapter_profile", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"],
+  "required": ["schema_version", "run_id", "request_id", "session_root", "provider_id", "provider_version", "config_digest", "adapter_profile", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "run_id": {"type": "string", "pattern": "^PRV-[A-F0-9]{64}$"},
     "request_id": {"type": "string", "minLength": 1},
+    "session_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "provider_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,63}$"},
     "provider_version": {"type": "string", "minLength": 1},
     "config_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
