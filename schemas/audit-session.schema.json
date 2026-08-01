@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/audit-session.schema.json",
+  "title": "VHEATM resumable audit session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "context_digest",
+    "bundle_root",
+    "session_root",
+    "state",
+    "current_plan_id",
+    "current_plan_digest",
+    "plan_revision",
+    "sequence",
+    "last_event_hash",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "session_id": {"type": "string", "pattern": "^SES-[A-F0-9]{64}$"},
+    "context_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "session_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "state": {"enum": ["created", "context_validated", "planned", "running", "blocked", "partial", "complete", "attested"]},
+    "current_plan_id": {"type": ["string", "null"], "pattern": "^PLN-[a-f0-9]{64}$"},
+    "current_plan_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "plan_revision": {"type": "integer", "minimum": -1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "last_event_hash": {"type": "string", "pattern": "^[A-F0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

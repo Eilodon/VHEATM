@@ -28,6 +28,10 @@ def _canonical_bytes(value: Mapping[str, Any]) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def request_digest(request: Mapping[str, Any]) -> str:
+    return hashlib.sha256(_canonical_bytes(dict(request))).hexdigest()
+
+
 def _parse_time(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -39,7 +43,7 @@ def _parse_time(value: str) -> datetime:
 
 
 def sign_approval_token(claims: Mapping[str, Any], *, key: bytes, key_id: str) -> dict[str, Any]:
-    required = {"requester", "tool_class", "exact_scope", "issued_at", "expires_at", "approved_by", "nonce"}
+    required = {"requester", "tool_class", "exact_scope", "request_digest", "issued_at", "expires_at", "approved_by", "nonce"}
     allowed = required | {"single_use"}
     missing = sorted(required - claims.keys())
     extra = sorted(claims.keys() - allowed)
@@ -51,6 +55,8 @@ def sign_approval_token(claims: Mapping[str, Any], *, key: bytes, key_id: str) -
         raise PolicyError("approval tokens are only valid for restricted tool classes")
     if not str(claims.get("exact_scope", "")).startswith("workspace:"):
         raise PolicyError("approval exact_scope must be workspace-bound")
+    if not isinstance(claims.get("request_digest"), str) or len(claims["request_digest"]) != 64:
+        raise PolicyError("approval request_digest must be a SHA-256 hex string")
     issued = _parse_time(str(claims.get("issued_at", "")))
     expires = _parse_time(str(claims.get("expires_at", "")))
     if expires <= issued:
@@ -58,7 +64,7 @@ def sign_approval_token(claims: Mapping[str, Any], *, key: bytes, key_id: str) -
     if claims.get("single_use", True) is not True:
         raise PolicyError("approval tokens must be single-use")
     unsigned = {"schema_version": "1.0.0", **dict(claims), "single_use": True}
-    token_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest()[:16].upper()}"
+    token_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest().upper()}"
     payload = {"token_id": token_id, **unsigned}
     signature = hmac.new(key, _canonical_bytes(payload), hashlib.sha256).hexdigest()
     return {
@@ -118,7 +124,7 @@ class ApprovalVerifier:
         consume: bool = True,
     ) -> str:
         allowed_fields = {
-            "token_id", "schema_version", "requester", "tool_class", "exact_scope", "issued_at",
+            "token_id", "schema_version", "requester", "tool_class", "exact_scope", "request_digest", "issued_at",
             "expires_at", "approved_by", "nonce", "single_use", "signature"
         }
         extra_fields = sorted(token.keys() - allowed_fields)
@@ -146,6 +152,8 @@ class ApprovalVerifier:
             raise PolicyError("approval tool_class does not match request")
         if token.get("exact_scope") != request.get("scope"):
             raise PolicyError("approval scope does not exactly match request")
+        if token.get("request_digest") != request_digest(request):
+            raise PolicyError("approval token is not bound to the complete request")
         issued = _parse_time(str(token.get("issued_at", "")))
         expires = _parse_time(str(token.get("expires_at", "")))
         current = (now or datetime.now(UTC)).astimezone(UTC)
@@ -158,7 +166,7 @@ class ApprovalVerifier:
 
         token_id = str(token.get("token_id", ""))
         unsigned = {field: value for field, value in signed_payload.items() if field != "token_id"}
-        expected_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest()[:16].upper()}"
+        expected_id = f"APR-{hashlib.sha256(_canonical_bytes(unsigned)).hexdigest().upper()}"
         if token_id != expected_id:
             raise PolicyError("approval token_id does not match signed claims")
         if consume:

@@ -10,6 +10,7 @@
     "requester",
     "tool_class",
     "exact_scope",
+    "request_digest",
     "issued_at",
     "expires_at",
     "approved_by",
@@ -18,11 +19,12 @@
     "signature"
   ],
   "properties": {
-    "token_id": {"type": "string", "pattern": "^APR-[A-F0-9]{16}$"},
+    "token_id": {"type": "string", "pattern": "^APR-[A-F0-9]{64}$"},
     "schema_version": {"const": "1.0.0"},
     "requester": {"type": "string", "minLength": 1},
     "tool_class": {"enum": ["execute", "write", "network", "secrets"]},
     "exact_scope": {"type": "string", "pattern": "^workspace:"},
+    "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "issued_at": {"type": "string", "format": "date-time"},
     "expires_at": {"type": "string", "format": "date-time"},
     "approved_by": {"type": "string", "minLength": 1},

@@ -30,15 +30,27 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: hypothesis_register
     required: true
     description: Prioritized hypotheses with source lens, affected boundary, and falsification path.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   - id: lens_trace
     required: true
     description: Record of applicable core and specialist lenses, including explicit skip reasons.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   - id: bias_record
     required: true
     description: Anchoring, confirmation, availability, automation, self-audit, and capture bias checks.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - document

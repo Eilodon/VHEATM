@@ -20,7 +20,7 @@
   ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{16}$"},
+    "probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{64}$"},
     "probe_type": {"const": "python_ast_v1"},
     "workspace": {"const": "workspace:"},
     "requested_paths": {

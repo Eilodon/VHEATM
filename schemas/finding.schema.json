@@ -38,11 +38,11 @@
           "anchor": {"type": "string", "minLength": 1},
           "claim": {"type": "string", "minLength": 1},
           "verified": {"type": "boolean", "default": false},
-          "claim_id": {"type": "string", "pattern": "^CLM-[A-F0-9]{16}$"},
+          "claim_id": {"type": "string", "pattern": "^CLM-[A-F0-9]{64}$"},
           "source_refs": {
             "type": "array",
             "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
+            "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}
           }
         }
       }

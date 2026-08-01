@@ -8,7 +8,7 @@
     "schema_version",
     "framework_version",
     "legacy_source",
-    "coverage_mode",
+    "gate_owner_coverage",
     "hard_token_budget",
     "required_gate_coverage",
     "modules"
@@ -21,7 +21,7 @@
       "type": "string",
       "minLength": 1
     },
-    "coverage_mode": {
+    "gate_owner_coverage": {
       "enum": [
         "pilot",
         "complete"

@@ -25,9 +25,9 @@
   ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
-    "linkage_id": {"type": "string", "pattern": "^LNK-[A-F0-9]{16}$"},
+    "linkage_id": {"type": "string", "pattern": "^LNK-[A-F0-9]{64}$"},
     "linkage_type": {"const": "python_import_graph_v1"},
-    "input_probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{16}$"},
+    "input_probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{64}$"},
     "input_probe_root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "source_roots": {
       "type": "array",
@@ -131,7 +131,7 @@
         "path": {"type": "string", "minLength": 1},
         "source_root": {"type": "string", "minLength": 1},
         "is_package": {"type": "boolean"},
-        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
+        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}
       }
     },
     "target": {
@@ -148,7 +148,7 @@
         },
         "qualified_name": {"type": "string", "minLength": 1},
         "path": {"type": "string", "minLength": 1},
-        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"},
+        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"},
         "definition_line": {
           "type": ["integer", "null"],
           "minimum": 1

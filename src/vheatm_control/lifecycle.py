@@ -25,7 +25,7 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 
 def _event_id(payload: Mapping[str, Any]) -> str:
     raw = json.dumps(dict(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return f"EVT-{hashlib.sha256(raw).hexdigest()[:16].upper()}"
+    return f"EVT-{hashlib.sha256(raw).hexdigest().upper()}"
 
 
 def _validate_time(value: str) -> None:

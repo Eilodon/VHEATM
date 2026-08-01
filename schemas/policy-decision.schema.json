@@ -14,7 +14,7 @@
     "evaluated_at": {"type": "string", "format": "date-time"},
     "approval_token_id": {
       "oneOf": [
-        {"type": "string", "pattern": "^APR-[A-F0-9]{16}$"},
+        {"type": "string", "pattern": "^APR-[A-F0-9]{64}$"},
         {"type": "null"}
       ]
     }

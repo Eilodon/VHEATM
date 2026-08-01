@@ -28,15 +28,27 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: system_map
     required: true
     description: Component, dependency, data-flow, and external-boundary map with evidence anchors.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   - id: delta_map
     required: true
     description: Change-surface map separating current behavior, intended change, and unaffected scope.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   - id: ownership_map
     required: true
     description: Ownership and handoff map for components and trust boundaries in scope.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - document

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/capability-ledger.schema.json",
+  "title": "VHEATM corrected semantic capability ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ledger_id", "framework_version", "legacy_root", "corpus_digest", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "ledger_id": {"type": "string", "pattern": "^LED-[A-F0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "legacy_root": {"type": "string", "minLength": 1},
+    "corpus_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "entries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["capability_id", "source_file", "source_digest", "source_sections", "trigger", "typed_inputs", "algorithm_or_protocol", "typed_outputs", "failure_semantics", "mode_adaptation", "evidence_requirement", "disposition", "correction_adr", "module_owner", "tests", "eval_cases"],
+        "properties": {
+          "capability_id": {"type": "string", "pattern": "^CAP-LEGACY-[0-9]{2}$"},
+          "source_file": {"type": "string", "minLength": 1},
+          "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "source_sections": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "trigger": {"type": "string", "minLength": 1},
+          "typed_inputs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "algorithm_or_protocol": {"type": "string", "minLength": 1},
+          "typed_outputs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "failure_semantics": {"type": "string", "minLength": 1},
+          "mode_adaptation": {"type": "string", "minLength": 1},
+          "evidence_requirement": {"type": "string", "minLength": 1},
+          "disposition": {"enum": ["preserved", "corrected", "superseded", "deprecated", "missing"]},
+          "correction_adr": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "module_owner": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"}},
+          "tests": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "eval_cases": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
+  }
+}

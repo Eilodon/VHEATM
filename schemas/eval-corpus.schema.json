@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/eval-corpus.schema.json",
+  "title": "VHEATM deterministic evaluation corpus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "corpus_id", "corpus_version", "cases"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "corpus_id": {"type": "string", "pattern": "^EVC-[A-F0-9]{64}$"},
+    "corpus_version": {"type": "string", "minLength": 1},
+    "cases": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["case_id", "family", "description", "seed", "expected"],
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^EVC-[A-Z0-9-]+$"},
+          "family": {"enum": ["authority", "determinism", "context", "typed_execution", "evidence", "security", "policy", "recovery", "privacy", "supply_chain"]},
+          "description": {"type": "string", "minLength": 1},
+          "seed": {"type": "integer", "minimum": 0},
+          "expected": {"enum": ["reject", "unknown", "block", "pass"]},
+          "mutation": {"type": "object"},
+          "metrics": {"type": "object"}
+        }
+      }
+    }
+  }
+}

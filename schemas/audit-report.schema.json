@@ -24,6 +24,25 @@
     "declarations": {"type": "object", "additionalProperties": {"enum": ["yes", "no", "unknown"]}},
     "activation_plan": {"$ref": "https://vheatm.dev/schemas/gate-plan.schema.json"},
     "provenance": {"$ref": "https://vheatm.dev/schemas/provenance-registry.schema.json"},
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plan_id", "selection_digest", "module_selection", "module_runs", "module_runs_digest",
+        "artifacts", "artifacts_digest", "validation_receipts", "validation_receipts_digest"
+      ],
+      "properties": {
+        "plan_id": {"type": "string", "pattern": "^PLN-[a-f0-9]{64}$"},
+        "selection_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "module_selection": {"$ref": "https://vheatm.dev/schemas/module-selection.schema.json"},
+        "module_runs": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/module-run.schema.json"}},
+        "module_runs_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "artifacts": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/artifact-envelope.schema.json"}},
+        "artifacts_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "validation_receipts": {"type": "array", "items": {"$ref": "https://vheatm.dev/schemas/validation-receipt.schema.json"}},
+        "validation_receipts_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
     "gate_results": {
       "type": "array",
       "minItems": 1,
@@ -38,7 +57,7 @@
           "evidence_refs": {
             "type": "array",
             "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^(?:SRC|CLM)-[A-F0-9]{16}$"}
+            "items": {"type": "string", "pattern": "^(?:SRC|CLM|VRF|ART)-[A-F0-9]{64}$"}
           }
         }
       }

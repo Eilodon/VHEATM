@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["id", "source_type", "locator", "digest", "trust_zone", "taint_state", "captured_at", "metadata"],
   "properties": {
-    "id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"},
+    "id": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"},
     "source_type": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]},
     "locator": {"type": "string", "minLength": 1},
     "digest": {

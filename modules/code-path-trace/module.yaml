@@ -30,10 +30,16 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: code_path_traces
     required: true
     description: Boundary-by-boundary path traces with terminal states, divergences, and linked CRIT/HIGH
       hypotheses.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - code

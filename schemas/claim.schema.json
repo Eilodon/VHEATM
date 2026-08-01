@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["id", "text", "epistemic_status", "confidence", "source_refs", "evidence_kind"],
   "properties": {
-    "id": {"type": "string", "pattern": "^CLM-[A-F0-9]{16}$"},
+    "id": {"type": "string", "pattern": "^CLM-[A-F0-9]{64}$"},
     "text": {"type": "string", "minLength": 1},
     "epistemic_status": {"enum": ["verified", "inferred", "unknown", "contradicted"]},
     "confidence": {
@@ -18,10 +18,20 @@
     "source_refs": {
       "type": "array",
       "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
+      "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}
+    },
+    "lineage_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(?:SRC|CLM|VRF)-[A-F0-9]{64}$"}
+    },
+    "validation_receipt_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^VRF-[A-F0-9]{64}$"}
     },
     "evidence_kind": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]},
-    "supersedes": {"type": "string", "pattern": "^CLM-[A-F0-9]{16}$"}
+    "supersedes": {"type": "string", "pattern": "^CLM-[A-F0-9]{64}$"}
   },
   "allOf": [
     {

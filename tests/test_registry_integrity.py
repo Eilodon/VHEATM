@@ -64,7 +64,7 @@ def test_registry_root_binds_legacy_source_fingerprint():
 def test_complete_registry_has_one_owner_for_every_manifest_gate():
     registry = _load_document(ROOT / "modules" / "registry.yaml")
     manifest = _load_document(ROOT / "manifests" / "vheatm-v17.yaml")
-    assert registry["coverage_mode"] == "complete"
+    assert registry["gate_owner_coverage"] == "complete"
     issues, modules = validate_module_repository(
         ROOT, manifest,
         module_schema=_load_document(ROOT / "schemas" / "module-contract.schema.json"),

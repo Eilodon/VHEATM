@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/pilot-run.schema.json",
+  "title": "VHEATM shadow or canary pilot record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pilot_id", "session_root", "plan_id", "release_report_id", "profile", "read_only", "tools_enabled", "status", "rollback_plan", "drills", "created_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "pilot_id": {"type": "string", "pattern": "^PIL-[A-F0-9]{64}$"},
+    "session_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "plan_id": {"type": "string", "pattern": "^PLN-[a-f0-9]{64}$"},
+    "release_report_id": {"type": "string", "pattern": "^RGR-[A-F0-9]{64}$"},
+    "profile": {"enum": ["shadow", "canary"]},
+    "read_only": {"type": "boolean"},
+    "tools_enabled": {"type": "boolean"},
+    "status": {"enum": ["ready", "blocked", "complete", "rollback"]},
+    "rollback_plan": {"type": "string", "minLength": 1},
+    "drills": {
+      "type": "array", "minItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["drill_id", "status", "evidence_refs"],
+        "properties": {"drill_id": {"enum": ["incident", "rollback", "evidence_store_outage", "clock_skew", "provider_outage"]}, "status": {"enum": ["pass", "fail", "unknown"]}, "evidence_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "rollback_reason": {"type": "string", "minLength": 1},
+    "rollback_at": {"type": "string", "format": "date-time"}
+  }
+}

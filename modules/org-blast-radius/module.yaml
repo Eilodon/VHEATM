@@ -32,10 +32,16 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: org_blast_radius_maps
     required: true
     description: Four-layer organizational impact maps with BRS, escalation, ownership, SLA, and regulatory
       decisions.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - document

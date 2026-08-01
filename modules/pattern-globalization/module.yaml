@@ -28,12 +28,21 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: pattern_search_record
     required: true
     description: Per-pattern signature, scope, method, matches, exclusions, and search evidence.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   - id: cascade_decision
     required: true
     description: Decision for each additional instance and any divergent implementation discovered.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - code

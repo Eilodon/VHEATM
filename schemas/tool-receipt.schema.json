@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/tool-receipt.schema.json",
+  "title": "VHEATM brokered tool receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^TRC-[A-F0-9]{64}$"},
+    "request_id": {"type": "string", "minLength": 1},
+    "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "tool_class": {"enum": ["read", "execute", "write", "network", "secrets"]},
+    "decision": {"enum": ["allow", "deny", "unknown"]},
+    "approval_token_id": {"type": ["string", "null"], "pattern": "^APR-[A-F0-9]{64}$"},
+    "action_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "recorded_at": {"type": "string", "format": "date-time"}
+  }
+}

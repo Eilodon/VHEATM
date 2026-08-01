@@ -1,0 +1,64 @@
+schema_version: 1.0.0
+corpus_id: EVC-636DE685B4FFB8E8B525282DCEDFD96E9B331E3DFDB33CD2ADA947453EE69E80
+corpus_version: v17.0.0-dev.1
+cases:
+- case_id: EVC-AUTHORITY-001
+  family: authority
+  description: mutate a plan summary and require rejection
+  seed: 1
+  expected: reject
+  mutation: {target: plan.summary, operation: replace}
+- case_id: EVC-CONTEXT-001
+  family: context
+  description: remove a security declaration without becoming inactive
+  seed: 3
+  expected: unknown
+  mutation: {target: context.declarations, operation: remove}
+- case_id: EVC-DETERMINISM-001
+  family: determinism
+  description: repeat evaluation over one immutable snapshot
+  seed: 2
+  expected: pass
+  metrics: {runs: 1000}
+- case_id: EVC-TYPED-EXECUTION-001
+  family: typed_execution
+  description: forge a module invocation identity
+  seed: 4
+  expected: reject
+  mutation: {target: module_run.id, operation: replace}
+- case_id: EVC-EVIDENCE-001
+  family: evidence
+  description: remove a provenance lineage reference
+  seed: 5
+  expected: block
+  mutation: {target: claim.lineage_refs, operation: remove}
+- case_id: EVC-SECURITY-001
+  family: security
+  description: attempt an unauthorized tool class
+  seed: 6
+  expected: reject
+  mutation: {target: tool_request.tool_class, operation: replace}
+- case_id: EVC-POLICY-001
+  family: policy
+  description: reuse a single-use approval token
+  seed: 7
+  expected: reject
+  mutation: {target: approval_token.nonce, operation: reuse}
+- case_id: EVC-RECOVERY-001
+  family: recovery
+  description: resume after a journal boundary without duplicate effect
+  seed: 8
+  expected: pass
+  metrics: {duplicate_effects: 0}
+- case_id: EVC-PRIVACY-001
+  family: privacy
+  description: propagate a secret canary through analyzer output
+  seed: 9
+  expected: block
+  mutation: {target: analyzer.output, operation: inject_secret}
+- case_id: EVC-SUPPLY-CHAIN-001
+  family: supply_chain
+  description: reject an unsigned dependency-unlocked release
+  seed: 10
+  expected: block
+  mutation: {target: release.attestation, operation: remove_signature}

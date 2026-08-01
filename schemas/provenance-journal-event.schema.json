@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/provenance-journal-event.schema.json",
+  "title": "VHEATM append-only provenance journal event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "record_type", "record_id", "action", "actor", "occurred_at", "previous_hash", "event_hash"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^EVT-[A-F0-9]{64}$"},
+    "record_type": {"enum": ["source", "claim", "validation_receipt"]},
+    "record_id": {"type": "string", "pattern": "^(?:SRC|CLM|VRF)-[A-F0-9]{64}$"},
+    "action": {"enum": ["add"]},
+    "actor": {"type": "string", "minLength": 1},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "previous_hash": {"oneOf": [{"const": ""}, {"type": "string", "pattern": "^[a-f0-9]{64}$"}]},
+    "event_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

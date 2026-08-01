@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/artifact-envelope.schema.json",
+  "title": "VHEATM content-addressed artifact envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_ref", "producer_module_id", "producer_run_id", "output_id", "payload", "taint_state"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ART-[A-F0-9]{64}$"},
+    "schema_ref": {"type": "string", "pattern": "^https://vheatm.dev/schemas/[a-z0-9-]+\\.schema\\.json$"},
+    "producer_module_id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
+    "producer_run_id": {"type": "string", "pattern": "^RUN-[A-F0-9]{64}$"},
+    "output_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "payload": {"type": "object"},
+    "source_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}},
+    "validation_receipt_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^VRF-[A-F0-9]{64}$"}},
+    "taint_state": {"enum": ["tainted", "validated", "human_approved"]}
+  }
+}

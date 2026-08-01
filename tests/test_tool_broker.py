@@ -10,10 +10,15 @@ from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 
 from vheatm_control.tool_broker import (
+    action_digest,
     BrokerCapabilities,
     InMemoryTokenLedger,
     ToolBroker,
     approval_signing_payload,
+    build_tool_receipt,
+    expected_approval_token_id,
+    expected_tool_receipt_id,
+    request_digest,
 )
 
 NOW = datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc)
@@ -49,17 +54,18 @@ def _request(tool_class: str, **extra: object) -> dict[str, object]:
     return request
 
 
-def _token(request: dict[str, object], *, token_id: str = "APR-0123456789ABCDEF") -> dict[str, object]:
+def _token(request: dict[str, object], *, token_id: str = "APR-" + "01" * 32) -> dict[str, object]:
     token: dict[str, object] = {
         "token_id": token_id,
         "schema_version": "1.0.0",
         "requester": request["requester"],
         "tool_class": request["tool_class"],
         "exact_scope": request["scope"],
+        "request_digest": request_digest(request),
         "issued_at": (NOW - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
         "expires_at": (NOW + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
         "approved_by": "operator:alice",
-        "nonce": "nonce-1",
+        "nonce": "nonce-" + token_id,
         "single_use": True,
         "signature": {
             "algorithm": "hmac-sha256",
@@ -67,6 +73,7 @@ def _token(request: dict[str, object], *, token_id: str = "APR-0123456789ABCDEF"
             "value": "0" * 64,
         },
     }
+    token["token_id"] = expected_approval_token_id(token)
     token["signature"]["value"] = hmac.new(KEY, approval_signing_payload(token), hashlib.sha256).hexdigest()  # type: ignore[index]
     return token
 
@@ -106,7 +113,7 @@ def test_execute_requires_valid_approval_and_exact_command(tmp_path: Path) -> No
 
     other = copy.deepcopy(request)
     other["command"] = "pytest -q tests/test_tool_broker.py"
-    assert broker.evaluate(other, _token(other, token_id="APR-1111111111111111"))["decision"] == "deny"
+    assert broker.evaluate(other, _token(other, token_id="APR-" + "11" * 32))["decision"] == "deny"
 
 
 def test_execute_blocks_sandbox_network_and_secret_inheritance_gaps(tmp_path: Path) -> None:
@@ -126,7 +133,7 @@ def test_execute_blocks_sandbox_network_and_secret_inheritance_gaps(tmp_path: Pa
     for index, (field, value) in enumerate(mutations.items()):
         request = copy.deepcopy(base)
         request[field] = value
-        token = _token(request, token_id=f"APR-{index + 2:016X}")
+        token = _token(request, token_id=f"APR-{index + 2:064X}")
         assert broker.evaluate(request, token)["decision"] == "deny"
 
 
@@ -145,12 +152,12 @@ def test_approval_binding_signature_expiry_and_replay(tmp_path: Path) -> None:
     assert replay["decision"] == "deny"
     assert "already been consumed" in replay["reason"]
 
-    bad_scope = _token(request, token_id="APR-2222222222222222")
+    bad_scope = _token(request, token_id="APR-" + "22" * 32)
     bad_scope["exact_scope"] = "workspace:tests"
     bad_scope["signature"]["value"] = hmac.new(KEY, approval_signing_payload(bad_scope), hashlib.sha256).hexdigest()  # type: ignore[index]
     assert broker.evaluate(request, bad_scope)["decision"] == "deny"
 
-    expired = _token(request, token_id="APR-3333333333333333")
+    expired = _token(request, token_id="APR-" + "33" * 32)
     expired["expires_at"] = (NOW - timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
     expired["signature"]["value"] = hmac.new(KEY, approval_signing_payload(expired), hashlib.sha256).hexdigest()  # type: ignore[index]
     assert broker.evaluate(request, expired)["decision"] == "deny"
@@ -165,7 +172,7 @@ def test_verified_token_is_consumed_even_when_command_control_denies(tmp_path: P
         network_enabled=False,
         inherit_secrets=False,
     )
-    token = _token(request, token_id="APR-6666666666666666")
+    token = _token(request, token_id="APR-" + "66" * 32)
     first = broker.evaluate(request, token)
     assert first["decision"] == "deny"
     assert "not present" in first["reason"]
@@ -180,7 +187,7 @@ def test_write_paths_must_remain_within_exact_scope(tmp_path: Path) -> None:
     assert broker.evaluate(valid, _token(valid))["decision"] == "allow"
 
     escaped = _request("write", diff_paths=["tests/a.py"], rollback_plan="revert")
-    decision = broker.evaluate(escaped, _token(escaped, token_id="APR-4444444444444444"))
+    decision = broker.evaluate(escaped, _token(escaped, token_id="APR-" + "44" * 32))
     assert decision["decision"] == "deny"
     assert "escapes" in decision["reason"]
 
@@ -210,7 +217,7 @@ def test_secret_request_requires_registered_name_and_non_disclosure_controls(tmp
 
     unknown = copy.deepcopy(request)
     unknown["secret_name"] = "production-root"
-    assert broker.evaluate(unknown, _token(unknown, token_id="APR-5555555555555555"))["decision"] == "deny"
+    assert broker.evaluate(unknown, _token(unknown, token_id="APR-" + "55" * 32))["decision"] == "deny"
 
 
 def test_all_decisions_match_canonical_schema(tmp_path: Path) -> None:
@@ -224,3 +231,18 @@ def test_all_decisions_match_canonical_schema(tmp_path: Path) -> None:
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     for decision in decisions:
         assert not list(validator.iter_errors(decision))
+
+
+def test_approval_and_receipt_bind_full_request_and_action() -> None:
+    request = _request("execute", sandboxed=True, command="pytest -q", network_enabled=False, inherit_secrets=False)
+    token = _token(request)
+    mutated = copy.deepcopy(request)
+    mutated["command"] = "pytest -q tests"
+    broker = _broker(PROJECT_ROOT, commands={"pytest -q", "pytest -q tests"})
+    assert broker.evaluate(mutated, token)["decision"] == "deny"
+
+    decision = broker.evaluate(request, _token(request, token_id="APR-" + "77" * 32))
+    receipt = build_tool_receipt(request, decision, recorded_at="2026-08-01T00:00:00Z")
+    assert receipt["request_digest"] == request_digest(request)
+    assert receipt["action_digest"] == action_digest(request)
+    assert receipt["id"] == expected_tool_receipt_id(receipt)

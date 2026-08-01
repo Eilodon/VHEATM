@@ -11,6 +11,9 @@ from typing import Any, Mapping
 import yaml
 from jsonschema import Draft202012Validator
 
+from .bundle import resolve_control_root
+from .serialization import load_document
+
 
 class ModuleRoutingError(ValueError):
     """Raised when module artifacts or a routing request are invalid."""
@@ -38,11 +41,7 @@ class LoadedModule:
 
 
 def _load_document(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        if path.suffix.lower() == ".json":
-            value = json.load(handle)
-        else:
-            value = yaml.safe_load(handle)
+    value = load_document(path)
     if not isinstance(value, dict):
         raise ModuleRoutingError(f"{path} must contain an object")
     return value
@@ -305,6 +304,23 @@ def validate_module_repository(
                 if module_id not in reverse:
                     issues.append(ModuleIssue(module_id, f"conflict with {conflict} must be symmetric"))
 
+        dependency_outputs: dict[str, set[str]] = {}
+        for dependency in dependencies:
+            if dependency in loaded:
+                for output in loaded[dependency].document.get("contract", {}).get("outputs", []):
+                    if isinstance(output, Mapping):
+                        dependency_outputs.setdefault(str(output.get("id")), set()).add(str(output.get("schema_ref")))
+        for required_input in module.document.get("contract", {}).get("inputs", {}).get("artifact_inputs", []):
+            if not isinstance(required_input, Mapping):
+                continue
+            output_id = str(required_input.get("output_id", ""))
+            schema_ref = str(required_input.get("schema_ref", ""))
+            available_schemas = dependency_outputs.get(output_id, set())
+            if required_input.get("required") is True and not available_schemas:
+                issues.append(ModuleIssue(module_id, f"required artifact input has no dependency producer: {output_id}"))
+            elif available_schemas and schema_ref not in available_schemas:
+                issues.append(ModuleIssue(module_id, f"artifact input schema is incompatible for {output_id}"))
+
     cycle = _find_cycle(graph)
     if cycle:
         issues.append(ModuleIssue("modules", f"dependency cycle: {' -> '.join(cycle)}"))
@@ -314,7 +330,7 @@ def validate_module_repository(
     missing_coverage = sorted(required_coverage - actual_coverage)
     if missing_coverage:
         issues.append(ModuleIssue("modules/registry.yaml", f"required gates lack module coverage: {missing_coverage}"))
-    if registry.get("coverage_mode") == "complete":
+    if registry.get("gate_owner_coverage") == "complete":
         all_gates = set(manifest_gates)
         uncovered = sorted(all_gates - actual_coverage)
         if uncovered:
@@ -327,7 +343,7 @@ def _registry_root(registry: Mapping[str, Any]) -> str:
     subject = {
         "schema_version": registry.get("schema_version"),
         "framework_version": registry.get("framework_version"),
-        "coverage_mode": registry.get("coverage_mode"),
+        "gate_owner_coverage": registry.get("gate_owner_coverage"),
         "hard_token_budget": registry.get("hard_token_budget"),
         "required_gate_coverage": sorted(registry.get("required_gate_coverage", [])),
         "legacy_source": registry.get("legacy_source"),
@@ -369,7 +385,7 @@ def _topological_order(selected: set[str], modules: Mapping[str, LoadedModule], 
     return result
 
 
-def route_modules(
+def _route_modules_unchecked(
     manifest: Mapping[str, Any],
     registry: Mapping[str, Any],
     modules: Mapping[str, LoadedModule],
@@ -450,6 +466,8 @@ def route_modules(
             "kind": module.document.get("kind"),
             "title": module.document.get("title"),
             "summary": module.document.get("summary"),
+            "module_sha256": module.digest,
+            "output_contracts": module.document.get("contract", {}).get("outputs", []),
             "gate_coverage": module.document.get("gate_coverage", []),
             "phase_coverage": module.document.get("phase_coverage", []),
             "instruction_path": module.instruction_ref,
@@ -489,7 +507,37 @@ def route_modules(
     }
 
 
-def load_and_route(root: Path, gate_plan: Mapping[str, Any], *, include_instructions: bool = False) -> dict[str, Any]:
+def route_modules(
+    manifest: Mapping[str, Any],
+    registry: Mapping[str, Any],
+    modules: Mapping[str, LoadedModule],
+    gate_plan: Mapping[str, Any],
+    *,
+    include_instructions: bool = False,
+) -> dict[str, Any]:
+    """Route only a fully bound plan; untrusted fixture routing is private."""
+
+    from .evaluator import PlanIntegrityError, assert_plan_matches
+
+    try:
+        assert_plan_matches(manifest, gate_plan, require_binding=True)
+    except PlanIntegrityError as exc:
+        raise ModuleRoutingError(str(exc)) from exc
+    return _route_modules_unchecked(
+        manifest,
+        registry,
+        modules,
+        gate_plan,
+        include_instructions=include_instructions,
+    )
+
+
+def load_and_route(
+    root: Path,
+    gate_plan: Mapping[str, Any],
+    *,
+    include_instructions: bool = False,
+) -> dict[str, Any]:
     root = root.resolve()
     manifest = _load_document(root / "manifests" / "vheatm-v17.yaml")
     registry = _load_document(root / "modules" / "registry.yaml")
@@ -505,31 +553,47 @@ def load_and_route(root: Path, gate_plan: Mapping[str, Any], *, include_instruct
     )
     if issues:
         raise ModuleRoutingError("; ".join(f"[{issue.source}] {issue.message}" for issue in issues))
-    return route_modules(manifest, registry, modules, gate_plan, include_instructions=include_instructions)
+    from .evaluator import PlanIntegrityError, assert_plan_matches, validate_context
+    from .bundle import build_bundle
+
+    context = gate_plan.get("context", {})
+    validate_context(context, context_schema)
+    bundle_root = build_bundle(root)["bundle_root"]
+    try:
+        assert_plan_matches(manifest, gate_plan, require_binding=True, bundle_root=bundle_root)
+    except PlanIntegrityError as exc:
+        raise ModuleRoutingError(str(exc)) from exc
+    return _route_modules_unchecked(manifest, registry, modules, gate_plan, include_instructions=include_instructions)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Select VHEATM instruction modules from a canonical gate plan.")
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--root", type=Path)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--plan", type=Path, help="Existing gate plan in JSON or YAML format")
     source.add_argument("--context", type=Path, help="Audit context to evaluate before routing")
     parser.add_argument("--include-instructions", action="store_true")
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args()
+    root = resolve_control_root(args.root)
 
     try:
         if args.plan:
             gate_plan = _load_document(args.plan)
         else:
             from .evaluator import evaluate_manifest, validate_context
+            from .bundle import build_bundle
 
-            manifest = _load_document(args.root / "manifests" / "vheatm-v17.yaml")
+            manifest = _load_document(root / "manifests" / "vheatm-v17.yaml")
             context = _load_document(args.context)
-            context_schema = _load_document(args.root / "schemas" / "audit-context.schema.json")
+            context_schema = _load_document(root / "schemas" / "audit-context.schema.json")
             validate_context(context, context_schema)
-            gate_plan = evaluate_manifest(manifest, context)
-        result = load_and_route(args.root, gate_plan, include_instructions=args.include_instructions)
+            gate_plan = evaluate_manifest(manifest, context, bundle_root=build_bundle(root)["bundle_root"])
+        result = load_and_route(
+            root,
+            gate_plan,
+            include_instructions=args.include_instructions,
+        )
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

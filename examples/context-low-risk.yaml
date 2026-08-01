@@ -1,10 +1,27 @@
-schema_version: "1.0.0"
-mode: standard
-target_tier: 2
-context_mode: single
-mandatory_findings: 0
-blast_radius: 1
-write_chain_components: 1
+schema_version: "2.0.0"
+goal: "Assess the current repository against the VHEATM V17 control bundle."
+decision_owner: "vheatm-maintainers"
+stakeholder: "platform-team"
+subject:
+  kind: repository
+  locator: "workspace:/home/ybao/B.1/VHEATM"
+  digest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  tree_digest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+scope:
+  included_paths: ["src", "schemas", "modules", "tests"]
+  excluded_paths: [".venv"]
+audit_stage: code
+legacy_state: "no"
+organization_scope: single-team
+execution_profile: standard
+audit_intent: assessment-only
+pii: "no"
+compliance: []
+multi_tenant: "no"
+post_incident: "no"
+language: "vi"
+organization_size: "small"
+test_availability: "adequate"
 declarations:
   self_audit: "no"
   ai_integrated: "no"
@@ -12,3 +29,8 @@ declarations:
   async_worker: "no"
   safety_critical: "no"
   financial_path: "no"
+finding_ledger: []
+facts:
+  blast_radius: 1
+  write_chain_components: 1
+amendments: []

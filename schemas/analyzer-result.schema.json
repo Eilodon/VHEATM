@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/analyzer-result.schema.json",
+  "title": "VHEATM brokered analyzer result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "result_id", "request_id", "analyzer_id", "provider_id", "provider_version", "operation", "session_root", "input_snapshot_digest", "status", "epistemic_status", "output_digest", "source_refs", "tool_receipt", "generated_at", "output"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "result_id": {"type": "string", "pattern": "^ANZ-[A-F0-9]{64}$"},
+    "request_id": {"type": "string", "pattern": "^ANR-[A-F0-9]{64}$"},
+    "analyzer_id": {"type": "string", "minLength": 1},
+    "provider_id": {"type": "string", "minLength": 1},
+    "provider_version": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["probe", "link"]},
+    "session_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "input_snapshot_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["complete", "blocked", "unknown"]},
+    "epistemic_status": {"enum": ["candidate", "unknown"]},
+    "output_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^SRC-[A-F0-9]{64}$"}},
+    "tool_receipt": {"$ref": "https://vheatm.dev/schemas/tool-receipt.schema.json"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "output": {"type": ["object", "null"]},
+    "error": {"type": "string", "minLength": 1}
+  }
+}

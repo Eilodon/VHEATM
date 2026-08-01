@@ -29,10 +29,16 @@ contract:
   - id: module_decision
     required: true
     description: Decision-bearing module result with gate trace and evidence references.
+    schema_ref: https://vheatm.dev/schemas/module-decision.schema.json
+    cardinality: one
+    required_when: always
   - id: utility_tree
     required: true
     description: Ranked ISO/IEC 25010 quality scenarios with measures, current state, sensitivity points,
       tradeoffs, and smell weights.
+    schema_ref: https://vheatm.dev/schemas/module-artifact.schema.json
+    cardinality: one
+    required_when: completed
   evidence:
     required_kinds:
     - document

@@ -8,6 +8,7 @@ from vheatm_control.policy import (
     GuardedExecutor,
     PolicyDenied,
     PolicyEngine,
+    request_digest,
     sign_approval_token,
 )
 
@@ -25,6 +26,7 @@ def token_for(request: dict, *, expires_at: str = "2026-07-31T16:00:00Z", ledger
             "requester": request["requester"],
             "tool_class": request["tool_class"],
             "exact_scope": request["scope"],
+            "request_digest": request_digest(request),
             "issued_at": "2026-07-31T14:00:00Z",
             "expires_at": expires_at,
             "approved_by": "human-reviewer",
@@ -147,4 +149,7 @@ def test_denied_preconditions_do_not_burn_approval() -> None:
     engine = PolicyEngine(POLICY, approval_verifier=verifier, command_allowlist={"pytest"})
     assert engine.authorize(request, approval_token=token, now=NOW).decision == "deny"
     request["sandboxed"] = True
-    assert engine.authorize(request, approval_token=token, now=NOW).decision == "allow"
+    assert engine.authorize(request, approval_token=token, now=NOW).decision == "deny"
+    refreshed_token, refreshed_verifier = token_for(request)
+    refreshed_engine = PolicyEngine(POLICY, approval_verifier=refreshed_verifier, command_allowlist={"pytest"})
+    assert refreshed_engine.authorize(request, approval_token=refreshed_token, now=NOW).decision == "allow"

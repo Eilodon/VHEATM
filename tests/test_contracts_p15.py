@@ -6,7 +6,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from vheatm_control.lifecycle import AuditLifecycle
-from vheatm_control.policy import ApprovalVerifier, PolicyEngine, sign_approval_token
+from vheatm_control.policy import ApprovalVerifier, PolicyEngine, request_digest, sign_approval_token
 from vheatm_control.provenance import ProvenanceRegistry, build_claim_record, build_source_record
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +54,7 @@ def test_approval_and_decision_match_contracts() -> None:
             "requester": "agent",
             "tool_class": "write",
             "exact_scope": "workspace:/repo:file",
+            "request_digest": request_digest(request),
             "issued_at": "2026-07-31T00:00:00Z",
             "expires_at": "2026-08-01T00:00:00Z",
             "approved_by": "human",

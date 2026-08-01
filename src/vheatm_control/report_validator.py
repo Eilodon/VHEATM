@@ -13,7 +13,12 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from .lifecycle import AuditLifecycle, LifecycleError
+from .module_router import ModuleRoutingError, load_and_route
+from .bundle import build_bundle, resolve_control_root
 from .provenance import ProvenanceError, ProvenanceRegistry
+from .evaluator import PlanIntegrityError, assert_plan_matches
+from .execution import ExecutionError, derive_gate_results, expected_artifact_id, selection_digest
+from .serialization import load_document
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,20 @@ def canonical_digest(value: Any) -> str:
 
 def report_subject_digest(report: Mapping[str, Any]) -> str:
     return canonical_digest({key: value for key, value in report.items() if key != "attestation"})
+
+
+def record_collection_digest(records: Any) -> str:
+    """Digest a typed record collection in deterministic ID order."""
+
+    if not isinstance(records, list):
+        raise ValueError("record collection must be an array")
+    if not all(isinstance(record, Mapping) for record in records):
+        raise ValueError("record collection entries must be objects")
+    normalized = sorted(
+        (dict(record) for record in records if isinstance(record, Mapping)),
+        key=lambda record: str(record.get("id", "")),
+    )
+    return canonical_digest(normalized)
 
 
 def _parse_time(value: str) -> datetime:
@@ -75,6 +94,8 @@ def validate_report_semantics(
     policy: Mapping[str, Any],
     report: Mapping[str, Any],
     now: datetime | None = None,
+    canonical_selection: Mapping[str, Any] | None = None,
+    bundle_root: str | None = None,
 ) -> list[ReportIssue]:
     issues: list[ReportIssue] = []
     manifest_version = manifest.get("framework", {}).get("version")
@@ -87,6 +108,11 @@ def validate_report_semantics(
         return issues
     if plan.get("framework_version") != manifest_version:
         issues.append(ReportIssue("activation_plan", "plan framework version must equal canonical manifest version"))
+    try:
+        recomputed_plan = assert_plan_matches(manifest, plan, require_binding=True, bundle_root=bundle_root)
+    except PlanIntegrityError as exc:
+        recomputed_plan = None
+        issues.append(ReportIssue("activation_plan", str(exc)))
 
     manifest_gates = {str(gate["id"]): gate for gate in manifest.get("gates", {}).get("items", [])}
     plan_entries = plan.get("gates", [])
@@ -116,6 +142,10 @@ def validate_report_semantics(
         for field in ("layer", "phase", "activation"):
             if entry.get(field) != canonical.get(field):
                 issues.append(ReportIssue(f"activation_plan.{gate_id}", f"{field} does not match manifest"))
+        if recomputed_plan is not None:
+            expected_entry = next(item for item in recomputed_plan["gates"] if item["id"] == gate_id)
+            if entry.get("activation_state") != expected_entry.get("activation_state"):
+                issues.append(ReportIssue(f"activation_plan.{gate_id}", "activation_state does not match recomputed plan"))
 
     counts = {"active": 0, "inactive": 0, "unknown": 0}
     for entry in plan_by_id.values():
@@ -171,6 +201,70 @@ def validate_report_semantics(
         elif activation == "active" and result not in {"pass", "fail", "unknown"}:
             issues.append(ReportIssue(f"gate_results.{gate_id}", "active gates require pass/fail/unknown result"))
 
+    execution = report.get("execution")
+    derived_execution_results: list[Mapping[str, Any]] | None = None
+    execution_artifact_records: dict[str, Mapping[str, Any]] = {}
+    execution_receipt_records: dict[str, Mapping[str, Any]] = {}
+    if not isinstance(execution, Mapping):
+        issues.append(ReportIssue("execution", "reports require typed module execution records"))
+    else:
+        module_selection = execution.get("module_selection")
+        if execution.get("plan_id") != plan.get("plan_id"):
+            issues.append(ReportIssue("execution.plan_id", "execution must bind to activation_plan.plan_id"))
+        if not isinstance(module_selection, Mapping):
+            issues.append(ReportIssue("execution.module_selection", "execution requires a module selection"))
+        elif execution.get("selection_digest") != selection_digest(module_selection):
+            issues.append(ReportIssue("execution.selection_digest", "selection_digest does not match module selection"))
+        if canonical_selection is not None and isinstance(module_selection, Mapping):
+            if selection_digest(module_selection) != selection_digest(canonical_selection):
+                issues.append(ReportIssue("execution.module_selection", "module selection does not match canonical routing"))
+        raw_execution_artifacts = execution.get("artifacts", [])
+        if isinstance(raw_execution_artifacts, list):
+            execution_artifact_records = {str(item.get("id")): item for item in raw_execution_artifacts if isinstance(item, Mapping)}
+        raw_execution_receipts = execution.get("validation_receipts", [])
+        if isinstance(raw_execution_receipts, list):
+            execution_receipt_records = {str(item.get("id")): item for item in raw_execution_receipts if isinstance(item, Mapping)}
+        for field, digest_field in (
+            ("module_runs", "module_runs_digest"),
+            ("artifacts", "artifacts_digest"),
+            ("validation_receipts", "validation_receipts_digest"),
+        ):
+            try:
+                expected_digest = record_collection_digest(execution.get(field))
+            except ValueError as exc:
+                issues.append(ReportIssue(f"execution.{field}", str(exc)))
+            else:
+                if execution.get(digest_field) != expected_digest:
+                    issues.append(ReportIssue(f"execution.{digest_field}", f"{digest_field} does not match typed records"))
+        try:
+            derived_execution_results = derive_gate_results(
+                manifest,
+                plan,
+                module_selection if isinstance(module_selection, Mapping) else {},
+                execution.get("module_runs", []),
+                execution.get("artifacts", []),
+                execution.get("validation_receipts", []),
+            )
+        except (ExecutionError, TypeError, AttributeError) as exc:
+            issues.append(ReportIssue("execution", str(exc)))
+
+    if derived_execution_results is not None:
+        derived_by_gate = {str(item["gate"]): item for item in derived_execution_results}
+        for gate_id, declared_state in results.items():
+            derived = derived_by_gate.get(gate_id)
+            if derived is None:
+                issues.append(ReportIssue(f"gate_results.{gate_id}", "gate has no derived execution result"))
+                continue
+            if declared_state != derived.get("state"):
+                issues.append(
+                    ReportIssue(
+                        f"gate_results.{gate_id}",
+                        f"declared gate state {declared_state!r} does not match derived execution state {derived.get('state')!r}",
+                    )
+                )
+            if declared_state == "pass" and set(result_documents[gate_id].get("evidence_refs", [])) != set(derived.get("evidence_refs", [])):
+                issues.append(ReportIssue(f"gate_results.{gate_id}", "passing evidence_refs must be derived from module output"))
+
     provenance_document = report.get("provenance")
     registry: ProvenanceRegistry | None = None
     if not isinstance(provenance_document, Mapping):
@@ -183,12 +277,44 @@ def validate_report_semantics(
 
     source_ids = set()
     source_records: dict[str, Mapping[str, Any]] = {}
+    validation_receipt_records: dict[str, Mapping[str, Any]] = {}
     claim_records: dict[str, Mapping[str, Any]] = {}
     if registry is not None:
         normalized = registry.to_document()
         source_records = {str(source["id"]): source for source in normalized["sources"]}
         source_ids = set(source_records)
+        validation_receipt_records = {
+            str(receipt["id"]): receipt for receipt in normalized.get("validation_receipts", [])
+        }
         claim_records = {str(claim["id"]): claim for claim in normalized["claims"]}
+
+    def validate_claim_trust(claim: Mapping[str, Any], source: str) -> None:
+        claim_source_refs = set(str(ref) for ref in claim.get("source_refs", []))
+        tainted_sources = {
+            ref for ref in claim_source_refs if source_records.get(ref, {}).get("taint_state") == "tainted"
+        }
+        if not tainted_sources:
+            return
+        receipt_refs = set(str(ref) for ref in claim.get("validation_receipt_refs", []))
+        if not receipt_refs:
+            issues.append(ReportIssue(source, "verified evidence over tainted sources requires a validation receipt"))
+            return
+        valid_receipts: set[str] = set()
+        for receipt_ref in sorted(receipt_refs):
+            receipt = validation_receipt_records.get(receipt_ref)
+            if receipt is None:
+                issues.append(ReportIssue(source, f"unknown validation receipt: {receipt_ref}"))
+                continue
+            if receipt.get("result") != "validated":
+                issues.append(ReportIssue(source, f"validation receipt is not successful: {receipt_ref}"))
+                continue
+            receipt_sources = set(str(ref) for ref in receipt.get("source_refs", []))
+            if not tainted_sources.issubset(receipt_sources):
+                issues.append(ReportIssue(source, f"validation receipt does not cover tainted sources: {receipt_ref}"))
+                continue
+            valid_receipts.add(receipt_ref)
+        if not valid_receipts:
+            issues.append(ReportIssue(source, "verified evidence has no successful validation receipt"))
 
     for gate_id, state in results.items():
         if state != "pass":
@@ -197,7 +323,14 @@ def validate_report_semantics(
         if not refs:
             issues.append(ReportIssue(f"gate_results.{gate_id}", "passing active gates require evidence_refs"))
             continue
-        unknown_refs = sorted(ref for ref in refs if ref not in source_records and ref not in claim_records)
+        unknown_refs = sorted(
+            ref
+            for ref in refs
+            if ref not in source_records
+            and ref not in claim_records
+            and ref not in execution_receipt_records
+            and ref not in execution_artifact_records
+        )
         if unknown_refs:
             issues.append(ReportIssue(f"gate_results.{gate_id}", f"unknown evidence refs: {unknown_refs}"))
         for ref in refs:
@@ -206,6 +339,23 @@ def validate_report_semantics(
             claim = claim_records.get(ref)
             if claim is not None and claim.get("epistemic_status") != "verified":
                 issues.append(ReportIssue(f"gate_results.{gate_id}", f"passing gate references non-verified claim: {ref}"))
+            if claim is not None and claim.get("epistemic_status") == "verified":
+                validate_claim_trust(claim, f"gate_results.{gate_id}")
+            receipt = execution_receipt_records.get(ref)
+            if receipt is not None and receipt.get("result") != "validated":
+                issues.append(ReportIssue(f"gate_results.{gate_id}", f"passing gate references unsuccessful validation receipt: {ref}"))
+            artifact = execution_artifact_records.get(ref)
+            if artifact is not None:
+                if artifact.get("id") != expected_artifact_id(artifact):
+                    issues.append(ReportIssue(f"gate_results.{gate_id}", f"artifact evidence id does not match content: {ref}"))
+                if artifact.get("taint_state") not in {"validated", "human_approved"}:
+                    issues.append(ReportIssue(f"gate_results.{gate_id}", f"passing gate references tainted artifact: {ref}"))
+                artifact_receipts = set(str(item) for item in artifact.get("validation_receipt_refs", []))
+                if not artifact_receipts or not any(
+                    execution_receipt_records.get(receipt_ref, {}).get("result") == "validated"
+                    for receipt_ref in artifact_receipts
+                ):
+                    issues.append(ReportIssue(f"gate_results.{gate_id}", f"artifact evidence lacks a successful validation receipt: {ref}"))
 
     findings = report.get("findings", [])
     if not isinstance(findings, list):
@@ -243,9 +393,7 @@ def validate_report_semantics(
                     if requires_verified_claim and claim_record.get("epistemic_status") != "verified":
                         issues.append(ReportIssue(f"finding.{finding_id}.evidence.{index}", "verified evidence requires a verified claim record"))
                     if requires_verified_claim:
-                        tainted = sorted(ref for ref in claim_refs if source_records.get(ref, {}).get("taint_state") == "tainted")
-                        if tainted:
-                            issues.append(ReportIssue(f"finding.{finding_id}.evidence.{index}", f"verified evidence references tainted sources: {tainted}"))
+                        validate_claim_trust(claim_record, f"finding.{finding_id}.evidence.{index}")
             missing_sources = sorted(refs - source_ids)
             if missing_sources:
                 issues.append(ReportIssue(f"finding.{finding_id}.evidence.{index}", f"unknown source refs: {missing_sources}"))
@@ -297,8 +445,7 @@ def validate_report_semantics(
 
 
 def _load_document(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        value = json.load(handle) if path.suffix.lower() == ".json" else yaml.safe_load(handle)
+    value = load_document(path)
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain an object")
     return value
@@ -323,18 +470,35 @@ def validate_report_file(root: Path, report_path: Path, *, now: datetime | None 
         location = ".".join(str(part) for part in error.absolute_path) or "<root>"
         issues.append(ReportIssue("schema", f"{location}: {error.message}"))
     if not issues:
-        issues.extend(validate_report_semantics(manifest=manifest, policy=policy, report=report, now=now))
+        canonical_selection: Mapping[str, Any] | None = None
+        bundle_root = build_bundle(root)["bundle_root"]
+        activation_plan = report.get("activation_plan")
+        if isinstance(activation_plan, Mapping):
+            try:
+                canonical_selection = load_and_route(root, activation_plan)
+            except (ModuleRoutingError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
+                issues.append(ReportIssue("execution.module_selection", f"canonical routing failed: {exc}"))
+        issues.extend(
+            validate_report_semantics(
+                manifest=manifest,
+                policy=policy,
+                report=report,
+                now=now,
+                canonical_selection=canonical_selection,
+                bundle_root=bundle_root,
+            )
+        )
     return issues
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a VHEATM report against canonical manifest, policy, plan, and provenance.")
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--root", type=Path)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args()
     try:
-        issues = validate_report_file(args.root.resolve(), args.report.resolve())
+        issues = validate_report_file(resolve_control_root(args.root), args.report.resolve())
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
         issues = [ReportIssue("runtime", str(exc))]
     if args.as_json:

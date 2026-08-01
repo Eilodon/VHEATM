@@ -8,6 +8,17 @@ version = "0.4.0"
 description = "Machine-validated control plane for the VHEATM audit framework"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Security",
+]
 dependencies = [
   "jsonschema>=4.23,<5",
   "pydantic>=2.10,<3",
@@ -15,19 +26,32 @@ dependencies = [
   "referencing>=0.35,<1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/vheatm/VHEATM"
+Repository = "https://github.com/vheatm/VHEATM"
+Issues = "https://github.com/vheatm/VHEATM/issues"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8,<10",
+]
+mcp = [
+  "fastmcp==4.0.0b1",
 ]
 
 [project.scripts]
 vheatm-validate = "vheatm_control.validator:main"
 vheatm-evaluate = "vheatm_control.evaluator:main"
 vheatm-route = "vheatm_control.module_router:main"
+vheatm-bundle = "vheatm_control.bundle:main"
 vheatm-validate-report = "vheatm_control.report_validator:main"
 vheatm-broker = "vheatm_control.tool_broker:main"
+vheatm-release-gates = "vheatm_control.evaluation:main"
 vheatm-probe-python = "vheatm_control.structural_probe:main"
 vheatm-link-python = "vheatm_control.python_linker:main"
+vheatm-mcp = "vheatm_control.mcp_server:main"
+vheatm-init = "vheatm_control.init_cmd:main"
+vheatm-doctor = "vheatm_control.doctor:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

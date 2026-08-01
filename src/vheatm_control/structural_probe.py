@@ -54,7 +54,7 @@ def _canonical_bytes(value: Any) -> bytes:
 
 
 def _content_id(prefix: str, value: Any) -> str:
-    digest = hashlib.sha256(_canonical_bytes(value)).hexdigest()[:16].upper()
+    digest = hashlib.sha256(_canonical_bytes(value)).hexdigest().upper()
     return f"{prefix}-{digest}"
 
 
@@ -846,7 +846,7 @@ def _analyze_file(root: Path, path: Path, *, captured_at: str, limits: ProbeLimi
         locator=f"workspace:{relative}",
         content=content,
         trust_zone="artifact_content",
-        taint_state="validated",
+        taint_state="tainted",
         captured_at=captured_at,
         metadata={"language": "python", "parser": PROBE_TYPE, "relative_path": relative},
     )

@@ -12,11 +12,69 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, MutableSet, Protocol
 
 import yaml
+
+from .bundle import resolve_control_root
+from .serialization import load_json
+from .serialization import load_yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
 
 class BrokerConfigurationError(ValueError):
     """Raised when broker policy or schema configuration is unsafe."""
+
+
+def _canonical_digest(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def request_digest(request: Mapping[str, Any]) -> str:
+    """Digest the complete schema-bound request, including identity and scope."""
+
+    return _canonical_digest(dict(request))
+
+
+def action_digest(request: Mapping[str, Any]) -> str:
+    """Digest operational fields separately from requester/request identity."""
+
+    action = {key: value for key, value in request.items() if key not in {"request_id", "requester"}}
+    return _canonical_digest(action)
+
+
+def expected_approval_token_id(token: Mapping[str, Any]) -> str:
+    unsigned = {key: value for key, value in token.items() if key not in {"token_id", "signature"}}
+    return "APR-" + _canonical_digest(unsigned).upper()
+
+
+def expected_tool_receipt_id(receipt: Mapping[str, Any]) -> str:
+    body = {key: value for key, value in receipt.items() if key != "id"}
+    return "TRC-" + _canonical_digest(body).upper()
+
+
+def build_tool_receipt(
+    request: Mapping[str, Any], decision: Mapping[str, Any], *, recorded_at: str
+) -> dict[str, Any]:
+    if decision.get("request_id") != request.get("request_id"):
+        raise BrokerConfigurationError("tool decision request_id does not match request")
+    if decision.get("decision") not in {"allow", "deny"}:
+        raise BrokerConfigurationError("tool decision must be allow or deny")
+    try:
+        timestamp = datetime.fromisoformat(recorded_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BrokerConfigurationError("tool receipt recorded_at must be RFC 3339") from exc
+    if timestamp.tzinfo is None:
+        raise BrokerConfigurationError("tool receipt recorded_at must include a timezone")
+    value: dict[str, Any] = {
+        "request_id": str(request.get("request_id", "")),
+        "request_digest": request_digest(request),
+        "tool_class": str(request.get("tool_class", "")),
+        "decision": str(decision.get("decision", "unknown")),
+        "action_digest": action_digest(request),
+        "recorded_at": recorded_at,
+        "approval_token_id": decision.get("approval_token_id"),
+    }
+    value["id"] = expected_tool_receipt_id(value)
+    return value
 
 
 class TokenLedger(Protocol):
@@ -334,6 +392,8 @@ class ToolBroker:
             return None, "approval token tool class does not match the tool request"
         if approval_token["exact_scope"] != request["scope"]:
             return None, "approval token scope does not exactly match the tool request"
+        if approval_token.get("request_digest") != request_digest(request):
+            return None, "approval token is not bound to the complete tool request"
 
         try:
             issued_at = _parse_datetime(approval_token["issued_at"])
@@ -355,6 +415,8 @@ class ToolBroker:
         expected = hmac.new(key, approval_signing_payload(approval_token), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, signature["value"]):
             return None, "approval token signature is invalid"
+        if approval_token.get("token_id") != expected_approval_token_id(approval_token):
+            return None, "approval token_id does not match signed claims"
         return str(approval_token["token_id"]), "approval verified"
 
     def _validate_configuration(self) -> None:
@@ -420,7 +482,7 @@ def approval_signing_payload(token: Mapping[str, Any]) -> bytes:
 
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
-        value = json.load(handle)
+        value = load_json(handle)
     if not isinstance(value, dict):
         raise BrokerConfigurationError(f"expected object in {path}")
     return value
@@ -428,7 +490,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
-        value = yaml.safe_load(handle)
+        value = load_yaml(handle)
     if not isinstance(value, dict):
         raise BrokerConfigurationError(f"expected object in {path}")
     return value
@@ -492,7 +554,7 @@ def _decode_keyring(path: Path | None) -> dict[str, bytes]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate a guarded VHEATM tool request without executing it.")
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--root", type=Path)
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--approval", type=Path)
     parser.add_argument("--keyring", type=Path, help="JSON map of key IDs to base64-encoded HMAC keys")
@@ -504,7 +566,7 @@ def main() -> int:
     request = _load_json(args.request)
     approval = _load_json(args.approval) if args.approval else None
     broker = ToolBroker.from_root(
-        args.root,
+        resolve_control_root(args.root),
         keyring=_decode_keyring(args.keyring),
         capabilities=BrokerCapabilities(
             exact_command_allowlist=frozenset(args.allow_command),

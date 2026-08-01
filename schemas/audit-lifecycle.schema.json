@@ -16,7 +16,7 @@
         "additionalProperties": false,
         "required": ["id", "audit_id", "from", "to", "actor", "reason", "occurred_at", "evidence_refs", "sequence"],
         "properties": {
-          "id": {"type": "string", "pattern": "^EVT-[A-F0-9]{16}$"},
+          "id": {"type": "string", "pattern": "^EVT-[A-F0-9]{64}$"},
           "audit_id": {"type": "string", "minLength": 1},
           "from": {"enum": ["created", "context_validated", "planned", "running", "blocked", "partial", "complete"]},
           "to": {"enum": ["context_validated", "planned", "running", "blocked", "partial", "complete", "attested"]},

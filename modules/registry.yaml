@@ -1,6 +1,6 @@
 schema_version: 1.0.0
 framework_version: 17.0.0-dev.1
-coverage_mode: complete
+gate_owner_coverage: complete
 hard_token_budget: 4096
 required_gate_coverage:
 - HG-P
@@ -28,70 +28,70 @@ required_gate_coverage:
 modules:
 - id: MOD-CONTEXT-CONTRACT
   path: modules/context-contract/module.yaml
-  sha256: 2f796b26e21a97360909d72c4d551b642311daa54910399ded7820e64e8eef23
+  sha256: aa75ef82a385b898c128cc800f9302333fc6b7af57c85b8c83b90c374e3ea123
 - id: MOD-SYSTEM-MAPS
   path: modules/system-maps/module.yaml
-  sha256: 9d25f2e7b328bc088b8fe9ca309a8cebcf64dd20568c3a251464a51cf8d220a6
+  sha256: 55bb96948121f1ca2bd7a8aeeeaa60c293a83c2987e9183afb411fa0fcce7192
 - id: MOD-UTILITY-TREE
   path: modules/utility-tree/module.yaml
-  sha256: f45a6fb5b59fa6c986dc892b3cfdc37fd4c9c736199d40e520d6b3f16fcd08e9
+  sha256: 3ba0fd4502b9235e360ac984ae823a3212ee7726f13e7ab184776a12ccbee154
 - id: MOD-ARCHITECTURE-SMELLS
   path: modules/architecture-smells/module.yaml
-  sha256: a74817cfd5b4e06115538b9ac5922105149f500ebb9e17f819b544613d19ff62
+  sha256: 72af644f15666bf323a07d481cbc87bff1fe3480c66b609666d3784616b83129
 - id: MOD-COMPOUND-DECOMPOSITION
   path: modules/compound-decomposition/module.yaml
-  sha256: c40f30124e2fde8b7c1cd4c06cf1a9eaf6f212e27c14e16dbc03a605601fb210
+  sha256: f19212b24d28162aa9f8197d5309681d9116c4ef7e2cccf8204f14b967aabc8e
 - id: MOD-HYPOTHESIS-GENERATION
   path: modules/hypothesis-generation/module.yaml
-  sha256: c61dd6b858fbea6c1be25d2b8656da55115a836b5430c19c4cc69f4f7a34cff6
+  sha256: a86f6253eb50983836b9600cb83be2ebe359fdab8f22af6268917c821b08d1ab
 - id: MOD-FMEA-LITE
   path: modules/fmea-lite/module.yaml
-  sha256: 2a209a5d65dbdaeee14efdb8bd20d5c59a7a4ded1cca195c0095fce656b26074
+  sha256: cb1b090db7b345def75357988a3e685b0ac01e355847e917b185af92523b9091
 - id: MOD-CODE-PATH-TRACE
   path: modules/code-path-trace/module.yaml
-  sha256: 118db53b6928f7c461a08a6da160255087e32e87ea330c70ac3acf904dfc81c9
+  sha256: 2ed08f853dcc58d6343bad0ee1db5619368254fe2f9f6ac619c3391a742a94db
 - id: MOD-INCENTIVE-MISALIGNMENT
   path: modules/incentive-misalignment/module.yaml
-  sha256: ee164f7b34f54a7806566967baee6f99deb2aada0ae1537d90bffcf30001929f
+  sha256: b87fa769d654f550f920953950fe99453fd50aa2d27c17a6a193c73bb2ffe702
 - id: MOD-ORG-BLAST-RADIUS
   path: modules/org-blast-radius/module.yaml
-  sha256: 30632db973b7a3f6ec8836f6e0c88fb72523c305bc946a97ba0353a34d055c73
+  sha256: 200a319ad54b075d7fad3dce2a02a2728f0260bda25161b91b35a9792b8522bb
 - id: MOD-PATTERN-GLOBALIZATION
   path: modules/pattern-globalization/module.yaml
-  sha256: 78ac73e0bf475288e924f588725b0e1f249649542e5eab1bc73d6d2a4145c4d8
+  sha256: 7139dc96a8808fda75c76f31cfdb33fccfddf89bdf317a209fd29470a73b1e0c
 - id: MOD-AUDITOR-DEFENSE
   path: modules/auditor-defense/module.yaml
-  sha256: 7654c58e20b67fd463ca7cd88b3a110e63233df6a81541a1650d735ea362dea6
+  sha256: b34b009fe53b2c88f51f1c7f4f13e06f24c6de6efb1e78f5b73bf0961b424c7a
 - id: MOD-EVIDENCE-ANCHORS
   path: modules/evidence-anchors/module.yaml
-  sha256: 140257d10d18c6652016c7bc5d87471e39229e39208406167fee2a72f7e3c3be
+  sha256: 8040fdfabbc498f64f3d17f5967a63e71d3ced0336257e06fd5c9200c7523b3b
 - id: MOD-HYBRID-VERIFICATION
   path: modules/hybrid-verification/module.yaml
-  sha256: 5d35c4aff3bd87bae460fd7bebefc6e54f56313fa5655eaede421c82727b319a
+  sha256: 087cc48359a8fbbc39c37e9a877683f3a1ec055928d24085c42e34e3a65c8e52
 - id: MOD-INDEPENDENT-JUDGE
   path: modules/independent-judge/module.yaml
-  sha256: c5fa0cac08bf579a76f91eb683cfb5aa474c4aba653462b7c93fdb320e1db83d
+  sha256: 600ebcff6725c98ae501b461107afedc3aac9f5ffb83307d339c4c420d0dbe0b
 - id: MOD-ARCHITECTURE-DECISIONS
   path: modules/architecture-decisions/module.yaml
-  sha256: 45fb77a59f56b8c3c34efe7f34fda395ce949180fe960f1bba051c5ebb197f32
+  sha256: 9dbf9d26a9341474567bda5b84bf6f480d07d34759e143358d0adb6db6dd1d50
 - id: MOD-TRANSFORMATION-VERIFICATION
   path: modules/transformation-verification/module.yaml
-  sha256: e88b288e70816937d84f4d7db0e30ca526415b2b1da20c406fee931ae6e7e059
+  sha256: a29feffc8345b75037c6ecb0489e05ac7b59e49987429cea5c69ce80edae7d93
 - id: MOD-FIX-VERIFICATION
   path: modules/fix-verification/module.yaml
-  sha256: 411585bf981d5c0c8e072317cdeef4e9846b4358a4a914bc798b6335b1b9e0dc
+  sha256: 1b1af02bb2922f8da7f3a123155ec3f79f3734bd02678e5de14431a6dead87fe
 - id: MOD-ADVERSARIAL-PASS
   path: modules/adversarial-pass/module.yaml
-  sha256: 2fa681041ba7f1a306f9ef6c81221a8a3e30f0c31ab7e45ae140a1e403e18418
+  sha256: 0cb97e106a51e75c6a53faa935fad97c88e59872bd01eaf9e19483585ec037ac
 - id: MOD-EXECUTION-FIDELITY
   path: modules/execution-fidelity/module.yaml
-  sha256: 099fd0d77dd888e71b9fa0aa6e44605fdb7b0adba8374ae4be041a84ce2cb755
+  sha256: 290ba017685ad8440cd3029929a43e0ec6383912d797d7d8996571e09888af91
 - id: MOD-CLOSURE-METRICS
   path: modules/closure-metrics/module.yaml
-  sha256: 3cac0951c4d3e2878ed57c3e3d3fa0b2065ea6f2d3400b59940e7d0254cae427
+  sha256: d32e768b0b934f8e439fb009454e6285a481de58110d039be86ec581a7189d3a
 - id: MOD-KNOWLEDGE-BASE
   path: modules/knowledge-base/module.yaml
-  sha256: e6c3c8b71e96ab13b1ad39b6b72870ea3755e89f531ee0bdaaa785777c36e4f2
+  sha256: 0ff4795dbca83de2e97cf7c442fbc9adeae4e811e9b01c021ce89ff7caf5f28f
 legacy_source:
   artifact: VHEATM-v16.1.1.skill
   version: 16.1.1

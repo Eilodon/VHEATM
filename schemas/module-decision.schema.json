@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/module-decision.schema.json",
+  "title": "VHEATM decision-bearing module output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["module_id", "module_run_id", "gate_trace", "state", "evidence_refs"],
+  "properties": {
+    "module_id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
+    "module_run_id": {"type": "string", "pattern": "^RUN-[A-F0-9]{64}$"},
+    "gate_trace": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^HG-[A-Z0-9]+$"}},
+    "state": {"enum": ["pass", "fail", "unknown"]},
+    "evidence_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(?:SRC|CLM|VRF|ART)-[A-F0-9]{64}$"}
+    }
+  }
+}

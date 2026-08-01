@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/analyzer-request.schema.json",
+  "title": "VHEATM brokered analyzer request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "analyzer_id", "provider_id", "provider_version", "operation", "workspace_path", "requested_paths", "source_snapshot", "snapshot_digest", "session_root", "captured_at", "tool_request"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "request_id": {"type": "string", "pattern": "^ANR-[A-F0-9]{64}$"},
+    "analyzer_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,63}$"},
+    "provider_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,63}$"},
+    "provider_version": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["probe", "link"]},
+    "workspace_path": {"type": "string", "minLength": 1},
+    "requested_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "source_snapshot": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+        "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+      }
+    },
+    "snapshot_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_roots": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "session_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "tool_request": {"$ref": "https://vheatm.dev/schemas/tool-request.schema.json"}
+  }
+}

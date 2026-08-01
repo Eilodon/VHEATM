@@ -33,7 +33,7 @@ def test_collects_normalized_symbols_imports_and_calls(tmp_path: Path) -> None:
     assert any(item["callee"] == "os.path.join" for item in file_record["calls"])
     assert any(item["dynamic"] is True and item["callee"] is None for item in file_record["calls"])
     assert file_record["source"]["locator"] == "workspace:src/sample.py"
-    assert file_record["source"]["taint_state"] == "validated"
+    assert file_record["source"]["taint_state"] == "tainted"
 
 
 def test_probe_id_and_root_hash_are_deterministic_with_fixed_timestamp(tmp_path: Path) -> None:

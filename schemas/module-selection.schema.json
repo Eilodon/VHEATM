@@ -22,7 +22,21 @@
         "completion_blocked": {"type": "boolean"}
       }
     },
-    "selected_modules": {"type": "array", "items": {"type": "object"}},
+    "selected_modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "module_sha256", "instruction_sha256", "gate_coverage", "phase_coverage", "output_contracts"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
+          "module_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "instruction_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "gate_coverage": {"type": "array", "items": {"type": "string", "pattern": "^HG-[A-Z0-9]+$"}},
+          "phase_coverage": {"type": "array", "items": {"type": "string"}},
+          "output_contracts": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
     "unselected_modules": {"type": "array", "items": {"type": "object"}},
     "unresolved_modules": {"type": "array", "items": {"type": "object"}},
     "unknown_gates": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},

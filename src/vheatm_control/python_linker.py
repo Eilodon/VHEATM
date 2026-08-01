@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
 from .structural_probe import ProbeError, verify_probe_bundle
+from .serialization import load_json
 
 SCHEMA_VERSION = "1.0.0"
 LINKAGE_TYPE = "python_import_graph_v1"
@@ -27,7 +28,7 @@ def _sha256(value: Any) -> str:
 
 
 def _content_id(prefix: str, value: Any) -> str:
-    return f"{prefix}-{_sha256(value)[:16].upper()}"
+    return f"{prefix}-{_sha256(value).upper()}"
 
 
 def _utc_now() -> str:
@@ -977,7 +978,7 @@ def main() -> int:
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args()
     try:
-        probe = json.loads(args.probe.read_text(encoding="utf-8"))
+        probe = load_json(args.probe.read_text(encoding="utf-8"))
         if not isinstance(probe, dict):
             raise LinkerError("probe document must be an object")
         document = link_probe_bundle(probe, args.source_roots, generated_at=args.generated_at)

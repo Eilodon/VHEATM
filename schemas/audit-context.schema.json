@@ -3,15 +3,86 @@
   "$id": "https://vheatm.dev/schemas/audit-context.schema.json",
   "title": "VHEATM audit context",
   "type": "object",
+  "minProperties": 1,
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"const": "1.0.0"},
+    "schema_version": {"enum": ["1.0.0", "2.0.0"]},
     "mode": {"enum": ["fast", "standard", "full"]},
     "target_tier": {"enum": [1, 2, 3]},
     "context_mode": {"enum": ["single", "enterprise"]},
     "mandatory_findings": {"type": "integer", "minimum": 0},
     "blast_radius": {"type": "integer", "minimum": 0, "maximum": 5},
     "write_chain_components": {"type": "integer", "minimum": 0},
+    "goal": {"type": "string", "minLength": 1},
+    "decision_owner": {"type": "string", "minLength": 1},
+    "stakeholder": {"type": "string", "minLength": 1},
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator", "digest", "tree_digest"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "tree_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "commit_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["included_paths", "excluded_paths"],
+      "properties": {
+        "included_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "excluded_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "audit_stage": {"enum": ["design", "code", "live", "legacy"]},
+    "legacy_state": {"enum": ["yes", "no", "unknown"]},
+    "organization_scope": {"enum": ["single-team", "multi-team", "enterprise"]},
+    "pii": {"enum": ["yes", "no", "unknown"]},
+    "compliance": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "multi_tenant": {"enum": ["yes", "no", "unknown"]},
+    "post_incident": {"enum": ["yes", "no", "unknown"]},
+    "language": {"type": "string", "minLength": 1},
+    "organization_size": {"enum": ["unknown", "small", "medium", "large", "enterprise"]},
+    "test_availability": {"enum": ["unknown", "none", "partial", "adequate"]},
+    "execution_profile": {"enum": ["fast", "standard", "full"]},
+    "audit_intent": {"enum": ["assessment-only", "plan-fix", "implement-fix"]},
+    "finding_ledger": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "priority", "state"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "priority": {"enum": ["mandatory", "high", "normal", "low"]},
+          "state": {"enum": ["open", "confirmed", "resolved", "closed", "rejected", "unknown"]}
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blast_radius": {"type": "integer", "minimum": 0, "maximum": 5},
+        "write_chain_components": {"type": "integer", "minimum": 0}
+      }
+    },
+    "amendments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "reason": {"type": "string", "minLength": 1},
+          "source_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    },
     "declarations": {
       "type": "object",
       "additionalProperties": false,
@@ -24,5 +95,39 @@
         "financial_path": {"enum": ["yes", "no", "unknown"]}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"schema_version": {"const": "2.0.0"}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": [
+          "schema_version",
+          "goal",
+          "decision_owner",
+          "stakeholder",
+          "subject",
+          "scope",
+          "audit_stage",
+          "legacy_state",
+          "organization_scope",
+          "execution_profile",
+          "audit_intent",
+          "pii",
+          "compliance",
+          "multi_tenant",
+          "post_incident",
+          "language",
+          "organization_size",
+          "test_availability",
+          "declarations",
+          "finding_ledger",
+          "facts",
+          "amendments"
+        ]
+      }
+    }
+  ]
 }

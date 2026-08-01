@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/module-run.schema.json",
+  "title": "VHEATM module execution record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "module_id", "module_digest", "instruction_digest", "status", "started_at", "finished_at", "input_artifact_refs", "output_artifact_refs", "validation_receipt_refs"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^RUN-[A-F0-9]{64}$"},
+    "module_id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
+    "module_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "instruction_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["completed", "failed", "blocked"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "input_artifact_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^ART-[A-F0-9]{64}$"}},
+    "output_artifact_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^ART-[A-F0-9]{64}$"}},
+    "validation_receipt_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^VRF-[A-F0-9]{64}$"}},
+    "result": {"$ref": "https://vheatm.dev/schemas/module-decision.schema.json"},
+    "failure": {"$ref": "https://vheatm.dev/schemas/failure-result.schema.json"}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]}, "then": {"required": ["result"]}},
+    {"if": {"properties": {"status": {"enum": ["failed", "blocked"]}}, "required": ["status"]}, "then": {"required": ["failure"]}}
+  ]
+}

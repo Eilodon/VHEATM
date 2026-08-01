@@ -14,7 +14,7 @@
 **DECISION TYPE:** `CONSTRAINT-FORCED`
 **CONFIDENCE:** `HIGH` — direct mutation and regression tests cover the trust-boundary invariants.
 **LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`
-**VOLATILITY:** `WATCHFUL` — the authority model will be revisited when the session/CAS layer lands.
+**VOLATILITY:** `WATCHFUL` — the authority model is revisited when sandbox enforcement, signing, or a second provider crosses the runtime boundary.
 
 ### Context
 
@@ -45,12 +45,12 @@ Cascade Review: ✅ Done
 - Plan tampering, missing invocation, forged output payloads, tainted evidence, and unbound selection are fail-closed.
 - Module contracts now expose reusable typed output schemas without creating one schema per module.
 - Context v2 can derive mandatory findings from its ledger and create a child plan for late facts.
-- SQLite/CAS persistence, subject tree/session roots, sandbox enforcement, independent judge isolation, and analyzer/provider integration remain deferred; this slice does not claim production attestation for those capabilities.
+- SQLite WAL/CAS persistence, subject/session roots, brokered Python analyzer adapters, and isolated independent-judge/HITL records now exist as local-first slices. Sandbox action enforcement, signing/key service, private qualification corpus, and production provider integrations remain release-gated.
 
 ### Evidence
 
 - [verified 2026-08-01] `.venv/bin/vheatm-validate --root .` passed.
-- [verified 2026-08-01] `.venv/bin/pytest -q` passed with the full repository suite.
+- [verified 2026-08-01] `.venv/bin/pytest -o addopts=''` passed with 174 tests.
 - [verified 2026-08-01] v2 low-risk evaluation and context/plan routing both returned exit 0 with 15 active, 7 inactive, 0 unknown, and 3374/4096 estimated tokens.
 - [verified 2026-08-01] Mutation tests reject activation-state edits, unbound plans, missing validation receipts, forged artifacts, missing module runs, and direct aggregator plan spoofing.
 
@@ -64,7 +64,7 @@ PATTERN-DEBT entries introduced or affected by this change: none registered. Def
 
 ### Next Cycle Trigger
 
-Start the next cycle when the first SQLite/CAS-backed session store is introduced or when any second runtime entry point consumes a plan revision; both events require replay, crash/recovery, and subject-root binding tests.
+Start the next cycle when a reference-monitor sandbox, signing/key service, or external provider is introduced; each requires a new trust-boundary ADR plus crash/recovery, isolation, and release-gate evidence.
 
 ### Cycle Retrospective
 
@@ -73,3 +73,81 @@ Start the next cycle when the first SQLite/CAS-backed session store is introduce
 - A validation receipt must be modeled separately from source and claim records; changing taint state alone is not evidence.
 - The v1 adapter must preserve unknown rather than infer missing critical declarations.
 - The next cycle should avoid presenting the context-v2 adapter as a complete session model until subject snapshots and CAS roots are implemented.
+
+## ADR-2 — Local-first typed execution, adjudication, and release-evidence plane
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `execution` `adjudication` `migration` `release-gates`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when a reference-monitor action adapter, signing/key service, external analyzer provider, or RG-13 evidence pipeline is introduced.
+
+### Context
+
+The v17 kernel established canonical bundles, typed plans and artifacts, strict activation, provenance boundaries, and deterministic routing. The remaining roadmap slices require durable session state, brokered analyzer evidence, independent adjudication, corrected legacy capability coverage, release-gate evaluation, supply-chain evidence, and a pilot boundary. These capabilities must be useful locally without implying that local tests are production qualification.
+
+### Decision
+
+Implement the next tranche as a local-first typed control plane:
+
+1. SQLite WAL plus content-addressed filesystem storage provides immutable session objects, append-only event chains, replay, resume, and idempotency.
+2. Analyzer adapters are brokered and read-only; source text and analyzer output remain tainted until a separate deterministic verifier emits a validation receipt bound to the source snapshot and bundle.
+3. Independent judge packets use distinct source/judge contexts and provider/model/config identities, blind ordering, hard divergence handling, and explicit HITL escalation. Provider timeout or hard failure blocks completion.
+4. A capability ledger covers the complete preserved 33-file legacy corpus with explicit dispositions; missing or corrected capability records are machine-visible rather than silently inferred.
+5. Evaluation and pilot records are schema-bound. Release predicates RG-00 through RG-15 fail closed on missing evidence; shadow/canary records cannot claim GA eligibility without all gates passing.
+6. Supply-chain output is explicit about unsigned, unlocked, partial, or otherwise incomplete evidence. No local implementation claims a production sandbox, signing service, private gold corpus, external provider, or GA release.
+
+### Options Considered
+
+- Distributed services first: rejected; it would add deployment and failure complexity before local contracts and evidence boundaries were stable.
+- Treat analyzer or model output as trusted evidence: rejected; this would collapse epistemic status, taint, and confidence boundaries.
+- Mark the 11 uncovered legacy files as migrated: rejected; the ledger must preserve `missing` until a reviewed owner and contract exist.
+- Infer GA readiness from unit tests: rejected; qualification metrics, private/time-sliced corpora, signing, and operational evidence remain release-gated.
+
+### Impact
+
+Components changed: session store, analyzer adapters, judge/HITL, capability ledger, evaluation/release-gate, supply-chain attestation, pilot schemas, bundle packaging, validator, and registry terminology.
+Breaking change: **YES**. The canonical bundle now includes the evaluated corpus and preserved legacy corpus; registry coverage terminology is explicit about gate ownership.
+IMPACT RADIUS: **WIDE**
+Cascades: `bundle → validator → plan/route → evidence → release/pilot`.
+Cascade Review: ✅ Done — full verification suite, low-risk evaluate/route path, package smoke checks, and unsafe-execution scan were rerun for this tranche.
+
+### Consequences
+
+Positive:
+
+- Runtime state and evidence have durable local boundaries instead of process-memory-only behavior.
+- Analyzer and judge outputs can be audited without promoting unverified text to authoritative findings.
+- Migration coverage, release readiness, and pilot safety are visible as typed records and fail-closed predicates.
+
+Known limitations:
+
+- The action reference monitor, real sandbox enforcement, external analyzer providers, private/time-sliced gold corpus, dependency lock, vulnerability evidence, and signing/key service are not implemented.
+- The release evaluator can honestly report `unknown`/`fail`, but it does not manufacture qualification metrics.
+
+### Evidence
+
+- [verified 2026-08-01] `vheatm-validate --root .` passes.
+- [verified 2026-08-01] `pytest -o addopts=''` passes the complete suite.
+- [verified 2026-08-01] low-risk evaluation and routing agree, with no unresolved activations or budget overflow.
+- [verified 2026-08-01] wheel/sdist build and offline installed CLI smoke checks pass.
+- [verified 2026-08-01] source scan finds no runtime `eval`, `exec`, shell execution, subprocess, or dynamic import path beyond package metadata lookup.
+
+### Owner and Known Debts
+
+**Owner:** VHEATM maintainers
+
+Known pattern debt: none newly opened; the pattern-debt registry has no `OPEN` entries. The limitations above are intentional release qualification debt tracked by this ADR and the v17 lifecycle plan.
+
+### Next Cycle Trigger
+
+Start the next ADR when the first reference-monitor action boundary, signing/key service, external provider, or RG-13 locked/vulnerability/signed evidence path is implemented.
+
+### Cycle Retrospective
+
+- Local-first persistence exposed the correct seam for later crash and fault-injection qualification.
+- Separate analyzer verification and judge adjudication preserve the distinction between candidate output and authoritative evidence.
+- The capability ledger makes incomplete migration measurable rather than rhetorical.
+- Release and pilot records now prevent local implementation status from being mistaken for GA qualification.
+- The next cycle should prioritize real enforcement and measured qualification evidence, not additional status labels.

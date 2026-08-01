@@ -11,30 +11,53 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from .activation import ActivationError, compile_activation
+from .bundle import BundleError, build_bundle, resolve_control_root
 from .models import Manifest
 from .module_router import validate_module_repository
+from .serialization import load_json, load_yaml
 
 
 REQUIRED_SCHEMA_FILES = frozenset(
     {
         "approval-token.schema.json",
+        "artifact-envelope.schema.json",
+        "analyzer-request.schema.json",
+        "analyzer-result.schema.json",
         "audit-context.schema.json",
         "audit-lifecycle.schema.json",
         "audit-report.schema.json",
+        "audit-session.schema.json",
+        "capability-ledger.schema.json",
+        "hitl-escalation.schema.json",
+        "eval-corpus.schema.json",
         "claim.schema.json",
+        "control-bundle.schema.json",
         "finding.schema.json",
+        "failure-result.schema.json",
         "gate-plan.schema.json",
         "module-contract.schema.json",
+        "module-decision.schema.json",
         "module-registry.schema.json",
+        "module-artifact.schema.json",
+        "module-run.schema.json",
         "module-selection.schema.json",
         "policy-decision.schema.json",
         "provenance-record.schema.json",
+        "provenance-journal-event.schema.json",
         "provenance-registry.schema.json",
+        "pilot-run.schema.json",
         "python-linkage.schema.json",
+        "release-gate-report.schema.json",
+        "judge-packet.schema.json",
+        "judge-verdict.schema.json",
         "runtime-policy.schema.json",
         "structural-probe.schema.json",
+        "session-event.schema.json",
+        "supply-chain-attestation.schema.json",
         "tool-request.schema.json",
+        "tool-receipt.schema.json",
         "vheatm-manifest.schema.json",
+        "validation-receipt.schema.json",
     }
 )
 
@@ -47,12 +70,12 @@ class ValidationIssue:
 
 def _load_yaml(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+        return load_yaml(handle)
 
 
 def _load_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        return load_json(handle)
 
 
 def _validate_schema_documents(schema_dir: Path) -> list[ValidationIssue]:
@@ -146,10 +169,12 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     schema_dir = root / "schemas"
     manifest_path = root / "manifests" / "vheatm-v17.yaml"
     policy_path = root / "policies" / "runtime-boundaries.yaml"
+    capability_ledger_path = root / "policies" / "capability-ledger.yaml"
+    eval_corpus_path = root / "evals" / "cases.yaml"
     module_registry_path = root / "modules" / "registry.yaml"
     skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path, module_registry_path, skill_path]
+    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, eval_corpus_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -158,16 +183,35 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     if schema_issues:
         return schema_issues
 
-    registry = _schema_registry(schema_dir)
-    manifest = _load_yaml(manifest_path)
-    policy = _load_yaml(policy_path)
-    manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
-    policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
-    context_schema = _load_json(schema_dir / "audit-context.schema.json")
+    try:
+        registry = _schema_registry(schema_dir)
+        manifest = _load_yaml(manifest_path)
+        policy = _load_yaml(policy_path)
+        capability_ledger = _load_yaml(capability_ledger_path)
+        eval_corpus = _load_yaml(eval_corpus_path)
+        manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
+        policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
+        context_schema = _load_json(schema_dir / "audit-context.schema.json")
+        bundle_schema = _load_json(schema_dir / "control-bundle.schema.json")
+        capability_ledger_schema = _load_json(schema_dir / "capability-ledger.schema.json")
+        eval_corpus_schema = _load_json(schema_dir / "eval-corpus.schema.json")
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        return [ValidationIssue("canonical", str(exc))]
 
     issues: list[ValidationIssue] = []
     issues.extend(_validate_schema(manifest, manifest_schema, registry, str(manifest_path.relative_to(root))))
     issues.extend(_validate_schema(policy, policy_schema, registry, str(policy_path.relative_to(root))))
+    issues.extend(_validate_schema(capability_ledger, capability_ledger_schema, registry, str(capability_ledger_path.relative_to(root))))
+    from .capability_ledger import validate_capability_ledger
+    issues.extend(ValidationIssue("policies/capability-ledger.yaml", issue) for issue in validate_capability_ledger(root, capability_ledger, capability_ledger_schema))
+    from .evaluation import validate_eval_corpus
+    issues.extend(_validate_schema(eval_corpus, eval_corpus_schema, registry, str(eval_corpus_path.relative_to(root))))
+    issues.extend(ValidationIssue("evals/cases.yaml", issue) for issue in validate_eval_corpus(eval_corpus, eval_corpus_schema))
+    try:
+        bundle = build_bundle(root)
+        issues.extend(_validate_schema(bundle, bundle_schema, registry, "control-bundle"))
+    except BundleError as exc:
+        issues.append(ValidationIssue("control-bundle", str(exc)))
 
     if not issues:
         try:
@@ -219,11 +263,11 @@ def _validate_runtime_policy_invariants(policy: dict[str, Any]) -> list[Validati
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate the VHEATM canonical control-plane artifacts.")
-    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--root", type=Path)
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args()
 
-    issues = validate_repository(args.root)
+    issues = validate_repository(resolve_control_root(args.root))
     if args.as_json:
         print(json.dumps({"valid": not issues, "issues": [issue.__dict__ for issue in issues]}, indent=2))
     elif issues:

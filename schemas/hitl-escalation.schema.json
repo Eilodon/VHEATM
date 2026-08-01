@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/hitl-escalation.schema.json",
+  "title": "VHEATM human escalation record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "escalation_id", "packet_id", "reason", "state", "epistemic_status", "created_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "escalation_id": {"type": "string", "pattern": "^HITL-[A-F0-9]{64}$"},
+    "packet_id": {"type": "string", "pattern": "^JPK-[A-F0-9]{64}$"},
+    "reason": {"type": "string", "minLength": 1},
+    "state": {"enum": ["open", "adjudicated", "deferred"]},
+    "epistemic_status": {"enum": ["unknown", "human_adjudicated"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "actor": {"type": "string", "minLength": 1},
+    "decision": {"enum": ["accept", "reject", "defer"]},
+    "rationale": {"type": "string", "minLength": 1}
+  }
+}

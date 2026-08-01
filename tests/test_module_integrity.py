@@ -63,3 +63,47 @@ def test_router_line_budget_is_enforced(tmp_path):
     root = _copy_repo(tmp_path)
     (root / "SKILL.md").write_text("\n".join(["line"] * 351))
     assert any("at most 350 lines" in issue.message for issue in _validate(root))
+
+
+def test_every_module_output_declares_typed_contract_and_cardinality():
+    root = ROOT
+    issues, loaded = validate_module_repository(
+        root,
+        _load_document(root / "manifests" / "vheatm-v17.yaml"),
+        module_schema=_load_document(root / "schemas" / "module-contract.schema.json"),
+        registry_schema=_load_document(root / "schemas" / "module-registry.schema.json"),
+    )
+    assert issues == []
+    for module in loaded.values():
+        for output in module.document["contract"]["outputs"]:
+            assert output["schema_ref"].startswith("https://vheatm.dev/schemas/")
+            assert output["cardinality"] in {"one", "many"}
+            assert output["required_when"] in {"always", "completed"}
+
+
+def test_dependency_artifact_schema_compatibility_is_static_checked(tmp_path):
+    root = _copy_repo(tmp_path)
+    module_path = root / "modules" / "system-maps" / "module.yaml"
+    document = yaml.safe_load(module_path.read_text())
+    document["contract"]["inputs"]["artifact_inputs"] = [
+        {
+            "output_id": "module_decision",
+            "schema_ref": "https://vheatm.dev/schemas/module-decision.schema.json",
+            "required": True,
+        }
+    ]
+    module_path.write_text(yaml.safe_dump(document, sort_keys=False))
+    registry_path = root / "modules" / "registry.yaml"
+    registry = yaml.safe_load(registry_path.read_text())
+    entry = next(item for item in registry["modules"] if item["id"] == "MOD-SYSTEM-MAPS")
+    entry["sha256"] = hashlib.sha256(module_path.read_bytes()).hexdigest()
+    registry_path.write_text(yaml.safe_dump(registry, sort_keys=False))
+    assert _validate(root) == []
+
+    document["contract"]["inputs"]["artifact_inputs"][0]["schema_ref"] = (
+        "https://vheatm.dev/schemas/module-artifact.schema.json"
+    )
+    module_path.write_text(yaml.safe_dump(document, sort_keys=False))
+    entry["sha256"] = hashlib.sha256(module_path.read_bytes()).hexdigest()
+    registry_path.write_text(yaml.safe_dump(registry, sort_keys=False))
+    assert any("artifact input schema is incompatible" in issue.message for issue in _validate(root))

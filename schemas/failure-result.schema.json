@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/failure-result.schema.json",
+  "title": "VHEATM typed module failure result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["module_id", "module_run_id", "code", "message"],
+  "properties": {
+    "module_id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
+    "module_run_id": {"type": "string", "pattern": "^RUN-[A-F0-9]{64}$"},
+    "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "message": {"type": "string", "minLength": 1},
+    "retryable": {"type": "boolean"}
+  }
+}
