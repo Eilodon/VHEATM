@@ -521,3 +521,28 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Shared JSON ingestion rejects duplicate keys and non-finite constants before evidence/state interpretation: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-30 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canonical-provider-descriptor-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical provider binding: added ✅
+- Qualification evidence reference: added ✅
+
+### Bug Patterns
+- An allowlisted provider ID/version could be redirected through caller-controlled endpoint/configuration: observed and fixed at adapter preflight and persisted-run verification; no PATTERN-DEBT entry (first occurrence).
+- Non-finite adapter configuration could produce a non-canonical digest: observed and fixed with strict canonical JSON serialization; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A network allow receipt proves request authorization, not provider implementation identity: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Provider endpoint, adapter profile, and configuration digest must be canonical policy bindings checked before broker/transport and before pilot evidence: added to CONTEXT.md Architectural Decisions ✅
+- `qualified` is not a valid policy state without qualification evidence references, and current local entries remain pending: added to CONTEXT.md ✅
+
+---

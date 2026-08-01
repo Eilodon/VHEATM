@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 21 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 22 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -32,6 +32,8 @@
 - **Host qualification handoff:** a real local sandbox probe emitted as content-addressed `HQR-*` evidence with `evidence_state=unverified`; it is a diagnostic handoff and cannot authorize RG-09 or GA. <!-- from ADR: ADR-28 -->
 - **Independent host attestation:** an Ed25519-signed `HAT-*` record that binds a host qualification run digest, current bundle, deployment identity, capability profile, and host hard-stop metric before RG-09 may consume it. <!-- from ADR: ADR-29 -->
 - **Strict JSON boundary:** the shared loader and runtime transport/CAS readers reject duplicate keys and non-finite JSON constants before typed evidence or persisted state is interpreted. <!-- from ADR: ADR-29 -->
+- **Canonical provider binding:** the provider policy fields that bind an adapter profile, exact endpoint, and configuration digest to an allowlisted provider/version before broker or pilot use. <!-- from ADR: ADR-30 -->
+- **Qualification evidence reference:** a canonical reference required before a provider policy entry may claim `qualified`; the reference is not itself proof until an external authority makes its evidence verifiable. <!-- from ADR: ADR-30 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -63,6 +65,7 @@
 - RG-09 may derive `hard_stop_p99_seconds` only from a verified HAT; private qualification evidence and an unverified local HQR cannot self-attest deployment enforcement. <!-- from ADR: ADR-29 -->
 - The HAT signed subject must include signature algorithm and key ID; unsigned key labels can be relabeled without cryptographic failure. <!-- from ADR: ADR-29 -->
 - Python's JSON Schema validator accepts `NaN` as a `number`; reject non-finite JSON constants at parsing and typed-run boundaries rather than relying on schema minimums. <!-- from ADR: ADR-29 -->
+- Provider endpoint, adapter profile, and configuration digest must be canonical policy bindings checked before broker/transport and before pilot evidence; a `qualified` state also requires evidence references. <!-- from ADR: ADR-30 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -94,3 +97,4 @@
 - [2026-08] A bwrap binary can exist while the host denies the required namespace | Record preflight as `unavailable` with no hard-stop metric; never reinterpret broker denial or preflight timing as RG-09 p99 evidence. <!-- from ADR: ADR-28 -->
 - [2026-08] A signed host record can retain a valid signature after its key label is renamed if key metadata is outside the signed subject | Sign algorithm and key ID, then verify against the supplied key identity. <!-- from ADR: ADR-29 -->
 - [2026-08] Python JSON Schema treats `NaN` as a number | Use a strict parser plus finite typed-run checks so non-standard numeric constants cannot poison evidence or persisted state. <!-- from ADR: ADR-29 -->
+- [2026-08] An allowlisted provider ID/version did not bind the caller-selected endpoint or configuration | A valid network receipt proved authorization only; canonical descriptor binding now fails closed before broker/transport and at pilot verification. <!-- from ADR: ADR-30 -->
