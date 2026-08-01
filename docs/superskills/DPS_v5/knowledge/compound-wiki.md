@@ -429,3 +429,25 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
 - Execute requests require the backend executable digest; local FD binding narrows TOCTOU while host provenance and namespace qualification remain external: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-26 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CONTEXT-CONTRACT, MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS]
+---
+
+## Cycle: legacy-archive-provenance-rebaseline
+
+### New Domain Terms Added to CONTEXT.md
+- Extracted-corpus re-baseline: added ✅
+
+### Bug Patterns
+- An absent legacy archive carried a plausible archive hash and recursive corpus digests could follow symlinked content: observed and fixed with explicit archive state, content-bound extracted baseline, and symlink rejection; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A content hash is not evidence when the addressed bytes are absent; filesystem corpus digests must reject symlink descendants: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Legacy provenance must distinguish original-archive verification from extracted-corpus re-baselining, and both registry and capability-ledger validators must enforce the corpus boundary: added to CONTEXT.md ✅
+
+---
