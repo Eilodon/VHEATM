@@ -364,3 +364,25 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS, MOD-F
 - Only allowlisted provider descriptors may produce pilot evidence, and only externally qualified entries may cross canary: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-23 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: sandbox-backend-digest-and-fd-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Verified sandbox backend: added ✅
+
+### Bug Patterns
+- A sandbox backend could drift after executor construction and the approval digest did not cover the executable identity: observed and fixed with per-run hashing, request binding, and verified-FD launch; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A digest on a record is not enough if the broker did not authorize the same backend bytes that are launched: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Execute requests require the backend executable digest; local FD binding narrows TOCTOU while host provenance and namespace qualification remain external: added to CONTEXT.md ✅
+
+---

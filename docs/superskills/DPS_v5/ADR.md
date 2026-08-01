@@ -1583,3 +1583,75 @@ Start the next cycle when a real provider is proposed or a provider entry change
 - A network authorization receipt answers “may this request run?”; it does not answer “is this provider qualified for canary?”.
 - Allowlist identity and qualification state need one canonical policy, while shadow and canary require different states.
 - Keeping local provider entries pending preserves useful contract tests without laundering them into external evidence.
+
+## ADR-23 — Bind and revalidate the sandbox backend at every launch
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `reference-monitor` `sandbox` `backend-integrity` `TOCTOU` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when backend attestation, host deployment, or execute-request fields change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local digest/request/FD binding; `NOT_PRODUCTION_QUALIFIED` for host-level bubblewrap identity and namespace capability.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — backend binaries, host kernels, deployment paths, and external attestation remain deployment-specific.
+
+### Context
+
+The sandbox checked its configured backend digest only during executor construction. A later backend replacement could therefore reach preflight/action using a different executable. In addition, the execute request and approval receipt did not carry the executable digest, so the authorization action digest did not cover the reference-monitor binary itself. Re-opening the path after a hash check would leave a time-of-check/time-of-use window.
+
+### Decision
+
+Require `executable_digest` on every execute request. The sandbox rejects a request whose digest does not equal its configured backend before brokered execution, re-hashes the backend on every run, and opens one verified file descriptor that is passed to both preflight and action launch through `/proc/self/fd`. Completed and failed sandbox records require the request/backend digest equality; the shared request/action/approval digest consequently covers the backend identity. Backend drift, replacement, or unavailable file access remains a typed blocked result with no host fallback.
+
+### Options Considered
+
+- Check the backend only at executor construction: rejected because deployment files can change between construction and execution.
+- Hash the path and reopen it for launch: rejected because replacement after the hash would remain a TOCTOU bypass.
+- Put the digest only in the sandbox result: rejected because the broker approval would not authorize the exact backend used for the action.
+- Claim that a local digest proves production bubblewrap provenance: rejected because trusted binary custody and host namespace qualification remain external evidence.
+
+### Impact
+
+Schemas changed: `tool-request.schema.json` requires `executable_digest` for execute requests.
+Components changed: sandbox subprocess boundary, backend verification/FD binding, seeded broker request, tool-broker fixtures, sandbox regression tests, and lifecycle evidence.
+Breaking change: **YES** for execute callers that omit or mismatch the backend digest.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `backend bytes → execute request → approval token/action digest → verified FD → preflight/action → sandbox outcome`.
+Cascade Review: ✅ Done — digest-drift RED regression, request-binding RED regression, focused broker/sandbox tests, full suite, validator, and package/replay gates cover the changed boundary.
+
+### Consequences
+
+- Approval now covers the executable identity as well as command, scope, environment flags, and other request fields.
+- A backend replacement after executor construction cannot be launched through the verified reference-monitor path.
+- FD binding narrows the local TOCTOU window without asserting that the host kernel actually provides the requested namespace isolation.
+- Deployment still needs an independently trusted backend digest/attestation and a qualified host; local configuration alone cannot authorize GA or canary claims.
+
+### Evidence
+
+- [verified 2026-08-01] RED regression showed a changed backend was not classified as digest drift before the fix.
+- [verified 2026-08-01] GREEN sandbox/broker tests pass with request-bound executable digests and FD-passed backend launches.
+- [verified 2026-08-01] Full repository suite passes at 257 tests; canonical validator passes; no production host or GA evidence was created.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External backend provenance/attestation, host namespace capability, private qualification, key custody, provider qualification, fresh vulnerability evidence, UX research, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a deployment supplies a trusted backend attestation or host qualification receipt; bind it to the canonical request/bundle and rerun the RG-08/RG-09 and full RG-00…RG-15 evidence matrix.
+
+### Cycle Retrospective
+
+- A backend digest is useful only when it participates in the authorization identity and is used for the same file that is executed.
+- Revalidation and FD binding are complementary: the first catches drift, the second prevents reopening a changed path after verification.
+- Local enforcement can close a code-path gap while production trust remains explicitly evidence-dependent.

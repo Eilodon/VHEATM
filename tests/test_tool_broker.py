@@ -51,6 +51,8 @@ def _request(tool_class: str, **extra: object) -> dict[str, object]:
         "scope": "workspace:src",
         "workspace_path": str(PROJECT_ROOT),
     }
+    if tool_class == "execute":
+        request["executable_digest"] = "a" * 64
     request.update(extra)
     return request
 
@@ -115,6 +117,12 @@ def test_execute_requires_valid_approval_and_exact_command(tmp_path: Path) -> No
     other = copy.deepcopy(request)
     other["command"] = "pytest -q tests/test_tool_broker.py"
     assert broker.evaluate(other, _token(other, token_id="APR-" + "11" * 32))["decision"] == "deny"
+
+    missing_backend_binding = copy.deepcopy(request)
+    missing_backend_binding.pop("executable_digest")
+    missing_decision = broker.evaluate(missing_backend_binding, _token(missing_backend_binding, token_id="APR-" + "12" * 32))
+    assert missing_decision["decision"] == "deny"
+    assert "schema validation" in missing_decision["reason"]
 
 
 def test_execute_blocks_sandbox_network_and_secret_inheritance_gaps(tmp_path: Path) -> None:

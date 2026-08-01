@@ -95,6 +95,8 @@ def build_sandbox_run(
         }
     if status in {"completed", "failed"} and (not authorization or policy_decision.get("decision") != "allow"):
         raise SandboxExecutionError("sandbox execution requires allow decision authorization evidence")
+    if status in {"completed", "failed"} and request.get("executable_digest") != backend_digest:
+        raise SandboxExecutionError("sandbox execution backend digest is not bound to the request")
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
         "request_id": str(request.get("request_id", "")),
@@ -171,6 +173,7 @@ def _run_bounded_process(
     output_bytes: int,
     cpu_seconds: int,
     memory_bytes: int,
+    pass_fds: Sequence[int] = (),
 ) -> _ProcessOutcome:
     process = subprocess.Popen(
         list(command),
@@ -180,6 +183,7 @@ def _run_bounded_process(
         stderr=subprocess.PIPE,
         shell=False,
         start_new_session=True,
+        pass_fds=tuple(pass_fds),
         preexec_fn=lambda: _limit_resources(
             cpu_seconds=cpu_seconds,
             memory_bytes=memory_bytes,
@@ -317,81 +321,118 @@ class SandboxExecutor:
         except (OSError, ValueError) as exc:
             return self._blocked(request, argv, str(exc), started, controls=("scope:workspace",))
 
-        if self.broker is None:
-            return self._blocked(request, argv, "reference monitor has no policy broker", started, controls=("broker:unavailable",))
-        try:
-            decision = self.broker.evaluate(request, approval_token)
-        except Exception as exc:  # a failed policy boundary must not become host execution
-            return self._blocked(request, argv, f"policy broker unavailable: {exc}", started, controls=("broker:error",))
-        try:
-            validate_policy_decision(decision, request)
-            authorization_receipt = build_tool_receipt(request, decision, recorded_at=started)
-        except Exception as exc:  # a malformed authorization boundary must not become host execution
-            return self._blocked(request, argv, f"authorization receipt unavailable: {exc}", started, controls=("authorization:receipt-failed",))
-        if decision.get("decision") != "allow":
+        if request.get("executable_digest") != self.backend_sha256:
             return self._blocked(
                 request,
                 argv,
-                str(decision.get("reason", "policy denied execute request")),
+                "sandbox request executable digest does not match the configured backend",
                 started,
-                controls=("policy:deny", "approval:verified-or-denied"),
-                policy_decision=decision,
-                tool_receipt=authorization_receipt,
+                controls=("backend:request-binding",),
             )
 
-        # Probe the exact reference-monitor mode before accepting the action.
-        # In particular, bubblewrap may be installed while the host forbids
-        # creation of the required network namespace. That is an unavailable
-        # monitor, not a command failure and must remain blocked.
-        probe = self._probe(workspace, cwd)
-        if probe is not None:
-            return self._blocked(request, argv, probe, started, controls=("backend:preflight-failed",), policy_decision=decision, tool_receipt=authorization_receipt)
+        backend_fd, backend_issue = self._open_verified_backend()
+        if backend_fd is None:
+            return self._blocked(request, argv, backend_issue or "reference monitor backend is unavailable", started, controls=(backend_issue or "backend:unavailable",))
 
-        command = self._command(workspace, cwd, argv)
         try:
-            completed = _run_bounded_process(
-                command, cwd=workspace, timeout_seconds=self.timeout_seconds, output_bytes=self.output_bytes,
-                cpu_seconds=self.cpu_seconds, memory_bytes=self.memory_bytes,
-            )
-        except OSError as exc:
-            return self._blocked(request, argv, f"reference monitor unavailable: {exc}", started, controls=("backend:unavailable",), policy_decision=decision, tool_receipt=authorization_receipt)
-        if completed.timed_out:
+            if self.broker is None:
+                return self._blocked(request, argv, "reference monitor has no policy broker", started, controls=("broker:unavailable",))
+            try:
+                decision = self.broker.evaluate(request, approval_token)
+            except Exception as exc:  # a failed policy boundary must not become host execution
+                return self._blocked(request, argv, f"policy broker unavailable: {exc}", started, controls=("broker:error",))
+            try:
+                validate_policy_decision(decision, request)
+                authorization_receipt = build_tool_receipt(request, decision, recorded_at=started)
+            except Exception as exc:  # a malformed authorization boundary must not become host execution
+                return self._blocked(request, argv, f"authorization receipt unavailable: {exc}", started, controls=("authorization:receipt-failed",))
+            if decision.get("decision") != "allow":
+                return self._blocked(
+                    request,
+                    argv,
+                    str(decision.get("reason", "policy denied execute request")),
+                    started,
+                    controls=("policy:deny", "approval:verified-or-denied"),
+                    policy_decision=decision,
+                    tool_receipt=authorization_receipt,
+                )
+
+            # Probe the exact reference-monitor mode before accepting the action.
+            # In particular, bubblewrap may be installed while the host forbids
+            # creation of the required network namespace. That is an unavailable
+            # monitor, not a command failure and must remain blocked.
+            probe = self._probe(workspace, cwd, backend_fd)
+            if probe is not None:
+                return self._blocked(request, argv, probe, started, controls=("backend:preflight-failed",), policy_decision=decision, tool_receipt=authorization_receipt)
+
+            command = self._command(workspace, cwd, argv, backend_fd)
+            try:
+                completed = _run_bounded_process(
+                    command, cwd=workspace, timeout_seconds=self.timeout_seconds, output_bytes=self.output_bytes,
+                    cpu_seconds=self.cpu_seconds, memory_bytes=self.memory_bytes, pass_fds=(backend_fd,),
+                )
+            except OSError as exc:
+                return self._blocked(request, argv, f"reference monitor unavailable: {exc}", started, controls=("backend:unavailable",), policy_decision=decision, tool_receipt=authorization_receipt)
+            if completed.timed_out:
+                return build_sandbox_run(
+                    request=request, backend_digest=self.backend_sha256 or "", argv=argv,
+                    status="blocked", exit_code=None, stdout=completed.stdout, stderr=completed.stderr + b"sandbox timeout",
+                    started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                    sandbox_controls=self._controls() + ("timeout:enforced",),
+                    policy_decision=decision,
+                    tool_receipt=authorization_receipt,
+                )
+            stdout = completed.stdout
+            stderr = completed.stderr
+            if completed.output_exceeded:
+                return build_sandbox_run(
+                    request=request, backend_digest=self.backend_sha256 or "", argv=argv,
+                    status="blocked", exit_code=None, stdout=stdout[: self.output_bytes],
+                    stderr=stderr[: self.output_bytes] + b"output limit exceeded",
+                    started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                    sandbox_controls=self._controls() + ("output:bounded",),
+                    policy_decision=decision,
+                    tool_receipt=authorization_receipt,
+                )
             return build_sandbox_run(
                 request=request, backend_digest=self.backend_sha256 or "", argv=argv,
-                status="blocked", exit_code=None, stdout=completed.stdout, stderr=completed.stderr + b"sandbox timeout",
-                started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                sandbox_controls=self._controls() + ("timeout:enforced",),
+                status="completed" if completed.returncode == 0 else "failed", exit_code=completed.returncode,
+                stdout=stdout, stderr=stderr, started_at=started,
+                finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                sandbox_controls=self._controls(),
                 policy_decision=decision,
                 tool_receipt=authorization_receipt,
             )
-        stdout = completed.stdout
-        stderr = completed.stderr
-        if completed.output_exceeded:
-            return build_sandbox_run(
-                request=request, backend_digest=self.backend_sha256 or "", argv=argv,
-                status="blocked", exit_code=None, stdout=stdout[: self.output_bytes],
-                stderr=stderr[: self.output_bytes] + b"output limit exceeded",
-                started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                sandbox_controls=self._controls() + ("output:bounded",),
-                policy_decision=decision,
-                tool_receipt=authorization_receipt,
-            )
-        return build_sandbox_run(
-            request=request, backend_digest=self.backend_sha256 or "", argv=argv,
-            status="completed" if completed.returncode == 0 else "failed", exit_code=completed.returncode,
-            stdout=stdout, stderr=stderr, started_at=started,
-            finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            sandbox_controls=self._controls(),
-            policy_decision=decision,
-            tool_receipt=authorization_receipt,
-        )
+        finally:
+            os.close(backend_fd)
 
-    def _probe(self, workspace: Path, cwd: Path) -> str | None:
+    def _open_verified_backend(self) -> tuple[int | None, str | None]:
+        try:
+            backend_fd = os.open(self.backend_path, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+        except OSError:
+            return None, "backend:unavailable"
+        try:
+            digest = hashlib.sha256()
+            while True:
+                chunk = os.read(backend_fd, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+            os.lseek(backend_fd, 0, os.SEEK_SET)
+            if digest.hexdigest() != self.backend_sha256:
+                os.close(backend_fd)
+                return None, "backend:digest-mismatch"
+            return backend_fd, None
+        except OSError:
+            os.close(backend_fd)
+            return None, "backend:unavailable"
+
+    def _probe(self, workspace: Path, cwd: Path, backend_fd: int) -> str | None:
         try:
             completed = _run_bounded_process(
-                self._command(workspace, cwd, ["/bin/true"]), cwd=workspace,
+                self._command(workspace, cwd, ["/bin/true"], backend_fd), cwd=workspace,
                 timeout_seconds=min(self.timeout_seconds, 5.0), output_bytes=self.output_bytes,
-                cpu_seconds=self.cpu_seconds, memory_bytes=self.memory_bytes,
+                cpu_seconds=self.cpu_seconds, memory_bytes=self.memory_bytes, pass_fds=(backend_fd,),
             )
         except OSError as exc:
             return f"reference monitor preflight unavailable: {exc}"
@@ -400,9 +441,9 @@ class SandboxExecutor:
             return "reference monitor preflight failed" + (f": {detail}" if detail else "")
         return None
 
-    def _command(self, workspace: Path, cwd: Path, argv: Sequence[str]) -> list[str]:
+    def _command(self, workspace: Path, cwd: Path, argv: Sequence[str], backend_fd: int) -> list[str]:
         command: list[str] = [
-            str(self.backend_path),
+            f"/proc/self/fd/{backend_fd}",
             "--die-with-parent",
             "--new-session",
             "--unshare-user-try",
@@ -435,6 +476,8 @@ class SandboxExecutor:
         return (
             "reference-monitor:bubblewrap",
             "backend:digest-bound",
+            "backend:digest-revalidated",
+            "backend:fd-bound",
             "filesystem:workspace-read-only",
             "network:unshare-net",
             "environment:clearenv-no-secrets",

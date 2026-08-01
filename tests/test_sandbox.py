@@ -21,7 +21,7 @@ from vheatm_control.tool_broker import build_tool_receipt, action_digest, reques
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _request() -> dict[str, object]:
+def _request(*, executable_digest: str = "a" * 64) -> dict[str, object]:
     return {
         "schema_version": "1.0.0",
         "request_id": "REQ-sandbox",
@@ -31,6 +31,7 @@ def _request() -> dict[str, object]:
         "workspace_path": str(ROOT),
         "sandboxed": True,
         "command": "true",
+        "executable_digest": executable_digest,
         "network_enabled": False,
         "inherit_secrets": False,
     }
@@ -100,6 +101,34 @@ def test_completed_sandbox_run_cannot_claim_execution_without_authorization() ->
         )
 
 
+def test_completed_sandbox_run_binds_backend_digest_to_request() -> None:
+    decision = {
+        "schema_version": "1.0.0",
+        "request_id": "REQ-sandbox",
+        "decision": "allow",
+        "reason": "approved",
+        "controls": ["approval:verified", "execute:sandbox"],
+        "evaluated_at": "2026-08-01T00:00:00Z",
+        "approval_token_id": "APR-" + "A" * 64,
+    }
+    request = _request(executable_digest="b" * 64)
+    receipt = build_tool_receipt(request, decision, recorded_at="2026-08-01T00:00:00Z")
+    with pytest.raises(SandboxExecutionError, match="backend digest"):
+        build_sandbox_run(
+            request=request,
+            backend_digest="a" * 64,
+            argv=["true"],
+            status="completed",
+            exit_code=0,
+            stdout=b"",
+            stderr=b"",
+            started_at="2026-08-01T00:00:00Z",
+            finished_at="2026-08-01T00:00:01Z",
+            policy_decision=decision,
+            tool_receipt=receipt,
+        )
+
+
 def test_sandbox_rejects_schema_invalid_policy_decision_before_action() -> None:
     valid_decision = {
         "schema_version": "1.0.0",
@@ -156,6 +185,35 @@ def test_executor_never_falls_back_when_backend_probe_fails(tmp_path: Path) -> N
         SandboxExecutor(backend_path=backend, backend_sha256="a" * 64)
 
 
+def test_executor_blocks_backend_digest_drift_before_launch(tmp_path: Path) -> None:
+    backend = tmp_path / "backend"
+    backend.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    backend.chmod(0o755)
+    digest = hashlib.sha256(backend.read_bytes()).hexdigest()
+    executor = SandboxExecutor(backend_path=backend, backend_sha256=digest)
+
+    backend.write_text("#!/bin/sh\nexit 42\n", encoding="utf-8")
+    backend.chmod(0o755)
+
+    result = executor.run(_request(executable_digest=digest))
+    assert result["status"] == "blocked"
+    assert "backend:digest-mismatch" in result["sandbox_controls"]
+
+
+def test_executor_requires_request_backend_digest_binding(tmp_path: Path) -> None:
+    backend = tmp_path / "backend"
+    backend.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    backend.chmod(0o755)
+    digest = hashlib.sha256(backend.read_bytes()).hexdigest()
+    executor = SandboxExecutor(backend_path=backend, backend_sha256=digest)
+    request = _request()
+    request["executable_digest"] = "b" * 64
+
+    result = executor.run(request)
+    assert result["status"] == "blocked"
+    assert "backend:request-binding" in result["sandbox_controls"]
+
+
 def test_executor_blocks_when_host_cannot_provide_required_namespace() -> None:
     backend = Path("/usr/bin/bwrap")
     if not backend.is_file():
@@ -175,7 +233,7 @@ def test_executor_blocks_when_host_cannot_provide_required_namespace() -> None:
             }
 
     digest = hashlib.sha256(backend.read_bytes()).hexdigest()
-    result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=AllowBroker()).run(_request())
+    result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=AllowBroker()).run(_request(executable_digest=digest))
     assert result["status"] in {"completed", "blocked"}
     if result["status"] == "blocked":
         assert "backend:preflight-failed" in result["sandbox_controls"] or "authorization:receipt-failed" in result["sandbox_controls"]
@@ -196,6 +254,6 @@ def test_executor_blocks_when_policy_broker_errors() -> None:
             raise RuntimeError("broker store unavailable")
 
     digest = hashlib.sha256(backend.read_bytes()).hexdigest()
-    result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=BrokenBroker()).run(_request())
+    result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=BrokenBroker()).run(_request(executable_digest=digest))
     assert result["status"] == "blocked"
     assert "broker:error" in result["sandbox_controls"]

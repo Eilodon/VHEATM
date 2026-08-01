@@ -6,7 +6,7 @@
 
 - Every request is validated against `tool-request.schema.json` and must use a normalized `workspace:` scope.
 - Read requests require explicit `secret_expansion: false` and `contains_secrets: false` declarations.
-- Execute requests require a valid single-use approval, an active sandbox, disabled network, disabled secret inheritance, and an exact command allowlist match.
+- Execute requests require a valid single-use approval, an active sandbox, disabled network, disabled secret inheritance, an exact command allowlist match, and an executable digest bound into the canonical request/action digest.
 - Write requests require a valid single-use approval, safe diff paths contained by the exact workspace scope, and a rollback plan.
 - Network requests require a valid single-use approval, a destination listed by runtime policy, permitted data classes, and redaction. The current empty destination list therefore denies all network requests.
 - Secret requests require a valid single-use approval, a broker-registered secret name, least-privilege use, and a no-model-echo declaration.

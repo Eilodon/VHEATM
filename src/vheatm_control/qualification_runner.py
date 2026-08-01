@@ -5,6 +5,7 @@ import copy
 import hashlib
 import hmac
 import json
+import shutil
 import sys
 import tempfile
 from datetime import UTC, datetime, timedelta
@@ -293,7 +294,9 @@ def _security_case(root: Path, case: Mapping[str, Any], observed_at: str) -> tup
 
 def _policy_case(root: Path, case: Mapping[str, Any], observed_at: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     broker = _new_broker(root, observed_at, commands={"true"})
-    request = {"schema_version": "1.0.0", "request_id": "REQ-APPROVAL-SEEDED", "requester": RUNNER_ID, "tool_class": "execute", "scope": "workspace:", "workspace_path": str(root), "sandboxed": True, "command": "true", "network_enabled": False, "inherit_secrets": False}
+    executable = Path(shutil.which("true") or "/usr/bin/true")
+    executable_digest = hashlib.sha256(executable.read_bytes()).hexdigest() if executable.is_file() else "0" * 64
+    request = {"schema_version": "1.0.0", "request_id": "REQ-APPROVAL-SEEDED", "requester": RUNNER_ID, "tool_class": "execute", "scope": "workspace:", "workspace_path": str(root), "sandboxed": True, "command": "true", "executable_digest": executable_digest, "network_enabled": False, "inherit_secrets": False}
     token = _build_approval_token(request, observed_at)
     first = broker.evaluate(request, token)
     second = broker.evaluate(request, token)
