@@ -14,6 +14,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .provider_policy import ProviderPolicyError, validate_provider_binding
+from .signer_service import SignerClient, SignerServiceError
 
 
 class JudgeError(ValueError):
@@ -56,6 +57,21 @@ def _order_digest(items: Sequence[Mapping[str, Any]]) -> str:
     return _digest([str(item.get("item_id", "")) for item in items])
 
 
+_PACKET_ID_FIELDS = (
+    "source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id",
+    "judge_provider_id", "judge_provider_version", "judge_endpoint", "judge_adapter_profile",
+    "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items",
+)
+
+
+def _packet_identity(packet: Mapping[str, Any]) -> dict[str, Any]:
+    identity = {key: packet[key] for key in _PACKET_ID_FIELDS}
+    for key in ("framework_version", "bundle_root"):
+        if key in packet:
+            identity[key] = packet[key]
+    return identity
+
+
 def build_blind_packet(
     *,
     source_session_root: str,
@@ -70,10 +86,18 @@ def build_blind_packet(
     config_digest: str,
     rubric_digest: str,
     order_seed: str,
+    framework_version: str | None = None,
+    bundle_root: str | None = None,
     items: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     for value, field in ((source_session_root, "source_session_root"), (judge_context_root, "judge_context_root"), (config_digest, "config_digest"), (rubric_digest, "rubric_digest"), (order_seed, "order_seed")):
         _require_digest(value, field)
+    if (framework_version is None) != (bundle_root is None):
+        raise JudgeError("judge scope requires both framework_version and bundle_root")
+    if framework_version is not None:
+        if not isinstance(framework_version, str) or not framework_version.strip():
+            raise JudgeError("judge framework_version is required when scope is supplied")
+        _require_digest(str(bundle_root), "bundle_root")
     if source_session_root == judge_context_root:
         raise JudgeError("independent judge requires a distinct judge context root")
     if not origin_provider_id or not origin_model_id or not judge_provider_id or not judge_model_id:
@@ -116,6 +140,8 @@ def build_blind_packet(
         "config_digest": config_digest, "rubric_digest": rubric_digest, "order_seed": order_seed,
         "order_digest": _order_digest(normalized), "items": normalized,
     }
+    if framework_version is not None and bundle_root is not None:
+        identity.update({"framework_version": framework_version, "bundle_root": bundle_root})
     packet_id = _content_id("JPK", identity)
     request_id = _content_id("JDR", {"packet_id": packet_id, "judge_context_root": judge_context_root})
     return {"schema_version": "1.0.0", "packet_id": packet_id, "request_id": request_id, **identity}
@@ -141,7 +167,13 @@ def _validate_packet(packet: Mapping[str, Any]) -> None:
         raise JudgeError(str(exc)) from exc
     if _order_digest(packet["items"]) != packet["order_digest"]:
         raise JudgeError("blind packet order digest mismatch")
-    expected_packet = _content_id("JPK", {key: packet[key] for key in ("source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_provider_version", "judge_endpoint", "judge_adapter_profile", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items")})
+    if ("framework_version" in packet) != ("bundle_root" in packet):
+        raise JudgeError("judge packet scope requires both framework_version and bundle_root")
+    if "framework_version" in packet and (not isinstance(packet["framework_version"], str) or not packet["framework_version"].strip()):
+        raise JudgeError("judge packet framework_version is invalid")
+    if "bundle_root" in packet:
+        _require_digest(str(packet["bundle_root"]), "bundle_root")
+    expected_packet = _content_id("JPK", _packet_identity(packet))
     if packet["packet_id"] != expected_packet:
         raise JudgeError("blind packet id mismatch")
     if packet["request_id"] != _content_id("JDR", {"packet_id": packet["packet_id"], "judge_context_root": packet["judge_context_root"]}):
@@ -227,15 +259,17 @@ def _build_verdict(packet: Mapping[str, Any], raw: Any) -> dict[str, Any]:
         "judge_model_id": packet["judge_model_id"], "config_digest": packet["config_digest"], "order_digest": packet["order_digest"],
         "status": status, "epistemic_status": "independent_candidate" if status == "complete" else "unknown", "decisions": decisions,
     }
+    for key in ("framework_version", "bundle_root"):
+        if key in packet:
+            identity[key] = packet[key]
     return {"schema_version": "1.0.0", "verdict_id": _content_id("JVR", identity), **identity, "generated_at": _timestamp()}
 
 
 def expected_verdict_id(verdict: Mapping[str, Any]) -> str:
-    identity = {
-        key: verdict[key]
-        for key in ("packet_id", "request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest", "status", "epistemic_status", "decisions")
-        if key in verdict
-    }
+    identity = {key: verdict[key] for key in ("packet_id", "request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest", "status", "epistemic_status", "decisions") if key in verdict}
+    for key in ("framework_version", "bundle_root"):
+        if key in verdict:
+            identity[key] = verdict[key]
     return _content_id("JVR", identity)
 
 
@@ -247,7 +281,12 @@ def _signed_verdict_subject(verdict: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def sign_verdict(verdict: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
+def sign_verdict(
+    verdict: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    bundle_root: str | None = None, public_key: Ed25519PublicKey | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     """Attach an independent judge signature to a complete candidate verdict."""
 
     validate_verdict_identity(verdict)
@@ -257,11 +296,40 @@ def sign_verdict(verdict: Mapping[str, Any], *, private_key: Ed25519PrivateKey, 
         raise JudgeError("judge signing key ID is required")
     signed = dict(verdict)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
-    signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical_bytes(_signed_verdict_subject(signed)))).decode("ascii")
+    subject = _signed_verdict_subject(signed)
+    if signer is not None:
+        if private_key is not None:
+            raise JudgeError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise JudgeError("external signer requires the expected judge public key")
+        if not isinstance(framework_version, str) or not framework_version.strip() or not isinstance(bundle_root, str):
+            raise JudgeError("external signer requires the canonical judge framework and bundle scope")
+        if framework_version != signed.get("framework_version") or bundle_root != signed.get("bundle_root"):
+            raise JudgeError("external signer scope does not match judge verdict")
+        try:
+            receipt = signer.sign(
+                _canonical_bytes(subject),
+                framework_version=framework_version,
+                bundle_root=bundle_root,
+                purpose="judge",
+                key_id=key_id,
+                public_key=public_key,
+                created_at=str(created_at or signed.get("generated_at", "")),
+            )
+        except SignerServiceError as exc:
+            raise JudgeError(str(exc)) from exc
+        signed["signature_value"] = str(receipt["signature_value"])
+    else:
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise JudgeError("a local fixture key or external signer is required")
+        signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical_bytes(subject))).decode("ascii")
     return signed
 
 
-def verify_signed_verdict(verdict: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None) -> None:
+def verify_signed_verdict(
+    verdict: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None,
+    expected_framework_version: str | None = None, expected_bundle_root: str | None = None,
+) -> None:
     """Verify the independent signer before a verdict contributes release metrics."""
 
     validate_verdict_identity(verdict)
@@ -271,6 +339,10 @@ def verify_signed_verdict(verdict: Mapping[str, Any], *, public_key: Ed25519Publ
         raise JudgeError("independent judge verdict signature is missing")
     if key_id is not None and verdict.get("signature_key_id") != key_id:
         raise JudgeError("independent judge signing key does not match")
+    if expected_framework_version is not None and verdict.get("framework_version") != expected_framework_version:
+        raise JudgeError("independent judge verdict framework version does not match release")
+    if expected_bundle_root is not None and verdict.get("bundle_root") != expected_bundle_root:
+        raise JudgeError("independent judge verdict bundle root does not match release")
     try:
         public_key.verify(base64.urlsafe_b64decode(str(verdict["signature_value"])), _canonical_bytes(_signed_verdict_subject(verdict)))
     except (InvalidSignature, ValueError) as exc:
@@ -283,6 +355,12 @@ def validate_verdict_identity(verdict: Mapping[str, Any]) -> None:
         raise JudgeError("independent judge verdict is incomplete")
     if verdict.get("verdict_id") != expected_verdict_id(verdict):
         raise JudgeError("independent judge verdict identity does not match its content")
+    if ("framework_version" in verdict) != ("bundle_root" in verdict):
+        raise JudgeError("independent judge verdict scope requires both framework_version and bundle_root")
+    if "framework_version" in verdict and (not isinstance(verdict["framework_version"], str) or not verdict["framework_version"].strip()):
+        raise JudgeError("independent judge verdict framework_version is invalid")
+    if "bundle_root" in verdict:
+        _require_digest(str(verdict["bundle_root"]), "bundle_root")
     decisions = verdict.get("decisions")
     if not isinstance(decisions, list) or not decisions:
         raise JudgeError("independent judge verdict requires decisions")
@@ -303,6 +381,9 @@ def validate_verdict_binding(packet: Mapping[str, Any], verdict: Mapping[str, An
     validate_verdict_identity(verdict)
     for field in ("request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest"):
         if verdict.get(field) != packet.get(field):
+            raise JudgeError(f"independent judge verdict {field} is not bound to its packet")
+    for field in ("framework_version", "bundle_root"):
+        if (field in packet) != (field in verdict) or (field in packet and verdict.get(field) != packet.get(field)):
             raise JudgeError(f"independent judge verdict {field} is not bound to its packet")
     packet_item_ids = [str(item["item_id"]) for item in packet["items"]]
     verdict_item_ids = [str(item["item_id"]) for item in verdict["decisions"]]

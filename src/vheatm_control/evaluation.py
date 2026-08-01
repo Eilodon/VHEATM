@@ -431,7 +431,12 @@ def _verified_qualification_metrics(
     if judge_key_id is None:
         return {}, ["qualification evidence is present but no independent judge key ID was supplied"]
     try:
-        verified_manifest = verify_manifest(manifest, public_key=public_key, key_id=_key_id(verification_key_ids, "qualification"))
+        verified_manifest = verify_manifest(
+            manifest,
+            public_key=public_key,
+            key_id=_key_id(verification_key_ids, "qualification"),
+            expected_bundle_root=expected_bundle_root,
+        )
         if verified_manifest.get("framework_version") != framework_version:
             raise QualificationError("qualification manifest framework version does not match the release")
         verified = verify_qualification_evidence(
@@ -505,7 +510,13 @@ def _verified_qualification_metrics(
         for ref in verified.get("judge_verdict_refs", []):
             verdict = verdict_by_id[ref]
             packet = packet_by_id[str(verdict.get("packet_id"))]
-            verify_signed_verdict(verdict, public_key=judge_public_key, key_id=judge_key_id)
+            verify_signed_verdict(
+                verdict,
+                public_key=judge_public_key,
+                key_id=judge_key_id,
+                expected_framework_version=framework_version,
+                expected_bundle_root=expected_bundle_root,
+            )
             validate_verdict_binding(packet, verdict)
             if verdict.get("status") != "complete" or verdict.get("epistemic_status") != "independent_candidate":
                 raise JudgeError("referenced independent judge verdict is not complete and independent")

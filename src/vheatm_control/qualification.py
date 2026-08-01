@@ -13,6 +13,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .qualification_methods import QualificationMethodError, method_definition, validate_method_digest
+from .signer_service import SignerClient, SignerServiceError
 
 
 class QualificationError(ValueError):
@@ -151,10 +152,13 @@ def build_private_time_slice_manifest(
     time_slice_end: str,
     case_digests: Sequence[str],
     generated_at: str,
+    bundle_root: str | None = None,
 ) -> dict[str, Any]:
     normalized = sorted(set(str(value) for value in case_digests))
     if not normalized or any(len(value) != 64 or any(char not in "0123456789abcdef" for char in value) for value in normalized):
         raise QualificationError("private corpus case digests must be lowercase SHA-256 values")
+    if bundle_root is not None and not re.fullmatch(r"[a-f0-9]{64}", bundle_root):
+        raise QualificationError("qualification manifest bundle root must be a lowercase SHA-256 digest")
     start = _timestamp(time_slice_start)
     end = _timestamp(time_slice_end)
     if datetime.fromisoformat(end.replace("Z", "+00:00")) <= datetime.fromisoformat(start.replace("Z", "+00:00")):
@@ -174,21 +178,56 @@ def build_private_time_slice_manifest(
         "signature_value": None,
         "generated_at": _timestamp(generated_at),
     }
+    if bundle_root is not None:
+        manifest["bundle_root"] = bundle_root
     manifest["manifest_id"] = expected_manifest_id(manifest)
     return manifest
 
 
-def sign_manifest(manifest: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
+def sign_manifest(
+    manifest: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    bundle_root: str | None = None, public_key: Ed25519PublicKey | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
     if manifest.get("manifest_id") != expected_manifest_id(manifest):
         raise QualificationError("manifest identity does not match content")
     signed = dict(manifest)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
     subject = {key: value for key, value in signed.items() if key not in {"manifest_id", "signature_algorithm", "signature_key_id", "signature_value", "verification_state"}}
-    signed["signature_value"] = _sign(subject, private_key)
+    if signer is not None:
+        if private_key is not None:
+            raise QualificationError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise QualificationError("external signer requires the expected qualification public key")
+        if not isinstance(framework_version, str) or not framework_version.strip() or not isinstance(bundle_root, str):
+            raise QualificationError("external signer requires the canonical qualification framework and bundle scope")
+        if framework_version != signed.get("framework_version") or bundle_root != signed.get("bundle_root"):
+            raise QualificationError("external signer scope does not match qualification manifest")
+        try:
+            receipt = signer.sign(
+                _canonical(subject),
+                framework_version=framework_version,
+                bundle_root=bundle_root,
+                purpose="qualification",
+                key_id=key_id,
+                public_key=public_key,
+                created_at=str(created_at or signed.get("generated_at", "")),
+            )
+        except SignerServiceError as exc:
+            raise QualificationError(str(exc)) from exc
+        signed["signature_value"] = str(receipt["signature_value"])
+    else:
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise QualificationError("a local fixture key or external signer is required")
+        signed["signature_value"] = _sign(subject, private_key)
     return signed
 
 
-def verify_manifest(manifest: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None) -> dict[str, Any]:
+def verify_manifest(
+    manifest: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None,
+    expected_bundle_root: str | None = None,
+) -> dict[str, Any]:
     if manifest.get("schema_version") != "1.0.0" or manifest.get("visibility") != "private":
         raise QualificationError("qualification manifest schema or visibility is invalid")
     if not isinstance(manifest.get("private_locator"), str) or not manifest["private_locator"].strip():
@@ -204,6 +243,13 @@ def verify_manifest(manifest: Mapping[str, Any], *, public_key: Ed25519PublicKey
         raise QualificationError("manifest identity does not match content")
     if manifest.get("case_count") != len(manifest.get("case_digests", [])) or manifest.get("corpus_digest") != _digest(manifest.get("case_digests", [])):
         raise QualificationError("manifest corpus digest is not derived from case digests")
+    if "bundle_root" in manifest and (
+        not isinstance(manifest.get("bundle_root"), str)
+        or not re.fullmatch(r"[a-f0-9]{64}", str(manifest.get("bundle_root")))
+    ):
+        raise QualificationError("qualification manifest bundle root is invalid")
+    if expected_bundle_root is not None and manifest.get("bundle_root") != expected_bundle_root:
+        raise QualificationError("qualification manifest is not bound to the current bundle root")
     _verify(manifest, public_key, key_id=key_id)
     verified = dict(manifest)
     verified["verification_state"] = "verified"
@@ -251,6 +297,7 @@ def build_qualification_evidence(
     evidence: dict[str, Any] = {
         "schema_version": "1.0.0",
         "manifest_id": manifest["manifest_id"],
+        "framework_version": str(manifest["framework_version"]),
         "bundle_root": bundle_root,
         "private_corpus_receipt_id": private_corpus_receipt_id,
         "manifest_digest": _digest({key: value for key, value in manifest.items() if key != "signature_value"}),
@@ -270,13 +317,42 @@ def build_qualification_evidence(
     return evidence
 
 
-def sign_qualification_evidence(evidence: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
+def sign_qualification_evidence(
+    evidence: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
+) -> dict[str, Any]:
     if evidence.get("evidence_id") != expected_qualification_evidence_id(evidence):
         raise QualificationError("qualification evidence identity does not match content")
     signed = dict(evidence)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
     subject = {key: value for key, value in signed.items() if key not in {"evidence_id", "signature_algorithm", "signature_key_id", "signature_value", "evidence_state"}}
-    signed["signature_value"] = _sign(subject, private_key)
+    if signer is not None:
+        if private_key is not None:
+            raise QualificationError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise QualificationError("external signer requires the expected Ed25519 public key")
+        if not isinstance(framework_version, str) or not framework_version.strip():
+            raise QualificationError("external signer requires the canonical framework version")
+        if framework_version != signed.get("framework_version"):
+            raise QualificationError("external signer framework version does not match qualification evidence")
+        try:
+            receipt = signer.sign(
+                _canonical(subject),
+                framework_version=framework_version,
+                bundle_root=str(signed.get("bundle_root", "")),
+                purpose="qualification",
+                key_id=key_id,
+                public_key=public_key,
+                created_at=str(created_at or signed.get("generated_at", "")),
+            )
+        except SignerServiceError as exc:
+            raise QualificationError(str(exc)) from exc
+        signed["signature_value"] = str(receipt["signature_value"])
+    else:
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise QualificationError("a local fixture key or external signer is required")
+        signed["signature_value"] = _sign(subject, private_key)
     return signed
 
 
@@ -287,6 +363,8 @@ def verify_qualification_evidence(
         raise QualificationError("qualification evidence schema version is invalid")
     if evidence.get("evidence_id") != expected_qualification_evidence_id(evidence):
         raise QualificationError("qualification evidence identity does not match content")
+    if evidence.get("framework_version") != manifest.get("framework_version"):
+        raise QualificationError("qualification evidence framework version does not match the manifest")
     if not isinstance(evidence.get("bundle_root"), str) or not re.fullmatch(r"[a-f0-9]{64}", evidence["bundle_root"]):
         raise QualificationError("qualification evidence bundle root is invalid")
     if expected_bundle_root is not None and evidence.get("bundle_root") != expected_bundle_root:

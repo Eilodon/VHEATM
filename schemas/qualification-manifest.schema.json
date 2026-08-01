@@ -9,6 +9,7 @@
     "schema_version": {"const": "1.0.0"},
     "manifest_id": {"type": "string", "pattern": "^QMF-[A-F0-9]{64}$"},
     "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "visibility": {"const": "private"},
     "private_locator": {"type": "string", "minLength": 1},
     "time_slice": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "properties": {"start": {"type": "string", "format": "date-time"}, "end": {"type": "string", "format": "date-time"}}},

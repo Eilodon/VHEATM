@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import time
 
 import pytest
@@ -16,6 +17,12 @@ from vheatm_control.judge import (
     validate_verdict_binding,
     verify_signed_verdict,
 )
+from vheatm_control.signer_service import SignerClient
+
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def judge_yes(packet):
@@ -29,6 +36,26 @@ def judge_no(packet):
 def judge_slow(packet):
     time.sleep(2)
     return judge_yes(packet)
+
+
+def _signer_client(key: Ed25519PrivateKey) -> SignerClient:
+    def transport(request: dict[str, object]) -> dict[str, object]:
+        payload = base64.urlsafe_b64decode(str(request["payload"]))
+        return {
+            "schema_version": "1.0.0",
+            "request_id": request["request_id"],
+            "framework_version": request["framework_version"],
+            "bundle_root": request["bundle_root"],
+            "purpose": request["purpose"],
+            "key_id": request["key_id"],
+            "signature_algorithm": "ed25519",
+            "payload_digest": request["payload_digest"],
+            "signature_value": base64.urlsafe_b64encode(key.sign(payload)).decode("ascii"),
+            "signer_service_id": "test-kms",
+            "signed_at": "2026-08-02T00:00:01Z",
+        }
+
+    return SignerClient(transport, root=ROOT)
 
 
 def _packet():
@@ -109,3 +136,60 @@ def test_signed_verdict_is_required_for_persisted_independent_evidence() -> None
     tampered["verdict_id"] = expected_verdict_id(tampered)
     with pytest.raises(JudgeError, match="signature"):
         verify_signed_verdict(tampered, public_key=key.public_key(), key_id="judge-key")
+
+
+def test_verdict_can_delegate_to_external_signer_with_exact_scope() -> None:
+    packet = build_blind_packet(
+        source_session_root="a" * 64,
+        judge_context_root="b" * 64,
+        origin_provider_id="origin.provider",
+        origin_model_id="origin-model",
+        judge_provider_id="judge.test",
+        judge_provider_version="1.0.0",
+        judge_endpoint="https://judge.example.test/evaluate",
+        judge_adapter_profile="judge-json-v1",
+        judge_model_id="judge-model",
+        config_digest="5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c",
+        rubric_digest="d" * 64,
+        order_seed="e" * 64,
+        framework_version="17.0.0-dev.1",
+        bundle_root="f" * 64,
+        items=[{"item_id": "f-1", "text": "Is the control present?"}],
+    )
+    verdict = run_independent_judge(packet, judge_yes)["verdict"]
+    key = Ed25519PrivateKey.generate()
+    signed = sign_verdict(
+        verdict,
+        signer=_signer_client(key),
+        framework_version="17.0.0-dev.1",
+        bundle_root="f" * 64,
+        public_key=key.public_key(),
+        key_id="judge-key",
+    )
+    verify_signed_verdict(
+        signed,
+        public_key=key.public_key(),
+        key_id="judge-key",
+        expected_framework_version="17.0.0-dev.1",
+        expected_bundle_root="f" * 64,
+    )
+
+    with pytest.raises(JudgeError, match="scope"):
+        sign_verdict(
+            verdict,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            bundle_root="f" * 64,
+            public_key=key.public_key(),
+            key_id="judge-key",
+        )
+    with pytest.raises(JudgeError, match="cannot be combined"):
+        sign_verdict(
+            verdict,
+            private_key=key,
+            signer=_signer_client(key),
+            framework_version="17.0.0-dev.1",
+            bundle_root="f" * 64,
+            public_key=key.public_key(),
+            key_id="judge-key",
+        )

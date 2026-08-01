@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -21,13 +22,34 @@ from vheatm_control.qualification import (
 )
 from vheatm_control.qualification_methods import QualificationMethodError, expected_method_digest, method_definition, validate_method_digest
 from vheatm_control.serialization import load_json
+from vheatm_control.signer_service import SignerClient
 from vheatm_control.qualification_private import expected_private_case_digest, expected_private_corpus_digest, expected_private_corpus_id, ingest_private_corpus
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _private_fixture(tmp_path: Path, key: Ed25519PrivateKey, *, count: int = 2) -> tuple[dict, dict, dict]:
+def _signer_client(key: Ed25519PrivateKey) -> SignerClient:
+    def transport(request: dict[str, object]) -> dict[str, object]:
+        payload = base64.urlsafe_b64decode(str(request["payload"]))
+        return {
+            "schema_version": "1.0.0",
+            "request_id": request["request_id"],
+            "framework_version": request["framework_version"],
+            "bundle_root": request["bundle_root"],
+            "purpose": request["purpose"],
+            "key_id": request["key_id"],
+            "signature_algorithm": "ed25519",
+            "payload_digest": request["payload_digest"],
+            "signature_value": base64.urlsafe_b64encode(key.sign(payload)).decode("ascii"),
+            "signer_service_id": "test-kms",
+            "signed_at": "2026-08-02T00:00:01Z",
+        }
+
+    return SignerClient(transport, root=ROOT)
+
+
+def _private_fixture(tmp_path: Path, key: Ed25519PrivateKey, *, count: int = 2, bundle_root: str | None = None) -> tuple[dict, dict, dict]:
     cases = []
     for index in range(count):
         case = {"case_id": f"PQC-CASE-{index:03d}", "captured_at": "2026-07-15T00:00:00Z", "payload": {"index": index, "label": "yes"}}
@@ -38,7 +60,7 @@ def _private_fixture(tmp_path: Path, key: Ed25519PrivateKey, *, count: int = 2) 
     corpus["corpus_id"] = expected_private_corpus_id(corpus)
     corpus_path = tmp_path / "private-corpus.json"
     corpus_path.write_text(json.dumps(corpus), encoding="utf-8")
-    manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator=str(corpus_path), time_slice_start=corpus["time_slice"]["start"], time_slice_end=corpus["time_slice"]["end"], case_digests=[case["case_digest"] for case in cases], generated_at="2026-08-01T00:00:00Z")
+    manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator=str(corpus_path), time_slice_start=corpus["time_slice"]["start"], time_slice_end=corpus["time_slice"]["end"], case_digests=[case["case_digest"] for case in cases], generated_at="2026-08-01T00:00:00Z", bundle_root=bundle_root)
     signed_manifest = sign_manifest(manifest, private_key=key, key_id="gold-key")
     receipt = ingest_private_corpus(signed_manifest, corpus_path=corpus_path, public_key=key.public_key(), key_id="gold-key", verified_at="2026-08-01T00:00:00Z")
     return signed_manifest, receipt, corpus
@@ -70,6 +92,98 @@ def test_private_time_sliced_manifest_and_measurements_are_signed_and_bound(tmp_
     tampered = sign_qualification_evidence(tampered, private_key=key, key_id="evidence-key")
     with pytest.raises(QualificationError, match="bundle root"):
         verify_qualification_evidence(tampered, manifest=verified_manifest, expected_bundle_root=bundle_root, public_key=key.public_key(), key_id="evidence-key")
+
+
+def test_qualification_evidence_can_delegate_to_external_signer(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, receipt, _ = _private_fixture(tmp_path, key)
+    verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="gold-key")
+    bundle_root = build_bundle(ROOT)["bundle_root"]
+    evidence = build_qualification_evidence(
+        manifest=verified_manifest,
+        bundle_root=bundle_root,
+        private_corpus_receipt_id=receipt["receipt_id"],
+        evaluator_id="eval:v17",
+        evaluator_version="1.0.0",
+        independent_judge_id="judge:v17",
+        judge_verdict_refs=["JVR-" + "A" * 64],
+        measurements=[{"metric": "mutation_rejection_rate", "value": 1.0, "sample_count": 1, "confidence_lower": 1.0, "method_digest": expected_method_digest("mutation_rejection_rate"), "evidence_refs": [receipt["receipt_id"]]}],
+        generated_at="2026-08-02T00:00:00Z",
+    )
+
+    signed = sign_qualification_evidence(
+        evidence,
+        signer=_signer_client(key),
+        framework_version=str(verified_manifest["framework_version"]),
+        public_key=key.public_key(),
+        key_id="evidence-key",
+    )
+    verified = verify_qualification_evidence(
+        signed,
+        manifest=verified_manifest,
+        expected_bundle_root=bundle_root,
+        public_key=key.public_key(),
+        key_id="evidence-key",
+    )
+    assert verified["evidence_state"] == "verified"
+
+
+def test_qualification_external_signer_scope_and_mixed_key_fail_closed(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, receipt, _ = _private_fixture(tmp_path, key)
+    verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="gold-key")
+    evidence = build_qualification_evidence(
+        manifest=verified_manifest,
+        bundle_root=build_bundle(ROOT)["bundle_root"],
+        private_corpus_receipt_id=receipt["receipt_id"],
+        evaluator_id="eval:v17",
+        evaluator_version="1.0.0",
+        independent_judge_id="judge:v17",
+        judge_verdict_refs=["JVR-" + "A" * 64],
+        measurements=[{"metric": "mutation_rejection_rate", "value": 1.0, "sample_count": 1, "confidence_lower": 1.0, "method_digest": expected_method_digest("mutation_rejection_rate"), "evidence_refs": [receipt["receipt_id"]]}],
+        generated_at="2026-08-02T00:00:00Z",
+    )
+
+    with pytest.raises(QualificationError, match="framework version"):
+        sign_qualification_evidence(
+            evidence,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            public_key=key.public_key(),
+            key_id="evidence-key",
+        )
+    with pytest.raises(QualificationError, match="cannot be combined"):
+        sign_qualification_evidence(
+            evidence,
+            private_key=key,
+            signer=_signer_client(key),
+            framework_version=str(verified_manifest["framework_version"]),
+            public_key=key.public_key(),
+            key_id="evidence-key",
+        )
+
+
+def test_private_manifest_can_delegate_to_external_signer_with_bundle_scope(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    bundle_root = build_bundle(ROOT)["bundle_root"]
+    signed_fixture, _, _ = _private_fixture(tmp_path, key, bundle_root=bundle_root)
+    unsigned = {**signed_fixture, "signature_algorithm": None, "signature_key_id": None, "signature_value": None}
+
+    signed = sign_manifest(
+        unsigned,
+        signer=_signer_client(key),
+        framework_version="17.0.0-dev.1",
+        bundle_root=bundle_root,
+        public_key=key.public_key(),
+        key_id="gold-key",
+    )
+    verified = verify_manifest(
+        signed,
+        public_key=key.public_key(),
+        key_id="gold-key",
+        expected_bundle_root=bundle_root,
+    )
+    assert verified["verification_state"] == "verified"
 
 
 def test_measurement_method_digest_is_bound_to_canonical_method_policy() -> None:

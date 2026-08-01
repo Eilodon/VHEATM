@@ -116,7 +116,7 @@ def _release_private_fixture(tmp_path: Path, key: Ed25519PrivateKey, *, count: i
     corpus["corpus_id"] = expected_private_corpus_id(corpus)
     corpus_path = tmp_path / "private-release-corpus.json"
     corpus_path.write_text(json.dumps(corpus), encoding="utf-8")
-    manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator=str(corpus_path), time_slice_start=corpus["time_slice"]["start"], time_slice_end=corpus["time_slice"]["end"], case_digests=[case["case_digest"] for case in cases], generated_at="2026-08-01T00:00:00Z")
+    manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator=str(corpus_path), time_slice_start=corpus["time_slice"]["start"], time_slice_end=corpus["time_slice"]["end"], case_digests=[case["case_digest"] for case in cases], generated_at="2026-08-01T00:00:00Z", bundle_root=BUNDLE_ROOT)
     signed_manifest = sign_manifest(manifest, private_key=key, key_id="qualification-key")
     receipt = ingest_private_corpus(signed_manifest, corpus_path=corpus_path, public_key=key.public_key(), key_id="qualification-key", verified_at="2026-08-01T00:00:00Z")
     return signed_manifest, receipt
@@ -137,6 +137,8 @@ def _release_judge_fixture(receipt: dict, *, case_refs: list[str] | None = None,
         config_digest="5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c",
         rubric_digest="d" * 64,
         order_seed="e" * 64,
+        framework_version="17.0.0-dev.1",
+        bundle_root=BUNDLE_ROOT,
         items=[{"item_id": case_ref, "text": "Evaluate the private qualification case."} for case_ref in selected_case_refs],
     )
     verdict = {
@@ -145,6 +147,8 @@ def _release_judge_fixture(receipt: dict, *, case_refs: list[str] | None = None,
         "request_id": packet["request_id"],
         "judge_provider_id": packet["judge_provider_id"],
         "judge_model_id": packet["judge_model_id"],
+        "framework_version": packet["framework_version"],
+        "bundle_root": packet["bundle_root"],
         "config_digest": packet["config_digest"],
         "order_digest": packet["order_digest"],
         "status": "complete",

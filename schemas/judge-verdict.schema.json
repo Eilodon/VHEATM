@@ -12,6 +12,8 @@
     "request_id": {"type": "string", "pattern": "^JDR-[A-F0-9]{64}$"},
     "judge_provider_id": {"type": "string", "minLength": 1},
     "judge_model_id": {"type": "string", "minLength": 1},
+    "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "config_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "order_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "status": {"enum": ["complete", "blocked", "unknown"]},
