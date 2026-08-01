@@ -319,6 +319,17 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     )
     assert next(item for item in packet_missing["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
 
+    duplicate_packet = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {**evidence, "independent_judge_packets": [judge_packet, judge_packet]},
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert next(item for item in duplicate_packet["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
+
     verdict_mismatch = {**judge_verdict, "config_digest": "f" * 64}
     verdict_mismatch["verdict_id"] = expected_verdict_id(verdict_mismatch)
     binding_mismatch = evaluate_release_gates(

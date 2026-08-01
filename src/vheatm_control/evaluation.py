@@ -323,28 +323,32 @@ def _verified_qualification_metrics(
     if unknown:
         return {}, [f"qualification evidence contains undeclared release metrics: {', '.join(unknown)}"]
     verdicts = evidence.get("independent_judge_verdicts")
-    verdict_by_id = (
-        {
-            str(verdict.get("verdict_id")): verdict
-            for verdict in verdicts
-            if isinstance(verdict, Mapping) and isinstance(verdict.get("verdict_id"), str)
-        }
-        if isinstance(verdicts, list)
-        else {}
-    )
+    verdict_by_id: dict[str, Mapping[str, Any]] = {}
+    duplicate_verdicts: set[str] = set()
+    if isinstance(verdicts, list):
+        for verdict in verdicts:
+            identifier = verdict.get("verdict_id") if isinstance(verdict, Mapping) else None
+            if isinstance(identifier, str):
+                if identifier in verdict_by_id:
+                    duplicate_verdicts.add(identifier)
+                verdict_by_id[identifier] = verdict
+    if duplicate_verdicts:
+        return {}, [f"qualification evidence contains duplicate independent judge verdict IDs: {', '.join(sorted(duplicate_verdicts))}"]
     missing_verdicts = sorted(ref for ref in verified.get("judge_verdict_refs", []) if ref not in verdict_by_id)
     if missing_verdicts:
         return {}, [f"qualification evidence is missing referenced independent judge verdicts: {', '.join(missing_verdicts)}"]
     packets = evidence.get("independent_judge_packets")
-    packet_by_id = (
-        {
-            str(packet.get("packet_id")): packet
-            for packet in packets
-            if isinstance(packet, Mapping) and isinstance(packet.get("packet_id"), str)
-        }
-        if isinstance(packets, list)
-        else {}
-    )
+    packet_by_id: dict[str, Mapping[str, Any]] = {}
+    duplicate_packets: set[str] = set()
+    if isinstance(packets, list):
+        for packet in packets:
+            identifier = packet.get("packet_id") if isinstance(packet, Mapping) else None
+            if isinstance(identifier, str):
+                if identifier in packet_by_id:
+                    duplicate_packets.add(identifier)
+                packet_by_id[identifier] = packet
+    if duplicate_packets:
+        return {}, [f"qualification evidence contains duplicate independent judge packet IDs: {', '.join(sorted(duplicate_packets))}"]
     missing_packets = sorted(
         str(verdict_by_id[ref].get("packet_id"))
         for ref in verified.get("judge_verdict_refs", [])
