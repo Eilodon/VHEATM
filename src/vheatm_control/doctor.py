@@ -37,8 +37,17 @@ def _load_yaml(path: Path) -> dict:
         return yaml.safe_load(handle)
 
 
-def _replace_digest(raw_text: str, old: str, new: str) -> str:
-    return raw_text.replace(old, new, 1)
+def _replace_digest(raw_text: str, field: str, old: str, new: str) -> str:
+    """Replace one digest value while preserving its YAML quoting style."""
+    candidates = (
+        (f'{field}: "{old}"', f'{field}: "{new}"'),
+        (f"{field}: '{old}'", f"{field}: '{new}'"),
+        (f"{field}: {old}", f"{field}: {new}"),
+    )
+    for rendered_old, rendered_new in candidates:
+        if rendered_old in raw_text:
+            return raw_text.replace(rendered_old, rendered_new, 1)
+    return raw_text
 
 
 def check_repository(root: Path, *, fix: bool = False) -> list[DigestIssue]:
@@ -61,13 +70,12 @@ def check_repository(root: Path, *, fix: bool = False) -> list[DigestIssue]:
             issues.append(DigestIssue(module_rel, "sha256", recorded, "missing file"))
             continue
 
-        actual = _sha256(module_path.read_bytes())
+        module_raw = module_path.read_text(encoding="utf-8")
+        original_module_raw = module_raw
+        actual = _sha256(module_raw.encode("utf-8"))
         if actual != recorded:
             issues.append(DigestIssue(module_rel, "sha256", actual, recorded))
-            if fix:
-                registry_raw = _replace_digest(registry_raw, f"sha256: {recorded}", f"sha256: {actual}")
 
-        module_raw = module_path.read_text(encoding="utf-8")
         module_doc = _load_yaml(module_path) or {}
         disclosure = module_doc.get("contract", {}).get("disclosure", {})
         instruction_rel = disclosure.get("instruction_path")
@@ -86,9 +94,15 @@ def check_repository(root: Path, *, fix: bool = False) -> list[DigestIssue]:
             )
             if fix:
                 module_raw = _replace_digest(
-                    module_raw, f"instruction_sha256: {recorded_instruction}", f"instruction_sha256: {actual_instruction}"
+                    module_raw, "instruction_sha256", recorded_instruction, actual_instruction
                 )
-                module_path.write_text(module_raw, encoding="utf-8")
+
+        if fix and module_raw != original_module_raw:
+            module_path.write_text(module_raw, encoding="utf-8")
+
+        final_module_digest = _sha256(module_raw.encode("utf-8"))
+        if fix and final_module_digest != recorded:
+            registry_raw = _replace_digest(registry_raw, "sha256", recorded, final_module_digest)
 
     if fix and registry_raw != registry_path.read_text(encoding="utf-8"):
         registry_path.write_text(registry_raw, encoding="utf-8")
