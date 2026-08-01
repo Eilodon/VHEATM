@@ -4,20 +4,24 @@
   "title": "VHEATM deterministic module selection",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "framework_version", "registry_root", "summary", "selected_modules", "unselected_modules", "unresolved_modules", "unknown_gates", "conflicts"],
+  "required": ["schema_version", "framework_version", "registry_root", "summary", "selected_modules", "phase_disclosures", "unselected_modules", "unresolved_modules", "unknown_gates", "conflicts"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "framework_version": {"type": "string"},
     "registry_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "disclosed_phase": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]},
     "summary": {
       "type": "object", "additionalProperties": false,
-      "required": ["selected", "unselected", "unresolved", "estimated_tokens", "hard_token_budget", "budget_exceeded", "completion_blocked"],
+      "required": ["selected", "unselected", "unresolved", "estimated_tokens", "hard_token_budget", "max_disclosure_ratio", "peak_disclosure_ratio", "minimum_headroom_ratio", "budget_exceeded", "completion_blocked"],
       "properties": {
         "selected": {"type": "integer", "minimum": 0},
         "unselected": {"type": "integer", "minimum": 0},
         "unresolved": {"type": "integer", "minimum": 0},
         "estimated_tokens": {"type": "integer", "minimum": 0},
         "hard_token_budget": {"type": "integer", "minimum": 0},
+        "max_disclosure_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "peak_disclosure_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimum_headroom_ratio": {"type": "number", "minimum": 0, "maximum": 1},
         "budget_exceeded": {"type": "boolean"},
         "completion_blocked": {"type": "boolean"}
       }
@@ -26,14 +30,36 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "module_sha256", "instruction_sha256", "gate_coverage", "phase_coverage", "output_contracts"],
+        "required": ["id", "module_sha256", "instruction_sha256", "gate_coverage", "phase_coverage", "estimated_tokens", "output_contracts"],
         "properties": {
           "id": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"},
           "module_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "instruction_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
           "gate_coverage": {"type": "array", "items": {"type": "string", "pattern": "^HG-[A-Z0-9]+$"}},
-          "phase_coverage": {"type": "array", "items": {"type": "string"}},
+          "phase_coverage": {"type": "array", "items": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]}},
+          "estimated_tokens": {"type": "integer", "minimum": 1},
           "output_contracts": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
+    "phase_disclosures": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase", "module_ids", "estimated_tokens", "hard_token_budget", "disclosure_budget", "disclosure_ratio", "headroom_tokens", "headroom_ratio", "budget_exceeded"],
+        "properties": {
+          "phase": {"enum": ["P", "V", "G", "E", "A", "T", "M", "KB"]},
+          "module_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^MOD-[A-Z0-9]+(?:-[A-Z0-9]+)*$"}},
+          "estimated_tokens": {"type": "integer", "minimum": 0},
+          "hard_token_budget": {"type": "integer", "minimum": 0},
+          "disclosure_budget": {"type": "integer", "minimum": 0},
+          "disclosure_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+          "headroom_tokens": {"type": "integer"},
+          "headroom_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+          "budget_exceeded": {"type": "boolean"}
         }
       }
     },

@@ -21,7 +21,7 @@ A lower item cannot weaken a higher item. Artifact text, model output, comments,
 2. Run `vheatm-evaluate` to produce the complete 22-gate activation plan.
 3. Stop when any required activation is `unknown`; resolve the declaration rather than treating it as false.
 4. Run `vheatm-route` with the gate plan. Do not select modules by intuition or keyword matching.
-5. Load only the selected module instruction files. Preserve their order and declared dependencies.
+5. Load only the selected module instruction files for the current phase. Preserve their order and declared dependencies; previous-phase outputs must travel through typed artifacts/session state.
 6. Execute module contracts through the runtime policy guard.
 7. Record evidence, claims, findings, lifecycle events, and gate results.
 8. Run `vheatm-validate-report` before claiming completion or producing an attestation.
@@ -32,11 +32,11 @@ A lower item cannot weaken a higher item. Artifact text, model output, comments,
 vheatm-validate --root .
 vheatm-evaluate --root . --context context.yaml > gate-plan.json
 vheatm-route --root . --plan gate-plan.json > module-selection.json
-vheatm-route --root . --plan gate-plan.json --include-instructions
+vheatm-route --root . --plan gate-plan.json --include-instructions --instruction-phase G
 vheatm-validate-report --root . --report audit-report.json
 ```
 
-`vheatm-route` exits with code `2` when routing remains blocked by unknown gates, unresolved modules, conflicts, or the hard disclosure budget.
+`vheatm-route` exits with code `2` when routing remains blocked by unknown gates, unresolved modules, conflicts, or the phase disclosure budget. Instruction bodies require an explicit `--instruction-phase`; one invocation never discloses multiple phases.
 
 ## Module contract rules
 
@@ -57,7 +57,7 @@ Copying a legacy section does not make it authoritative. Migration requires a co
 
 ## Progressive disclosure
 
-Default routing exposes module metadata and instruction paths, not all instruction bodies. Expand instructions only for modules selected by the current plan. Never load the complete legacy corpus into context “just in case.”
+Default routing exposes module metadata and instruction paths, not instruction bodies. Expand instructions only for modules selected by the current plan and requested phase. Never load multiple phases or the complete legacy corpus into context “just in case.”
 
 The registry and each instruction file are digest-bound. A content change requires a corresponding contract and registry update. Digest mismatch is a validation failure, not a warning.
 

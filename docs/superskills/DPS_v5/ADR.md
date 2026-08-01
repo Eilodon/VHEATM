@@ -51,7 +51,7 @@ Cascade Review: ✅ Done
 
 - [verified 2026-08-01] `.venv/bin/vheatm-validate --root .` passed.
 - [verified 2026-08-01] `.venv/bin/pytest -o addopts=''` passed with 174 tests.
-- [verified 2026-08-01] v2 low-risk evaluation and context/plan routing both returned exit 0 with 15 active, 7 inactive, 0 unknown, and 3374/4096 estimated tokens.
+- [verified 2026-08-01] v2 low-risk evaluation and context/plan routing both returned exit 0 with 15 active, 7 inactive, 0 unknown, and 3374/4096 total staged instruction tokens; phase-scoped disclosure was not yet exposed by the router at that historical checkpoint.
 - [verified 2026-08-01] Mutation tests reject activation-state edits, unbound plans, missing validation receipts, forged artifacts, missing module runs, and direct aggregator plan spoofing.
 
 ### Owner
@@ -3361,3 +3361,76 @@ When an external module provider is connected, replay malformed-reference and ta
 
 - Uniqueness is not type safety; evidence arrays need both canonical ID shape and duplicate checks.
 - Artifact builders are security boundaries even when a later validator also consumes the emitted envelope.
+
+## ADR-47 — Enforce phase-scoped disclosure headroom
+
+**Status:** ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `routing` `disclosure` `performance` `RG-11`
+**Change Classification:** `POLICY CHANGE`
+**Review date:** 2026-09-02 — or earlier when the execution context window, tokenizer, or module phase model changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for deterministic phase accounting; `NOT_PRODUCTION_QUALIFIED` for p95 latency and deployed-model context behavior.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — actual provider tokenization and deployed context windows require independent performance evidence.
+
+### Context
+
+The router enforced only a single aggregate instruction budget. That aggregate remained below the 4096-token window (`3374` low-risk, `4023` full route), but it did not implement the roadmap invariant that disclosure is phase-scoped with at least 25% headroom. An aggregate pass could therefore hide a phase whose capability payload consumed almost the whole context window.
+
+### Decision
+
+Add `max_disclosure_ratio: 0.75` to the canonical module registry and include it in the registry root. The router now groups selected instruction estimates by manifest phase, emits a typed `phase_disclosures` ledger, reports peak disclosure and minimum headroom, and blocks the route when any phase exceeds its derived `floor(hard_token_budget * max_disclosure_ratio)` budget. Instruction bodies require an explicit phase request and one invocation returns bodies only for that phase. The aggregate estimate remains visible as the total unique staged instruction set; it is not treated as one disclosure window.
+
+### Options Considered
+
+- Lower the global 4096-token budget to 3072: rejected because it would conflate the context window with a phase budget and incorrectly reject valid multi-phase routing.
+- Keep only the aggregate budget: rejected because it cannot prove the roadmap's phase-scoped headroom invariant.
+- Drop modules to fit the aggregate: rejected because module selection must remain the complete canonical gate-plan dependency closure.
+
+### Impact
+
+Schemas changed: `schemas/module-registry.schema.json`, `schemas/module-selection.schema.json`
+Components changed: `modules/registry.yaml`, `src/vheatm_control/module_router.py`, `SKILL.md`, module-system docs, router/report fixtures and tests
+Breaking change: **YES** for hand-authored module selections that omit phase disclosure accounting; canonical router output remains deterministic.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `registry root → module selection → selection digest → execution/report evidence`
+Cascade Review: ✅ Done — schema, route, report, full-suite, and package checks are required before integration.
+
+### Consequences
+
+- Low-risk routing now reports peak disclosure `1189/4096 = 0.290283` and minimum headroom `0.709717`.
+- The complete 22-owner route reports peak disclosure `1624/4096 = 0.396484` and minimum headroom `0.603516` while preserving all 22 modules.
+- A caller cannot use the instruction-expansion flag without naming a phase; expanded output contains no instruction body from another phase.
+- Artificial per-phase overflow is fail-closed even when the unique aggregate total still fits the raw window.
+- This proves deterministic disclosure accounting only; it does not claim deployed-provider latency, tokenizer parity, or RG-11 release qualification.
+
+### Evidence
+
+- [verified 2026-08-02] Router regression coverage proves phase grouping, 75% cap enforcement, full-route preservation, and synthetic phase-overflow blocking.
+- [verified 2026-08-02] Focused router/report suite passes with `36 passed`; instruction expansion without a phase is rejected, and phase `G` output contains only `G` instruction bodies.
+- [verified 2026-08-02] Low-risk CLI evaluate/route exits 0 with 15 selected, 7 unselected, 0 unresolved, `completion_blocked=false`, peak ratio `0.290283`.
+- [verified 2026-08-02] Full canonical owner route selects all 22 modules with peak ratio `0.396484` and no budget block.
+- [verified 2026-08-02] Full repository suite passes with `326 passed`; control-plane validation, doctor, lock check, and diff check pass.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+No pattern debt introduced. Deployed-model p95 latency, tokenizer-specific accounting, and external RG-11 qualification remain evidence-dependent.
+
+### Next Cycle Trigger
+
+When a production model/provider is connected, compare the conservative byte proxy with measured tokenizer usage and retain the stricter bound; re-run the long-context and phase-disclosure qualification suite.
+
+### Cycle Retrospective
+
+- A total budget is not a disclosure policy when the runtime is staged by phase.
+- The correct fix preserved the full dependency closure and made the phase boundary machine-visible instead of reducing coverage.

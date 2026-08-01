@@ -2,6 +2,7 @@ schema_version: 1.0.0
 framework_version: 17.0.0-dev.1
 gate_owner_coverage: complete
 hard_token_budget: 4096
+max_disclosure_ratio: 0.75
 required_gate_coverage:
 - HG-P
 - HG-V

@@ -345,6 +345,7 @@ def _registry_root(registry: Mapping[str, Any]) -> str:
         "framework_version": registry.get("framework_version"),
         "gate_owner_coverage": registry.get("gate_owner_coverage"),
         "hard_token_budget": registry.get("hard_token_budget"),
+        "max_disclosure_ratio": registry.get("max_disclosure_ratio"),
         "required_gate_coverage": sorted(registry.get("required_gate_coverage", [])),
         "legacy_source": registry.get("legacy_source"),
         "modules": [
@@ -392,6 +393,7 @@ def _route_modules_unchecked(
     gate_plan: Mapping[str, Any],
     *,
     include_instructions: bool = False,
+    instruction_phase: str | None = None,
 ) -> dict[str, Any]:
     if gate_plan.get("framework_version") != manifest.get("framework", {}).get("version"):
         raise ModuleRoutingError("gate plan framework_version does not match the canonical manifest")
@@ -414,6 +416,13 @@ def _route_modules_unchecked(
         missing = sorted(manifest_gates - set(gate_states))
         extra = sorted(set(gate_states) - manifest_gates)
         raise ModuleRoutingError(f"gate plan coverage mismatch; missing={missing}, extra={extra}")
+    phase_items = {str(item["id"]): item for item in manifest.get("phases", {}).get("items", [])}
+    if include_instructions and instruction_phase is None:
+        raise ModuleRoutingError("instruction disclosure requires an explicit phase")
+    if instruction_phase is not None and not include_instructions:
+        raise ModuleRoutingError("instruction disclosure phase requires --include-instructions")
+    if instruction_phase is not None and instruction_phase not in phase_items:
+        raise ModuleRoutingError(f"unknown instruction disclosure phase: {instruction_phase!r}")
 
     selected: set[str] = set()
     reasons: dict[str, list[str]] = {module_id: [] for module_id in modules}
@@ -475,15 +484,48 @@ def _route_modules_unchecked(
             "estimated_tokens": module.estimated_tokens,
             "reasons": reasons[module_id],
         }
-        if include_instructions:
+        if include_instructions and instruction_phase in module.document.get("phase_coverage", []):
             entry["instructions"] = module.instruction_path.read_text(encoding="utf-8")
         entries.append(entry)
 
     hard_budget = int(registry.get("hard_token_budget", 0))
-    budget_exceeded = total_tokens > hard_budget
+    max_disclosure_ratio = float(registry.get("max_disclosure_ratio", 1.0))
+    disclosure_budget = int(hard_budget * max_disclosure_ratio)
+    phase_disclosures: list[dict[str, Any]] = []
+    for phase in sorted(phase_items, key=lambda phase_id: int(phase_items[phase_id]["order"])):
+        phase_modules = [
+            entry
+            for entry in entries
+            if phase in entry.get("phase_coverage", [])
+        ]
+        phase_tokens = sum(int(entry["estimated_tokens"]) for entry in phase_modules)
+        phase_ratio = phase_tokens / hard_budget if hard_budget else 1.0
+        phase_headroom = hard_budget - phase_tokens
+        phase_disclosures.append(
+            {
+                "phase": phase,
+                "module_ids": [entry["id"] for entry in phase_modules],
+                "estimated_tokens": phase_tokens,
+                "hard_token_budget": hard_budget,
+                "disclosure_budget": disclosure_budget,
+                "disclosure_ratio": round(phase_ratio, 6),
+                "headroom_tokens": phase_headroom,
+                "headroom_ratio": round(phase_headroom / hard_budget, 6) if hard_budget else 0.0,
+                "budget_exceeded": phase_tokens > disclosure_budget,
+            }
+        )
+    budget_exceeded = any(item["budget_exceeded"] for item in phase_disclosures)
+    peak_disclosure_ratio = max(
+        (float(item["disclosure_ratio"]) for item in phase_disclosures),
+        default=1.0,
+    )
+    minimum_headroom_ratio = min(
+        (float(item["headroom_ratio"]) for item in phase_disclosures),
+        default=0.0,
+    )
     unknown_gate_ids = sorted(gate for gate, state in gate_states.items() if state == "unknown")
     completion_blocked = bool(conflicts or unresolved or unknown_gate_ids or budget_exceeded)
-    return {
+    result = {
         "schema_version": "1.0.0",
         "framework_version": manifest["framework"]["version"],
         "registry_root": _registry_root(registry),
@@ -493,10 +535,14 @@ def _route_modules_unchecked(
             "unresolved": len(unresolved),
             "estimated_tokens": total_tokens,
             "hard_token_budget": hard_budget,
+            "max_disclosure_ratio": max_disclosure_ratio,
+            "peak_disclosure_ratio": round(peak_disclosure_ratio, 6),
+            "minimum_headroom_ratio": round(minimum_headroom_ratio, 6),
             "budget_exceeded": budget_exceeded,
             "completion_blocked": completion_blocked,
         },
         "selected_modules": entries,
+        "phase_disclosures": phase_disclosures,
         "unselected_modules": sorted(unselected, key=lambda item: item["id"]),
         "unresolved_modules": [
             {"id": module_id, "unknown_gates": unresolved[module_id]}
@@ -505,6 +551,9 @@ def _route_modules_unchecked(
         "unknown_gates": unknown_gate_ids,
         "conflicts": conflicts,
     }
+    if instruction_phase is not None:
+        result["disclosed_phase"] = instruction_phase
+    return result
 
 
 def route_modules(
@@ -514,6 +563,7 @@ def route_modules(
     gate_plan: Mapping[str, Any],
     *,
     include_instructions: bool = False,
+    instruction_phase: str | None = None,
 ) -> dict[str, Any]:
     """Route only a fully bound plan; untrusted fixture routing is private."""
 
@@ -529,6 +579,7 @@ def route_modules(
         modules,
         gate_plan,
         include_instructions=include_instructions,
+        instruction_phase=instruction_phase,
     )
 
 
@@ -537,6 +588,7 @@ def load_and_route(
     gate_plan: Mapping[str, Any],
     *,
     include_instructions: bool = False,
+    instruction_phase: str | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
     manifest = _load_document(root / "manifests" / "vheatm-v17.yaml")
@@ -563,7 +615,14 @@ def load_and_route(
         assert_plan_matches(manifest, gate_plan, require_binding=True, bundle_root=bundle_root)
     except PlanIntegrityError as exc:
         raise ModuleRoutingError(str(exc)) from exc
-    return _route_modules_unchecked(manifest, registry, modules, gate_plan, include_instructions=include_instructions)
+    return _route_modules_unchecked(
+        manifest,
+        registry,
+        modules,
+        gate_plan,
+        include_instructions=include_instructions,
+        instruction_phase=instruction_phase,
+    )
 
 
 def main() -> int:
@@ -573,6 +632,7 @@ def main() -> int:
     source.add_argument("--plan", type=Path, help="Existing gate plan in JSON or YAML format")
     source.add_argument("--context", type=Path, help="Audit context to evaluate before routing")
     parser.add_argument("--include-instructions", action="store_true")
+    parser.add_argument("--instruction-phase", choices=["P", "V", "G", "E", "A", "T", "M", "KB"])
     parser.add_argument("--compact", action="store_true")
     args = parser.parse_args()
     root = resolve_control_root(args.root)
@@ -593,6 +653,7 @@ def main() -> int:
             root,
             gate_plan,
             include_instructions=args.include_instructions,
+            instruction_phase=args.instruction_phase,
         )
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -71,14 +71,14 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts='' -q` — 323 passed in the post-change verification.
+- `.venv/bin/pytest -o addopts='' -q` — 326 passed in the post-change verification.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
 - Pilot regressions reject a mutated `ready` pilot before accepting observations or enabling a changed execution mode.
 - Provider/pilot regressions reject unallowlisted providers and prevent pending providers from crossing the canary boundary.
 - `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs; visibility remains `public_seeded` and evidence state `unverified`.
-- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root is regenerated after this canonical adapter/schema change and remains content-addressed.
+- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 total staged instruction tokens; phase peak 1189/4096 (`0.290283`) with `0.709717` headroom; context route equals plan route; current bundle root is regenerated after this canonical adapter/schema change and remains content-addressed.
 - Session, analyzer, judge, capability, release-gate, private-corpus, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell interpolation, or target-code import/execution in the control runtime; the only subprocess boundary is the explicit digest-bound sandbox adapter with `shell=False`, while activation remains parser-backed (`ast.literal_eval` only).
@@ -104,9 +104,11 @@ Fresh evidence for this cycle:
 - Typed evidence boundary — null/non-string pilot observation and qualification measurement references are rejected before they can enter signed or completed evidence.
 - Execution evidence boundary — null/noncanonical module result and artifact references are rejected before completed module runs and gate derivation.
 - `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` — pass; all module digests match.
-- `.venv/bin/pytest -o addopts='' -q` — pass; `323 passed`.
+- `.venv/bin/pytest -o addopts='' -q` — pass; `326 passed`.
 - `uv build --wheel --sdist` — pass; wheel and sdist contain the updated analyzer/provider/pilot/qualification runtime and schemas.
-- Low-risk evaluate/route — pass; selected 15, unselected 7, unresolved 0, 3374/4096 estimated tokens, `completion_blocked=false`.
+- Low-risk evaluate/route — pass; selected 15, unselected 7, unresolved 0, 3374/4096 total staged instruction tokens, phase peak `0.290283`, minimum headroom `0.709717`, `completion_blocked=false`.
+- Full canonical owner route — pass; all 22 modules selected, total staged instruction tokens 4023/4096, phase peak `1624/4096` (`0.396484`), minimum headroom `0.603516`, `completion_blocked=false`.
+- Phase instruction disclosure — pass; missing `--instruction-phase` is rejected, and an explicit phase request returns only that phase's instruction bodies.
 
 ## Latest prerequisite probe (2026-08-02)
 

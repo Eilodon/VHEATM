@@ -10,6 +10,7 @@
     "legacy_source",
     "gate_owner_coverage",
     "hard_token_budget",
+    "max_disclosure_ratio",
     "required_gate_coverage",
     "modules"
   ],
@@ -31,6 +32,11 @@
       "type": "integer",
       "minimum": 256,
       "maximum": 100000
+    },
+    "max_disclosure_ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
     },
     "required_gate_coverage": {
       "type": "array",

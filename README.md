@@ -43,6 +43,7 @@ The V17 line moves invariants, activation rules, evidence contracts, runtime bou
 - digest chain from registry to module document to instruction file;
 - deterministic routing from the complete gate plan, never from keyword matching or agent intuition;
 - dependency closure, cycle detection, symmetric conflicts, phase ordering, and hard disclosure budgets;
+- phase-scoped disclosure accounting with a canonical 75% per-window cap and at least 25% headroom;
 - unknown gates and unresolved modules remain blocking;
 - progressive disclosure keeps instruction bodies out of context until their modules are selected;
 - pilot migration for context validation, architecture smells, auditor defense, and execution fidelity.

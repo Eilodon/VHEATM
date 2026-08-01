@@ -8,6 +8,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from vheatm_control.module_router import (
+    ModuleRoutingError,
     _load_document,
     _route_modules_unchecked,
     load_and_route,
@@ -69,7 +70,7 @@ def _plan(states: dict[str, str] | None = None):
     }
 
 
-def _route_fixture(plan, *, include_instructions: bool = False):
+def _route_fixture(plan, *, include_instructions: bool = False, instruction_phase: str | None = None):
     manifest = _manifest()
     registry = _load_document(ROOT / "modules" / "registry.yaml")
     issues, modules = validate_module_repository(
@@ -85,6 +86,7 @@ def _route_fixture(plan, *, include_instructions: bool = False):
         modules,
         plan,
         include_instructions=include_instructions,
+        instruction_phase=instruction_phase,
     )
 
 
@@ -146,10 +148,26 @@ def test_unknown_covered_gate_is_not_silently_skipped():
 
 def test_instruction_disclosure_is_opt_in():
     hidden = _route_fixture(_plan({"HG-P": "active"}))
-    expanded = _route_fixture(_plan({"HG-P": "active"}), include_instructions=True)
+    with pytest.raises(ModuleRoutingError, match="explicit phase"):
+        _route_fixture(_plan({"HG-P": "active"}), include_instructions=True)
+    expanded = _route_fixture(_plan({"HG-P": "active"}), include_instructions=True, instruction_phase="P")
     assert "instructions" not in hidden["selected_modules"][0]
     assert expanded["selected_modules"][0]["instructions"].startswith("# Context contract")
+    assert expanded["disclosed_phase"] == "P"
     assert len(hidden["selected_modules"][0]["module_sha256"]) == 64
+
+
+def test_instruction_disclosure_returns_only_the_requested_phase():
+    result = _route_fixture(
+        _plan({"HG-P": "active", "HG-AS": "active"}),
+        include_instructions=True,
+        instruction_phase="P",
+    )
+    by_id = {item["id"]: item for item in result["selected_modules"]}
+
+    assert "instructions" in by_id["MOD-CONTEXT-CONTRACT"]
+    assert "instructions" not in by_id["MOD-SYSTEM-MAPS"]
+    assert "instructions" not in by_id["MOD-ARCHITECTURE-SMELLS"]
 
 
 def test_output_matches_module_selection_schema():
@@ -288,6 +306,40 @@ def test_complete_registry_routes_all_twenty_two_gate_owners():
     assert len(set(ids)) == 22
     assert result["summary"]["budget_exceeded"] is False
     assert result["summary"]["completion_blocked"] is False
+
+
+def test_disclosure_is_phase_scoped_with_required_headroom():
+    result = _route_fixture(_plan({gate["id"]: "active" for gate in _manifest()["gates"]["items"]}))
+    summary = result["summary"]
+    phases = result["phase_disclosures"]
+
+    assert len(phases) == 8
+    assert {module_id for phase in phases for module_id in phase["module_ids"]} == {
+        item["id"] for item in result["selected_modules"]
+    }
+    assert summary["max_disclosure_ratio"] == 0.75
+    assert summary["peak_disclosure_ratio"] <= 0.75
+    assert summary["minimum_headroom_ratio"] >= 0.25
+    assert all(phase["budget_exceeded"] is False for phase in phases)
+
+
+def test_phase_disclosure_overflow_blocks_even_when_global_sum_fits():
+    manifest = _manifest()
+    registry = _load_document(ROOT / "modules" / "registry.yaml")
+    issues, modules = validate_module_repository(
+        ROOT,
+        manifest,
+        module_schema=_load_document(ROOT / "schemas" / "module-contract.schema.json"),
+        registry_schema=_load_document(ROOT / "schemas" / "module-registry.schema.json"),
+    )
+    assert not issues
+    registry = copy.deepcopy(registry)
+    registry["max_disclosure_ratio"] = 0.01
+    result = _route_modules_unchecked(manifest, registry, modules, _plan({"HG-E": "active"}))
+
+    assert result["summary"]["estimated_tokens"] < result["summary"]["hard_token_budget"]
+    assert result["summary"]["budget_exceeded"] is True
+    assert result["summary"]["completion_blocked"] is True
 
 
 def test_triggered_and_meta_completion_dependencies():

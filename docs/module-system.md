@@ -24,7 +24,7 @@ Triggered modules remain selected only by the canonical activation plan. Depende
 
 The registry pins every module digest and every module pins its instruction digest. Repository validation rejects path escape, digest mismatch, unknown gates or phases, multiple authoritative owners for one gate, dependency cycles, asymmetric conflicts, malformed legacy references, missing instructions, and budget overflow.
 
-The emitted `registry_root` commits to the schema and framework versions, coverage mode, disclosure budget, required gate coverage, module identity and digests, and the reviewed legacy archive fingerprint. The archive remains outside the runtime repository, so CI validates that declared source identity and the migrated digest chain but does not independently rehash the omitted source bundle.
+The emitted `registry_root` commits to the schema and framework versions, coverage mode, hard window, 75% phase disclosure cap, required gate coverage, module identity and digests, and the reviewed legacy archive fingerprint. The archive remains outside the runtime repository, so CI validates that declared source identity and the migrated digest chain but does not independently rehash the omitted source bundle.
 
 ## Routing semantics
 
@@ -40,7 +40,7 @@ evidence anchors
   -> adversarial pass
 ```
 
-Hybrid verification branches from evidence anchoring for mandatory findings. Routing blocks completion when the plan contains unknown gates, a module remains unresolved, selected modules conflict, or disclosure exceeds the hard budget.
+Hybrid verification branches from evidence anchoring for mandatory findings. Routing blocks completion when the plan contains unknown gates, a module remains unresolved, selected modules conflict, or any phase exceeds the derived disclosure budget. Instruction bodies can be requested only for one explicit phase at a time; phase transitions carry results through typed artifacts/session state rather than shared prompt context.
 
 ## Migration rule
 
