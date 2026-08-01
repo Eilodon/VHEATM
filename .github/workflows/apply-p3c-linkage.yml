@@ -7,6 +7,14 @@ on:
     paths:
       - .github/p3c.patch.gz.b64.part-*
       - .github/workflows/apply-p3c-linkage.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/p3c.patch.gz.b64.part-*
+      - .github/workflows/apply-p3c-linkage.yml
+      - docs/python-linkage.md
+      - schemas/python-linkage.schema.json
 
 permissions:
   contents: write
