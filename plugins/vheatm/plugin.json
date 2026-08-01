@@ -1,0 +1,9 @@
+{
+  "name": "vheatm",
+  "version": "0.4.0",
+  "description": "Machine-validated audit control plane — evaluator, router, and report validator for AI-executable audits.",
+  "author": {
+    "name": "VHEATM maintainers"
+  },
+  "license": "MIT"
+}

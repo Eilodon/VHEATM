@@ -49,6 +49,7 @@ vheatm-release-gates = "vheatm_control.evaluation:main"
 vheatm-probe-python = "vheatm_control.structural_probe:main"
 vheatm-link-python = "vheatm_control.python_linker:main"
 vheatm-mcp = "vheatm_control.mcp_server:main"
+vheatm-control = "vheatm_control.mcp_server:main"
 vheatm-init = "vheatm_control.init_cmd:main"
 vheatm-doctor = "vheatm_control.doctor:main"
 

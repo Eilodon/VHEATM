@@ -1,0 +1,17 @@
+services:
+  vheatm-validate:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: ghcr.io/vheatm/vheatm-control:latest
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 256m
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        read_only: true
+    working_dir: /workspace

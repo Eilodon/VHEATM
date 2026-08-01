@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.vheatm/vheatm-control -->
 # VHEATM
 
 VHEATM is an AI-executable audit orchestration framework being rebuilt as a **machine-validated, AI-native control plane**.
@@ -50,6 +51,8 @@ The evaluator decides only whether a gate is **active**, **inactive**, or **unkn
 
 ## Quick start
 
+### From source (contributors)
+
 ```bash
 python -m pip install -e '.[dev]'
 vheatm-validate --root .
@@ -57,6 +60,46 @@ vheatm-evaluate --root . --context examples/context-low-risk.yaml > gate-plan.js
 vheatm-route --root . --plan gate-plan.json > module-selection.json
 vheatm-validate-report --root . --report path/to/report.json
 pytest
+```
+
+### As a CLI (no clone required)
+
+```bash
+uvx vheatm-control vheatm-validate --root .
+# or: pip install vheatm-control
+```
+
+### As an MCP server (Claude Code, Cursor, Windsurf, Codex, Gemini CLI, ...)
+
+FastMCP 4.0 is currently a pre-release; `--prerelease=allow` is required until
+it reaches a stable release. Add to your client's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "vheatm": {
+      "command": "uvx",
+      "args": ["--prerelease=allow", "--from", "vheatm-control[mcp]", "vheatm-mcp"]
+    }
+  }
+}
+```
+
+This exposes `vheatm_validate`, `vheatm_evaluate`, `vheatm_route`, and
+`vheatm_validate_report` as MCP tools — the agent calls them directly instead
+of shelling out to the CLI.
+
+### As a Claude Code plugin
+
+```
+/plugin marketplace add vheatm/VHEATM
+/plugin install vheatm@VHEATM
+```
+
+### As a container
+
+```bash
+docker run --rm -v "$PWD:/workspace:ro" ghcr.io/vheatm/vheatm-control vheatm-validate --root /workspace
 ```
 
 `vheatm-evaluate` and `vheatm-route` exit codes:

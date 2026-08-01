@@ -1,0 +1,13 @@
+{
+  "name": "VHEATM",
+  "owner": {
+    "name": "VHEATM maintainers"
+  },
+  "plugins": [
+    {
+      "name": "vheatm",
+      "source": "./plugins/vheatm",
+      "description": "Machine-validated audit control plane — evaluator, router, and report validator for AI-executable audits."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vheatm": {
+      "command": "uvx",
+      "args": ["--prerelease=allow", "--from", "vheatm-control[mcp]", "vheatm-mcp"],
+      "env": {
+        "VHEATM_ROOT": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  }
+}

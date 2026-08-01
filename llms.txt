@@ -1,0 +1,40 @@
+# VHEATM
+
+> Machine-validated, AI-native audit control plane. An evaluator decides
+> whether each of 22 hard gates is active/inactive/unknown from a declared
+> audit context; a router deterministically selects the validated
+> instruction modules a plan requires; a report validator checks the final
+> audit report before it may be treated as complete. Prose never overrides
+> the schemas, manifest, or code — see the source-of-truth order below.
+
+## Start here
+
+- [README.md](README.md): what VHEATM is, install paths (pip/uvx, MCP,
+  Claude Code plugin, container), quick start commands.
+- [SKILL.md](SKILL.md): compact execution router for an AI agent driving an
+  audit.
+- [AGENTS.md](AGENTS.md): non-negotiable invariants for anyone (human or AI)
+  contributing to this repository.
+
+## Source of truth, in order
+
+1. `manifests/vheatm-v17.yaml` — phases, gates, activation expressions.
+2. `policies/runtime-boundaries.yaml` — runtime trust/safety policy.
+3. `schemas/` — machine contracts for context, plans, modules, reports.
+4. `modules/registry.yaml` and `modules/*/module.yaml` — digest-bound
+   instruction modules.
+5. `SKILL.md` — router; cannot override the artifacts above.
+6. `src/vheatm_control/` — executable validation, planning, routing,
+   enforcement, provenance.
+7. `tests/`
+8. `docs/` — explanation only, never authoritative.
+
+## Interfaces
+
+- CLI: `vheatm-validate`, `vheatm-evaluate`, `vheatm-route`,
+  `vheatm-validate-report`, `vheatm-init`, `vheatm-doctor`.
+- MCP server (`vheatm-mcp`, optional `[mcp]` extra): tools
+  `vheatm_validate`, `vheatm_evaluate`, `vheatm_route`,
+  `vheatm_validate_report`.
+- Claude Code plugin: `plugins/vheatm/` (bundles the MCP server + a
+  self-bootstrap hook).
