@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/signer-request.schema.json",
+  "title": "VHEATM external signer request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "framework_version", "bundle_root", "purpose", "key_id", "signature_algorithm", "payload_digest", "payload", "created_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "request_id": {"type": "string", "pattern": "^SGR-[A-F0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "purpose": {"enum": ["qualification", "judge", "host", "supply_chain", "vulnerability", "provenance", "authority"]},
+    "key_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "signature_algorithm": {"const": "ed25519"},
+    "payload_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "payload": {"type": "string", "pattern": "^[A-Za-z0-9_-]+={0,2}$", "maxLength": 1398104},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

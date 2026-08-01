@@ -86,6 +86,8 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "validation-receipt.schema.json",
         "vulnerability-scan.schema.json",
         "trust-key-registry.schema.json",
+        "signer-request.schema.json",
+        "signer-response.schema.json",
     }
 )
 
