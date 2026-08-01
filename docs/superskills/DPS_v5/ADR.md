@@ -3080,3 +3080,284 @@ When the canonical manifest version changes, regenerate the bundle, rerun all ev
 - Content-addressing a caller-supplied version proves only that the caller was consistent with itself.
 - Canonical authority checks belong at every entry point that can derive or consume release identity, not only in the final report builder.
 - A typed failure for a missing authority document preserves fail-closed semantics without inventing an `unknown` version.
+
+## ADR-43 — Bind persisted provider runs to the pilot session
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `provider` `session-integrity` `evidence`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-02 — or earlier when provider-run or pilot schemas change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for local provider/pilot binding; `NOT_PRODUCTION_QUALIFIED` because no qualified external provider or successful pilot observation is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `SCHEMA`
+**VOLATILITY:** `WATCHFUL` — provider deployment and pilot observations remain external inputs.
+
+### Context
+
+An analyzer request already carried a content-bound `session_root`, but the persisted provider-run record discarded it. `complete_pilot()` verified the provider descriptor and network receipt, yet could not prove that an otherwise valid completed run belonged to the pilot session being completed. A run from another session could therefore be replayed as a pilot observation.
+
+### Decision
+
+Persist `session_root` in every provider-run identity and schema. The builder requires a lowercase SHA-256 session root, the persisted-run verifier validates it, and pilot completion requires exact equality with the prepared pilot's session root before accepting the run or its observation references. Evidence references in pilot drills and observations must also be actual non-empty strings; runtime normalization may not turn arbitrary values into evidence IDs.
+
+### Options Considered
+
+- Trust the outer `request_digest`: rejected because the original request is not present at pilot completion and the digest alone cannot be recomputed from the persisted run.
+- Bind only the network receipt: rejected because the receipt authorizes an action, not its pilot/session ownership.
+- Infer session ownership from observation metadata: rejected because caller-supplied observation fields are not an authorization anchor.
+- Convert arbitrary evidence references with `str()`: rejected because values such as `None` would become plausible but untrusted evidence identifiers.
+
+### Impact
+
+Schemas changed: `schemas/provider-run.schema.json`
+Components changed: provider-run builder/verifier, pilot completion, pilot contract tests, lifecycle/knowledge records
+Breaking change: **YES** for persisted provider runs without `session_root`; **NO** for runs emitted from canonical analyzer requests carrying the field.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: MEDIUM
+Cascades: `analyzer request session → provider-run identity → receipt-backed pilot observation → shadow/canary completion`
+Cascade Review: ✅ Done — RED replay regression, provider schema coverage, session mismatch rejection, and non-string evidence-reference regressions cover the changed boundary.
+
+### Consequences
+
+- A completed provider run cannot cross pilot sessions merely because its allowlist and network receipt are valid.
+- The session binding is content-addressed, so changing it creates a new provider-run identity rather than mutating an old record.
+- This closes a local evidence-replay gap but does not qualify the provider, create private gold evidence, or establish a successful shadow/canary observation.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression demonstrated that a run built from a different request session was accepted by `complete_pilot()` because the persisted record had no session binding.
+- [verified 2026-08-02] Provider/pilot focused suite passes with `21 passed`; the mismatch run is rejected before observation completion and non-string drill/observation references are rejected.
+- [verified 2026-08-02] Full repository validation, package builds, and the remaining external-prerequisite audit are required before integration; no local fixture is promoted to provider qualification or GA.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Qualified provider, external authority, private qualification, trusted scanner provenance, host deployment, UX-04, and successful shadow/canary observation remain external.
+
+### Next Cycle Trigger
+
+When a real provider is supplied, bind its analyzer requests and completed observations to the target pilot session, re-run provider outage and rollback drills, and require the complete externally verified release report before canary.
+
+### Cycle Retrospective
+
+- An authorization receipt can be valid for the wrong operational session; ownership scope must be persisted alongside the action evidence.
+- Direct API normalization is an evidence boundary: preserve typed references and reject non-string values instead of coercing them into identifiers.
+
+## ADR-44 — Verify analyzer result identity before issuing validation receipts
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `analyzer` `provenance` `taint` `session-integrity`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-02 — or earlier when analyzer result or validation-receipt contracts change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for local analyzer/result verification; `NOT_PRODUCTION_QUALIFIED` for external provider and independent qualification claims.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `SCHEMA`
+**VOLATILITY:** `WATCHFUL` — analyzer implementations and external provider qualification remain changeable inputs.
+
+### Context
+
+`verify_analyzer_result()` checked the candidate output bundle and then issued a validation receipt, but it did not recompute the result identity or verify that the result's session, source references, and broker receipt were the ones emitted for that result. The persisted record also omitted the canonical redacted `tool_request`, so a downstream verifier could not recompute receipt request/action digests against the request. A caller could alter the session or source-reference fields while retaining valid output bytes and obtain a receipt detached from the original analyzer request.
+
+### Decision
+
+Before issuing a validation receipt, persist the redacted canonical read `tool_request`, require a complete candidate analyzer result, recompute its `ANZ-*` identity, validate the request/session and source-reference formats, verify the read tool receipt identity/timestamps and request/action digests, re-verify the probe/link output, and compare the declared source IDs exactly to the verified output. The verifier remains taint-preserving: a validated output bundle does not clear raw source taint.
+
+### Options Considered
+
+- Verify only the output digest: rejected because output integrity does not bind the result to its request/session or declared source lineage.
+- Trust the result ID without recomputing it: rejected because the ID is caller input and would not prevent a relabeled record.
+- Issue a receipt for any schema-shaped tool receipt: rejected because receipt identity, read scope, decision, and timestamps are part of the authorization evidence.
+- Promote source records to verified when probe parsing succeeds: rejected because structural parsing is not semantic/source trust clearance.
+
+### Impact
+
+Schemas changed: `schemas/analyzer-result.schema.json`
+Components changed: `src/vheatm_control/analyzers.py`, analyzer contract tests, lifecycle/knowledge records
+Breaking change: **YES** for malformed or re-labeled analyzer results submitted to the direct verifier; **NO** for results emitted by the canonical local analyzer provider.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: MEDIUM
+Cascades: `analyzer request/session → candidate result identity → verified output/source refs → validation receipt → module evidence`
+Cascade Review: ✅ Done — RED scope/source-reference drift regression and existing taint-preservation coverage exercise the direct receipt boundary.
+
+### Consequences
+
+- A validation receipt cannot be minted for a result that was relabeled to another session or source set.
+- Source lineage is checked against the actual verified probe/link output, reducing evidence-reference substitution risk.
+- This hardens the local analyzer seam but does not establish external provider qualification, semantic correctness of findings, or production GA evidence.
+
+### Evidence
+
+- [verified 2026-08-02] RED regressions accepted a result with a changed session root, substituted source references, or a detached tool request before the identity/coverage/digest checks existed.
+- [verified 2026-08-02] Analyzer/provider/pilot focused suite passes with `26 passed`; the full repository suite passes with `323 passed`.
+- [verified 2026-08-02] Raw probe source taint remains unchanged after validation; no analyzer result is promoted to independent qualification evidence.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External analyzer/provider qualification, independent judging, private corpus, signer custody, trusted host/scanner authority, UX-04, and successful pilot observation remain external.
+
+### Next Cycle Trigger
+
+When a qualified external analyzer is supplied, bind its result schema and provider/session descriptor to this same receipt boundary, then independently measure output correctness and failure behavior without clearing taint by signature alone.
+
+### Cycle Retrospective
+
+- A candidate output can be correct while the enclosing result record is unrelated; verify the envelope and lineage before issuing any downstream receipt.
+- Content-addressed identity is useful only when the verifier recomputes it from the same canonical fields used by the producer.
+
+## ADR-45 — Reject non-string pilot and qualification evidence references
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `qualification` `evidence-integrity`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-02 — or earlier when pilot or qualification evidence contracts change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for local typed-reference boundaries; `NOT_PRODUCTION_QUALIFIED` for external evidence and pilot claims.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — pilot observations and qualification evidence remain external inputs.
+
+### Context
+
+Pilot observations and qualification measurements carry caller-supplied evidence references. Direct runtime paths must not turn arbitrary values into plausible identifiers: `complete_pilot()` could stringify a null observation ID, and qualification measurement validation could stringify a null evidence reference before signing/verifying the evidence record.
+
+### Decision
+
+Require non-empty strings for pilot observation IDs, provider IDs, timestamps supplied by callers, rollback plans, and qualification measurement evidence references. Preserve the typed values in canonical records and reject malformed values before identity calculation, pilot completion, or qualification signing. Existing content-addressed provider-run, judge, and receipt references remain separately validated by their specific boundaries.
+
+### Options Considered
+
+- Rely only on the output schema: rejected because direct builders and verifiers are callable before schema validation, and signed evidence must be safe at the producer boundary.
+- Continue `str()` normalization: rejected because values such as `None` can become accepted-looking evidence rather than an explicit failure.
+- Accept arbitrary JSON scalar references: rejected because reference identity and downstream resolution require stable string values.
+
+### Impact
+
+Schemas changed: none
+Components changed: pilot completion, qualification measurement validation, pilot/qualification tests, lifecycle/knowledge records
+Breaking change: **YES** for malformed direct API inputs; **NO** for canonical typed records.
+
+IMPACT RADIUS: **MODERATE**
+BLAST RADIUS: MODERATE
+Cascades: `caller evidence → pilot/qualification identity → signed or completed evidence → release evaluation`
+Cascade Review: ✅ Done — malformed reference regressions and focused pilot/qualification coverage exercise both producer boundaries.
+
+### Consequences
+
+- Null and non-string evidence values fail closed before they can enter content-addressed pilot or qualification records.
+- Direct APIs and schema validation now agree on the reference type contract.
+- This removes a local evidence-shaping gap but does not create private gold data, independent judge evidence, qualified providers, or GA eligibility.
+
+### Evidence
+
+- [verified 2026-08-02] Pilot completion rejects a null observation ID and qualification evidence construction rejects a null measurement evidence reference.
+- [verified 2026-08-02] Focused pilot/qualification suite passes with `20 passed`; the full repository suite passes with `323 passed`.
+- [verified 2026-08-02] No production or external qualification evidence is minted by these tests.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Remaining external authority and qualification prerequisites remain unchanged.
+
+### Next Cycle Trigger
+
+When a real qualification corpus or pilot provider is supplied, reject any non-string reference at ingestion and re-run independent evidence, rollback, and shadow/canary qualification gates before release decisions.
+
+### Cycle Retrospective
+
+- A schema-valid-looking string can be manufactured from a non-string caller value; producer boundaries must type-check before canonicalization.
+- Evidence reference normalization is not harmless formatting when the normalized value participates in signatures or release authorization.
+
+## ADR-46 — Type-check module execution evidence references
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `execution` `artifacts` `evidence-integrity`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-02 — or earlier when module-run or artifact contracts change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for local execution/artifact boundaries; `NOT_PRODUCTION_QUALIFIED` for external module providers.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — provider output contracts remain external-input boundaries.
+
+### Context
+
+Module providers return model- or adapter-controlled evidence references. The execution path validated uniqueness but could stringify non-string values before artifact or module-run validation, and artifact source references were not checked against their content-addressed ID patterns at the direct builder boundary.
+
+### Decision
+
+Require content-addressed string IDs for module decision evidence (`SRC-*`, `CLM-*`, `VRF-*`, `ART-*`), artifact source refs (`SRC-*`), and artifact validation-receipt refs (`VRF-*`) in both builders and verifiers. Reject malformed values before computing or accepting execution/artifact identities; preserve taint and existing receipt requirements.
+
+### Options Considered
+
+- Depend on the artifact schema only: rejected because direct execution and artifact APIs can be called before a separate schema pass.
+- Convert references with `str()` and resolve later: rejected because a forged non-string value can become a plausible unresolved or signed-looking reference.
+- Allow opaque provider reference formats: rejected because downstream gate derivation relies on the canonical evidence namespace.
+
+### Impact
+
+Schemas changed: none
+Components changed: `src/vheatm_control/execution.py`, execution contract tests, lifecycle/knowledge records
+Breaking change: **YES** for malformed provider output and artifact inputs; **NO** for canonical content-addressed evidence.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `module provider output → artifact envelope → module run → derived gate result → report evidence`
+Cascade Review: ✅ Done — provider-output and artifact-builder regressions reject non-string refs before module-run completion.
+
+### Consequences
+
+- Provider output cannot enter a completed module run with a null or untyped evidence reference.
+- Artifact source and validation receipt fields now align with their canonical schemas at direct API boundaries.
+- This closes a local evidence-shaping gap but does not grant provider trust, semantic correctness, or GA eligibility.
+
+### Evidence
+
+- [verified 2026-08-02] Execution suite passes with `6 passed`; provider output containing `None` and artifact source refs containing `None` are rejected.
+- [verified 2026-08-02] Full repository suite passes with `323 passed` after this change; no external provider or production execution evidence is minted.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External provider qualification and deployment authority remain unavailable.
+
+### Next Cycle Trigger
+
+When an external module provider is connected, replay malformed-reference and taint-preservation tests against its adapter output before accepting any completed module run or release evidence.
+
+### Cycle Retrospective
+
+- Uniqueness is not type safety; evidence arrays need both canonical ID shape and duplicate checks.
+- Artifact builders are security boundaries even when a later validator also consumes the emitted envelope.

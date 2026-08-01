@@ -817,3 +817,87 @@ modules: [MOD-CONTEXT-CONTRACT, MOD-CLOSURE-METRICS]
 - Framework version authority is derived only from the canonical manifest; evaluator/report boundaries reject caller drift: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-43 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
+
+## Cycle: pilot-provider-session-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Pilot session binding: added ✅
+
+### Bug Patterns
+- A provider run carried a valid network receipt but discarded the analyzer request session, allowing cross-session pilot replay: observed and fixed with persisted session scope and exact pilot comparison; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Authorization proves the action and receipt binding, not that the action belongs to the current pilot; session ownership must be persisted: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Completed pilot observations require provider-run session equality and typed evidence references: added to CONTEXT.md Architectural Decisions ✅
+
+---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-44 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CODE-PATH-TRACE, MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY]
+
+## Cycle: analyzer-result-receipt-integrity
+
+### New Domain Terms Added to CONTEXT.md
+- Verified analyzer result identity: added ✅
+
+### Bug Patterns
+- Analyzer output verification ignored the enclosing result/session/source-reference identity and omitted the canonical tool request before minting a validation receipt: observed and fixed with persisted request, digest recomputation, and exact output coverage; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Output digest integrity does not prove envelope or lineage integrity; receipt issuance must verify both: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Candidate analyzer results remain tainted and require recomputed identity, receipt binding, and exact source coverage before validation evidence: added to CONTEXT.md Architectural Decisions ✅
+
+---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-45 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY]
+
+## Cycle: typed-pilot-qualification-references
+
+### New Domain Terms Added to CONTEXT.md
+- Typed evidence references: added ✅
+
+### Bug Patterns
+- Pilot observation IDs and qualification measurement evidence refs accepted values after `str()` coercion at direct producer boundaries: observed and fixed with non-empty string checks; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Reference normalization can alter signed or release-relevant identity; type-check before canonicalization: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Producer boundaries reject non-string pilot and qualification evidence refs before identity, signing, or completion: added to CONTEXT.md Architectural Decisions ✅
+
+---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-46 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS]
+
+## Cycle: typed-execution-evidence-references
+
+### New Domain Terms Added to CONTEXT.md
+- Typed execution evidence references: added ✅
+
+### Bug Patterns
+- Module provider outputs and artifact builders accepted untyped refs after normalization: observed and fixed with canonical namespace checks; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Duplicate checks do not establish evidence type or namespace: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Module-run and artifact producer boundaries reject untyped evidence refs before gate derivation: added to CONTEXT.md Architectural Decisions ✅
+
+---

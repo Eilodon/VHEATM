@@ -49,6 +49,10 @@
 - **Persisted supply-chain scope:** the canonical framework version carried in attestation, vulnerability-scan, and provenance records and compared at producer, bundle, and release-evaluation boundaries. <!-- from ADR: ADR-40 -->
 - **Pilot drill completeness:** the five required shadow/canary recovery drills, each with non-empty evidence references, that must exist before a pilot can become ready. <!-- from ADR: ADR-41 -->
 - **Canonical framework authority:** the manifest-derived framework version that release evaluation, report validation, and signed evidence scope must equal; caller-supplied versions are not authoritative. <!-- from ADR: ADR-42 -->
+- **Pilot session binding:** the provider-run `session_root` that must equal the prepared pilot session before a completed provider observation is accepted. <!-- from ADR: ADR-43 -->
+- **Verified analyzer result identity:** the recomputed `ANZ-*` envelope identity, persisted redacted tool request, receipt digest binding, and exact output/source-reference coverage required before a candidate analyzer result can mint a validation receipt. <!-- from ADR: ADR-44 -->
+- **Typed evidence references:** non-empty string pilot and qualification references that must be checked before content-addressing, signing, or completing release evidence. <!-- from ADR: ADR-45 -->
+- **Typed execution evidence references:** canonical `SRC-*`, `CLM-*`, `VRF-*`, and `ART-*` strings required in module outputs and artifact envelopes before execution evidence is accepted. <!-- from ADR: ADR-46 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -98,6 +102,10 @@
 - Supply-chain signer scope must be recoverable from the signed record; persist `framework_version` in every RG-13 artifact and reject verified scans or provenance that drift from the attestation/release. <!-- from ADR: ADR-40 -->
 - Pilot schema and runtime must bind profile flags and terminal payloads: shadow is read-only, canary enables tools, complete requires observations/timestamp, and rollback requires reason/timestamp. <!-- from ADR: ADR-41 -->
 - Release evaluator/report validation must compare framework version to the canonical manifest before deriving metrics or accepting a report identity. <!-- from ADR: ADR-42 -->
+- Persisted provider runs must carry the analyzer request's session root and pilot completion must compare it to the prepared pilot; a valid network receipt alone does not establish pilot ownership. <!-- from ADR: ADR-43 -->
+- Analyzer validation receipts require recomputed result identity, persisted request/session scope, read receipt request/action digest integrity, and exact source-reference coverage; output parsing alone cannot clear taint. <!-- from ADR: ADR-44 -->
+- Pilot and qualification evidence producers must reject non-string references before identity or signature calculation; schema validation is not a substitute for producer-boundary typing. <!-- from ADR: ADR-45 -->
+- Module execution and artifact builders must reject non-string or noncanonical evidence references before building completed runs or derived gate evidence. <!-- from ADR: ADR-46 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -139,3 +147,7 @@
 - [2026-08] A signer request can carry the right framework while the persisted artifact carries none or another version | Include `framework_version` in each supply-chain identity and compare it at producer, canonical-bundle, and RG-13 evaluation boundaries. <!-- from ADR: ADR-40 -->
 - [2026-08] A pilot could be marked ready with only four recovery drills or empty drill evidence, and a direct schema consumer could accept an incomplete terminal record | Require all five roadmap drills, non-empty refs, profile flag invariants, and terminal-state payloads at both runtime and schema boundaries. <!-- from ADR: ADR-41 -->
 - [2026-08] A caller could label release evidence with a framework version that was not the manifest version | Read the canonical manifest at evaluation/report boundaries and reject mismatches before trust resolution or gate derivation. <!-- from ADR: ADR-42 -->
+- [2026-08] A provider receipt can authorize a valid network action from the wrong pilot session | Persist `session_root` in the provider-run identity and reject cross-session observation replay before completion. <!-- from ADR: ADR-43 -->
+- [2026-08] A valid analyzer output can be wrapped in a relabeled result and still receive a validation receipt | Recompute the `ANZ-*` identity and compare source references to the verified output before issuing the receipt. <!-- from ADR: ADR-44 -->
+- [2026-08] `None` could be stringified into pilot or qualification evidence references before downstream validation | Type-check non-empty strings at the direct producer boundary before signing or completing evidence. <!-- from ADR: ADR-45 -->
+- [2026-08] Module execution checked evidence uniqueness but not reference type/namespace at its provider boundary | Require canonical evidence IDs in results and artifact envelopes before gate derivation. <!-- from ADR: ADR-46 -->

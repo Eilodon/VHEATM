@@ -61,6 +61,10 @@
 - Supply-chain attestation, vulnerability-scan, and provenance records now persist the canonical framework version; producer signing, verified-scan attachment, canonical bundle binding, and RG-13 evaluation reject scope drift.
 - Pilot preparation now requires all five roadmap drills, non-empty drill evidence, and schema-bound shadow/canary profile plus terminal-state invariants.
 - Release evaluation and report validation now reject caller-supplied framework versions that differ from the canonical manifest before evidence metrics or pilot authorization are derived.
+- Persisted provider runs now retain the analyzer request `session_root`; pilot completion rejects valid receipt-backed runs from another session and rejects non-string evidence references instead of coercing them into identifiers.
+- Analyzer validation now persists the redacted read `tool_request`, recomputes the `ANZ-*` result identity, binds receipt request/action digests to that request, validates session scope, and requires exact source-reference coverage before issuing a validation receipt; source taint remains unchanged.
+- Pilot and qualification evidence producers now reject non-string observation IDs, provider metadata, timestamps, rollback plans, and measurement evidence references before identity, signing, or completion.
+- Module execution and artifact builders now require canonical typed evidence IDs before accepting provider output or deriving gate evidence.
 
 ## Verification gates
 
@@ -95,8 +99,13 @@ Fresh evidence for this cycle:
 - Supply-chain scope boundary — attestation, vulnerability, and provenance schemas persist `framework_version`; external signer mismatch, foreign verified-scan attachment, and evaluator mismatch regressions remain fail-closed. Operational signer/scanner authority remains unavailable.
 - Pilot boundary — provider-outage drill, non-empty drill evidence, read-only/tool-enabled profile flags, and complete/rollback payload requirements are enforced by runtime and `pilot-run.schema.json`.
 - Framework authority boundary — evaluator and report-validator regressions reject noncanonical caller versions; manifest YAML failure is surfaced as typed evaluation failure.
+- Pilot session boundary — a completed provider run from another session is rejected after rehashing its new identity; provider-run schema/verification require the session digest and direct pilot APIs reject non-string evidence references.
+- Analyzer result boundary — re-scoped or source-reference-substituted candidate results are rejected before a validation receipt is emitted; focused analyzer/provider/pilot coverage passes.
+- Typed evidence boundary — null/non-string pilot observation and qualification measurement references are rejected before they can enter signed or completed evidence.
+- Execution evidence boundary — null/noncanonical module result and artifact references are rejected before completed module runs and gate derivation.
 - `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` — pass; all module digests match.
-- `uv build --wheel --sdist` — pass; both wheel and sdist contain the updated supply-chain schemas/runtime.
+- `.venv/bin/pytest -o addopts='' -q` — pass; `323 passed`.
+- `uv build --wheel --sdist` — pass; wheel and sdist contain the updated analyzer/provider/pilot/qualification runtime and schemas.
 - Low-risk evaluate/route — pass; selected 15, unselected 7, unresolved 0, 3374/4096 estimated tokens, `completion_blocked=false`.
 
 ## Latest prerequisite probe (2026-08-02)
