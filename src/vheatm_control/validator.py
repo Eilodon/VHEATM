@@ -52,6 +52,8 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "qualification-evidence.schema.json",
         "qualification-manifest.schema.json",
         "qualification-run.schema.json",
+        "private-qualification-corpus.schema.json",
+        "private-corpus-receipt.schema.json",
         "release-gate-report.schema.json",
         "judge-packet.schema.json",
         "judge-verdict.schema.json",

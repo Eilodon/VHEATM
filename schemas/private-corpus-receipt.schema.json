@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/private-corpus-receipt.schema.json",
+  "title": "VHEATM verified private corpus ingestion receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "manifest_id", "manifest_digest", "corpus_id", "corpus_digest", "framework_version", "visibility", "time_slice", "case_count", "case_refs", "payload_disclosed", "verification_state", "verified_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "receipt_id": {"type": "string", "pattern": "^PQR-[A-F0-9]{64}$"},
+    "manifest_id": {"type": "string", "pattern": "^QMF-[A-F0-9]{64}$"},
+    "manifest_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "corpus_id": {"type": "string", "pattern": "^PQC-[A-F0-9]{64}$"},
+    "corpus_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "visibility": {"const": "private"},
+    "time_slice": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "properties": {"start": {"type": "string", "format": "date-time"}, "end": {"type": "string", "format": "date-time"}}},
+    "case_count": {"type": "integer", "minimum": 1},
+    "case_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^PQC-[A-Z0-9-]+$"}},
+    "payload_disclosed": {"const": false},
+    "verification_state": {"const": "verified"},
+    "verified_at": {"type": "string", "format": "date-time"}
+  }
+}

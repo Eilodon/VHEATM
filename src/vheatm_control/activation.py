@@ -191,7 +191,8 @@ def _tokenize(expression: str) -> list[Token]:
         if not match:
             raise ActivationSyntaxError(f"unsupported token at offset {offset}: {expression[offset:offset + 12]!r}")
         kind = match.lastgroup
-        assert kind is not None
+        if kind is None:
+            raise ActivationSyntaxError(f"token kind is unavailable at offset {offset}")
         if kind != "SPACE":
             tokens.append(Token(kind, match.group(), offset))
         offset = match.end()

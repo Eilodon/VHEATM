@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 from .bundle import build_bundle, resolve_control_root
 from .judge import JudgeError, validate_verdict_identity
 from .qualification import QualificationError, verify_manifest, verify_qualification_evidence
+from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
 from .serialization import load_json, load_yaml
 from .supply_chain import (
     SupplyChainError,
@@ -118,6 +119,7 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
     bindings: list[dict[str, str]] = []
     for kind, field in (
         ("qualification_manifest", "manifest_id"),
+        ("private_corpus_receipt", "receipt_id"),
         ("qualification_evidence", "evidence_id"),
         ("supply_chain_attestation", "attestation_id"),
         ("vulnerability_scan", "scan_id"),
@@ -148,6 +150,7 @@ def expected_release_report_id(report: Mapping[str, Any]) -> str:
 def _validate_typed_evidence_documents(root: Path, evidence: Mapping[str, Any]) -> None:
     schema_by_field = {
         "qualification_manifest": "qualification-manifest.schema.json",
+        "private_corpus_receipt": "private-corpus-receipt.schema.json",
         "qualification_evidence": "qualification-evidence.schema.json",
         "supply_chain_attestation": "supply-chain-attestation.schema.json",
         "vulnerability_scan": "vulnerability-scan.schema.json",
@@ -170,6 +173,7 @@ def _verified_qualification_metrics(
     framework_version: str,
     verification_keys: Mapping[str, Ed25519PublicKey] | None,
     verification_key_ids: Mapping[str, str] | None,
+    schema_root: Path | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     qualification = evidence.get("qualification_evidence")
     if not isinstance(qualification, Mapping):
@@ -190,6 +194,15 @@ def _verified_qualification_metrics(
         )
     except QualificationError as exc:
         return {}, [f"qualification evidence verification failed: {exc}"]
+    receipt = evidence.get("private_corpus_receipt")
+    if not isinstance(receipt, Mapping):
+        return {}, ["qualification evidence is missing a verified private corpus receipt"]
+    if verified.get("private_corpus_receipt_id") != receipt.get("receipt_id"):
+        return {}, ["qualification evidence is not bound to the supplied private corpus receipt"]
+    try:
+        verify_private_corpus_receipt(receipt, manifest=verified_manifest, expected_framework_version=framework_version, root=schema_root)
+    except PrivateCorpusError as exc:
+        return {}, [f"private corpus receipt verification failed: {exc}"]
     metrics = verified.get("metrics")
     if not isinstance(metrics, Mapping):
         return {}, ["verified qualification evidence has no metrics object"]
@@ -304,6 +317,7 @@ def derive_verified_evidence_metrics(
     expected_bundle_root: str | None = None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
+    schema_root: Path | None = None,
 ) -> dict[str, Any]:
     """Derive metrics only after cryptographic verification at this boundary.
 
@@ -317,6 +331,7 @@ def derive_verified_evidence_metrics(
         framework_version=framework_version or "",
         verification_keys=verification_keys,
         verification_key_ids=verification_key_ids,
+        schema_root=schema_root,
     )
     supply_metrics, _ = _verified_supply_chain_metrics(
         evidence,
@@ -335,6 +350,7 @@ def evaluate_release_gates(
     expected_bundle_root: str | None = None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
+    schema_root: Path | None = None,
 ) -> dict[str, Any]:
     if not isinstance(evidence, Mapping):
         raise EvaluationError("release evidence must be an object")
@@ -345,6 +361,7 @@ def evaluate_release_gates(
         framework_version=framework_version,
         verification_keys=verification_keys,
         verification_key_ids=verification_key_ids,
+        schema_root=schema_root,
     )
     supply_metrics, supply_errors = _verified_supply_chain_metrics(
         evidence,
@@ -431,6 +448,7 @@ def main() -> int:
             expected_bundle_root=build_bundle(root)["bundle_root"],
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
+            schema_root=root,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")

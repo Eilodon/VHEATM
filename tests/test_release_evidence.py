@@ -16,6 +16,7 @@ from vheatm_control.qualification import (
     verify_manifest,
 )
 from vheatm_control.serialization import load_json
+from vheatm_control.qualification_private import expected_private_case_digest, expected_private_corpus_digest, expected_private_corpus_id, ingest_private_corpus
 from vheatm_control.supply_chain import (
     build_supply_chain_attestation,
     build_vulnerability_scan,
@@ -54,17 +55,23 @@ def test_release_gates_ignore_unverified_metric_shortcuts() -> None:
     assert report["summary"]["unknown"] == 16
 
 
-def test_release_gates_require_cryptographically_verified_qualification_and_supply_chain() -> None:
-    key = Ed25519PrivateKey.generate()
-    manifest = build_private_time_slice_manifest(
-        framework_version="17.0.0-dev.1",
-        private_locator="vault://qualification/v17/release-test",
-        time_slice_start="2026-07-01T00:00:00Z",
-        time_slice_end="2026-08-01T00:00:00Z",
-        case_digests=["a" * 64],
-        generated_at="2026-08-01T00:00:00Z",
-    )
+def _release_private_fixture(tmp_path: Path, key: Ed25519PrivateKey) -> tuple[dict, dict]:
+    case = {"case_id": "PQC-CASE-RELEASE", "captured_at": "2026-07-15T00:00:00Z", "payload": {"family": "release", "label": "yes"}}
+    case["case_digest"] = expected_private_case_digest(case)
+    corpus = {"schema_version": "1.0.0", "corpus_id": "PQC-" + "0" * 64, "framework_version": "17.0.0-dev.1", "visibility": "private", "time_slice": {"start": "2026-07-01T00:00:00Z", "end": "2026-08-01T00:00:00Z"}, "cases": [case]}
+    corpus["corpus_digest"] = expected_private_corpus_digest(corpus)
+    corpus["corpus_id"] = expected_private_corpus_id(corpus)
+    corpus_path = tmp_path / "private-release-corpus.json"
+    corpus_path.write_text(json.dumps(corpus), encoding="utf-8")
+    manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator=str(corpus_path), time_slice_start=corpus["time_slice"]["start"], time_slice_end=corpus["time_slice"]["end"], case_digests=[case["case_digest"]], generated_at="2026-08-01T00:00:00Z")
     signed_manifest = sign_manifest(manifest, private_key=key, key_id="qualification-key")
+    receipt = ingest_private_corpus(signed_manifest, corpus_path=corpus_path, public_key=key.public_key(), key_id="qualification-key", verified_at="2026-08-01T00:00:00Z")
+    return signed_manifest, receipt
+
+
+def test_release_gates_require_cryptographically_verified_qualification_and_supply_chain(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, private_receipt = _release_private_fixture(tmp_path, key)
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
     judge_verdict = {
         "schema_version": "1.0.0", "packet_id": "JPK-" + "a" * 64, "request_id": "JDR-" + "b" * 64,
@@ -87,11 +94,12 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         "scope_limitations_present": True, "unknown_risks_present": True, "certification_claims_absent": True,
     }
     measurements = [
-        {"metric": name, "value": value, "sample_count": 1000, "confidence_lower": float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 1.0, "method_digest": "c" * 64, "evidence_refs": [f"EV-{name}"]}
+        {"metric": name, "value": value, "sample_count": 1000, "confidence_lower": float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 1.0, "method_digest": "c" * 64, "evidence_refs": [private_receipt["receipt_id"], f"EV-{name}"]}
         for name, value in values.items()
     ]
     qualification = build_qualification_evidence(
         manifest=verified_manifest,
+        private_corpus_receipt_id=private_receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
         independent_judge_id="judge:v17",
@@ -136,6 +144,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     provenance["statement_id"] = expected_provenance_statement_id(provenance)
     evidence = {
         "qualification_manifest": signed_manifest,
+        "private_corpus_receipt": private_receipt,
         "qualification_evidence": sign_qualification_evidence(qualification, private_key=key, key_id="qualification-key"),
         "independent_judge_verdicts": [judge_verdict],
         "supply_chain_attestation": attestation,
@@ -149,8 +158,24 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         expected_bundle_root=base_attestation["bundle_root"],
         verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
+    Draft202012Validator(load_json((ROOT / "schemas" / "release-gate-report.schema.json").read_text())).validate(report)
+
+    missing_receipt = dict(evidence)
+    missing_receipt.pop("private_corpus_receipt")
+    blocked_report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        missing_receipt,
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert blocked_report["summary"]["ga_eligible"] is False
+    assert next(item for item in blocked_report["gates"] if item["gate_id"] == "RG-00")["status"] == "unknown"
 
 
 def test_supply_chain_evidence_is_canonical_and_locked_but_not_signed_yet(tmp_path) -> None:

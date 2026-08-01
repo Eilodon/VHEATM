@@ -166,6 +166,7 @@ def expected_qualification_evidence_id(evidence: Mapping[str, Any]) -> str:
 def build_qualification_evidence(
     *,
     manifest: Mapping[str, Any],
+    private_corpus_receipt_id: str,
     evaluator_id: str,
     evaluator_version: str,
     independent_judge_id: str,
@@ -179,6 +180,8 @@ def build_qualification_evidence(
         raise QualificationError("qualification evaluator and independent judge identities are required")
     if evaluator_id == independent_judge_id:
         raise QualificationError("qualification evaluator and independent judge must be independent identities")
+    if not isinstance(private_corpus_receipt_id, str) or not re.fullmatch(r"PQR-[A-F0-9]{64}", private_corpus_receipt_id):
+        raise QualificationError("qualification evidence requires a content-addressed private corpus receipt")
     normalized_judge_refs = sorted(set(str(ref) for ref in judge_verdict_refs))
     if not normalized_judge_refs or any(not re.fullmatch(r"JVR-[A-F0-9]{64}", ref) for ref in normalized_judge_refs):
         raise QualificationError("qualification evidence requires content-addressed independent judge verdict references")
@@ -189,6 +192,7 @@ def build_qualification_evidence(
     evidence: dict[str, Any] = {
         "schema_version": "1.0.0",
         "manifest_id": manifest["manifest_id"],
+        "private_corpus_receipt_id": private_corpus_receipt_id,
         "manifest_digest": _digest({key: value for key, value in manifest.items() if key != "signature_value"}),
         "evaluator_id": evaluator_id,
         "evaluator_version": evaluator_version,
@@ -225,6 +229,8 @@ def verify_qualification_evidence(
         raise QualificationError("qualification evidence identity does not match content")
     if manifest.get("verification_state") != "verified" or evidence.get("manifest_id") != manifest.get("manifest_id"):
         raise QualificationError("qualification evidence is not bound to a verified manifest")
+    if not isinstance(evidence.get("private_corpus_receipt_id"), str) or not re.fullmatch(r"PQR-[A-F0-9]{64}", evidence["private_corpus_receipt_id"]):
+        raise QualificationError("qualification evidence is not bound to a private corpus receipt")
     expected_manifest_digest = _digest({key: value for key, value in manifest.items() if key != "signature_value"})
     if evidence.get("manifest_digest") != expected_manifest_digest:
         raise QualificationError("qualification evidence manifest digest does not match the verified manifest")

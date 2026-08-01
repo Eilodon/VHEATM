@@ -160,8 +160,11 @@ def _run_bounded_process(
             file_size_bytes=output_bytes,
         ),
     )
+    if process.stdout is None or process.stderr is None:
+        _kill_process_group(process)
+        process.wait(timeout=1)
+        raise SandboxExecutionError("sandbox subprocess pipes were not created")
     selector = selectors.DefaultSelector()
-    assert process.stdout is not None and process.stderr is not None
     stdout_fd = process.stdout.fileno()
     stderr_fd = process.stderr.fileno()
     selector.register(process.stdout, selectors.EVENT_READ)

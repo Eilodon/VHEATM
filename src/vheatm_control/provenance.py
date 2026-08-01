@@ -198,7 +198,8 @@ def build_source_record(
         raise ProvenanceError("provided digest does not match source content")
     _validate_source_trust_state({"trust_zone": trust_zone, "taint_state": taint_state})
     final_digest = digest or computed
-    assert final_digest is not None
+    if final_digest is None:
+        raise ProvenanceError("source digest could not be derived")
     identity = {
         "source_type": source_type,
         "locator": locator,

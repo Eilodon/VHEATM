@@ -364,3 +364,75 @@ Start the next cycle when a private time-sliced corpus and independent judge ser
 - A replay record must carry its own method and evidence references; otherwise a deterministic hash only proves serialization, not what was measured.
 - Public seeded results are useful for regression and local RG diagnostics but cannot be promoted into private qualification by changing a status field.
 - Running the full 1,000 determinism samples is cheap enough locally and removes an avoidable shortcut at the measurement boundary.
+
+## ADR-6 — Fail-closed private corpus ingestion and receipt binding
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `privacy` `time-slice` `content-addressing` `release-gates`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when the real private vault and independent qualification service are connected.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local manifest/corpus integrity and non-disclosing receipt binding; `NOT_PRODUCTION_QUALIFIED` for private gold data or release claims.
+**LAST CONFIRMED:** 2026-08-01 — `METRICS`
+**VOLATILITY:** `WATCHFUL` — the private corpus contract, key custody, and vault boundary must remain bound to the canonical framework and release policy.
+
+### Context
+
+The release evaluator previously had typed qualification manifests and measurements but no enforcing boundary that proved the measurements came from the exact private, time-sliced corpus named by the signed manifest. A caller could otherwise provide a plausible receipt or a complete-looking qualification record without demonstrating corpus access, slice membership, or payload integrity.
+
+### Decision
+
+Add a schema-validated private corpus ingester that accepts only a verified Ed25519 manifest and a matching absolute local/file locator. It checks the exact framework version and `[start, end)` time slice, unique case IDs, every case payload digest, the signed digest set, the corpus digest, and the content-addressed corpus identity. It emits only a payload-free `PQR-*` receipt. `qualification-evidence` now requires the receipt ID, and the release evaluator re-verifies the receipt against the verified manifest before deriving any qualification metrics or report binding.
+
+Opaque external locators such as `vault://` remain unavailable in this environment and fail closed; a local fixture demonstrates the verifier seam but is not private qualification evidence.
+
+### Options Considered
+
+- Trust a receipt's `verification_state`: rejected because status fields are untrusted claims until the receipt identity and manifest binding are verified.
+- Include private case payloads in release evidence: rejected because the receipt boundary must preserve non-disclosure and minimize release-surface exposure.
+- Resolve relative paths from the process working directory: rejected because ambient working-directory state is not an authoritative locator and would weaken reproducibility.
+
+### Impact
+
+Schemas changed: `private-qualification-corpus.schema.json`, `private-corpus-receipt.schema.json`, `qualification-evidence.schema.json`, and the release-report binding enum.
+Components changed: private qualification ingester, qualification evidence builder/verifier, release evaluator, repository validator, runtime invariant checks, and contract tests.
+Breaking change: YES — callers constructing qualification evidence must provide a content-addressed private-corpus receipt ID.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `signed manifest → private corpus integrity checks → non-disclosing receipt → qualification evidence → release gate/report binding`; missing external corpus access remains `unknown`/blocked.
+Cascade Review: ✅ Done — schema, signature, locator, time-slice, tamper, receipt-binding, release-gate, and full-suite checks cover the changed boundary.
+
+### Consequences
+
+- Private corpus integrity and release binding have an executable fail-closed seam without disclosing case payloads.
+- Tampering, stale slices, unavailable vault locators, missing receipts, and receipt/evidence mismatches cannot produce verified qualification metrics.
+- Symlinked or relative locators are rejected, and runtime invariants use explicit exceptions instead of optimization-removable `assert` enforcement.
+- A local fixture proves contract behavior only; it does not satisfy private gold data provenance, independent judging, external key custody, or RG-00…RG-15 qualification.
+
+### Evidence
+
+- [verified 2026-08-01] `vheatm-validate --root .` passes with both private-corpus schemas registered as required.
+- [verified 2026-08-01] `PYTHONPATH=src .venv/bin/pytest -o addopts=''` passes with 216 tests, including private corpus tamper/out-of-slice/symlink rejection and release-gate receipt enforcement.
+- [verified 2026-08-01] Private corpus receipts are `PQR-*`, schema-valid, content-addressed, bound to the signed manifest/corpus/time slice, and contain `payload_disclosed: false`.
+- [verified 2026-08-01] Removing the receipt from otherwise signed-looking release evidence leaves RG qualification gates non-eligible rather than manufacturing metrics.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release qualification debt remains intentionally open: private vault/gold corpus, independent judge, key custody, provider qualification, host namespace capability, fresh vulnerability evidence, and shadow/canary observations.
+
+### Next Cycle Trigger
+
+Start the next cycle when the real private vault or an approved independent qualification service is available. Bind its immutable locator and key identity, ingest a time slice, run the complete RG measurement matrix, and preserve `unknown`/`blocked` for every missing external prerequisite.
+
+### Cycle Retrospective
+
+- A typed record is not evidence until its source boundary is verified; the receipt makes that boundary explicit without exporting private payloads.
+- Absolute locators and half-open time slices remove ambient path and boundary ambiguity from local verification.
+- The correct completion state is an executable verifier plus honest external blockers, not a synthetic private corpus or GA report.

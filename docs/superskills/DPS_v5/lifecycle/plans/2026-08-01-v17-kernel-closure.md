@@ -27,16 +27,17 @@
 - Qualification evidence now binds to content-addressed independent-judge verdicts, rejects undeclared metrics, enforces critical sample floors, and validates typed evidence schemas at CLI ingest.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 - Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.
+- Private qualification ingestion now verifies a signed manifest, an absolute/file locator, exact time-slice membership, case digests, corpus identity, and framework binding before emitting a payload-free `PQR-*` receipt; qualification evidence and release reports must bind to and re-verify that receipt.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 211 passed.
+- `.venv/bin/pytest -o addopts=''` — 216 passed.
 - `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 10/10 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs.
-- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `1711060823c7eb361cb1d01c1de2cc6c1ec767e736d885dc1655e41f6f86f2bb` with 169 canonical entries.
-- Session, analyzer, judge, capability, release-gate, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
+- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `cbebf37dadc88b56461d60282fbce7400ab89474200c331868f400a682b1b7aa` with 172 canonical entries.
+- Session, analyzer, judge, capability, release-gate, private-corpus, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell interpolation, or target-code import/execution in the control runtime; the only subprocess boundary is the explicit digest-bound sandbox adapter with `shell=False`, while activation remains parser-backed (`ast.literal_eval` only).
 
