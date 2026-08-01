@@ -50,3 +50,5 @@ jobs:
           git rm .github/p3c.patch.gz.b64.part-*
           git commit -m "feat: add conservative Python linkage graph"
           git push origin HEAD:feat/v17-p3c-python-linkage
+
+# Trigger after workflow registration.
