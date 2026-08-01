@@ -298,3 +298,25 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - RG sample bases and minimum floors must be loaded from the manifest-bound qualification-method policy; signed arbitrary protocols remain non-qualifying: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-20 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canonical-supply-chain-freshness-and-key-separation
+
+### New Domain Terms Added to CONTEXT.md
+- Supply-chain freshness boundary: added ✅
+
+### Bug Patterns
+- A signed vulnerability scan was accepted without an evaluation-time freshness bound, and one key could author all supply-chain roles: observed and fixed by canonical freshness and public-key-material separation; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Signature authenticity does not establish currentness or authority independence: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- RG-13 requires the manifest-bound scan window and distinct supply-chain/vulnerability/provenance key material: added to CONTEXT.md ✅
+
+---

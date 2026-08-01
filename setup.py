@@ -20,6 +20,7 @@ CANONICAL_EXACT = (
     "policies/standards-baseline.yaml",
     "policies/semantic-profiles.yaml",
     "policies/qualification-methods.yaml",
+    "policies/supply-chain-evidence.yaml",
     "uv.lock",
     "modules/registry.yaml",
 )

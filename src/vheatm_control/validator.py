@@ -70,6 +70,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "sandbox-run.schema.json",
         "semantic-profiles.schema.json",
         "qualification-methods.schema.json",
+        "supply-chain-evidence.schema.json",
         "supply-chain-attestation.schema.json",
         "standards-baseline.schema.json",
         "tool-request.schema.json",
@@ -192,12 +193,13 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     standards_baseline_path = root / "policies" / "standards-baseline.yaml"
     semantic_profiles_path = root / "policies" / "semantic-profiles.yaml"
     qualification_methods_path = root / "policies" / "qualification-methods.yaml"
+    supply_chain_evidence_path = root / "policies" / "supply-chain-evidence.yaml"
     dependency_lock_path = root / "uv.lock"
     eval_corpus_path = root / "evals" / "cases.yaml"
     module_registry_path = root / "modules" / "registry.yaml"
     skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, semantic_profiles_path, qualification_methods_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
+    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, semantic_profiles_path, qualification_methods_path, supply_chain_evidence_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -214,6 +216,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         standards_baseline = _load_yaml(standards_baseline_path)
         semantic_profiles = _load_yaml(semantic_profiles_path)
         qualification_methods = _load_yaml(qualification_methods_path)
+        supply_chain_evidence = _load_yaml(supply_chain_evidence_path)
         eval_corpus = _load_yaml(eval_corpus_path)
         manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
         policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
@@ -223,6 +226,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         standards_baseline_schema = _load_json(schema_dir / "standards-baseline.schema.json")
         semantic_profiles_schema = _load_json(schema_dir / "semantic-profiles.schema.json")
         qualification_methods_schema = _load_json(schema_dir / "qualification-methods.schema.json")
+        supply_chain_evidence_schema = _load_json(schema_dir / "supply-chain-evidence.schema.json")
         eval_corpus_schema = _load_json(schema_dir / "eval-corpus.schema.json")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return [ValidationIssue("canonical", str(exc))]
@@ -234,6 +238,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(_validate_schema(standards_baseline, standards_baseline_schema, registry, str(standards_baseline_path.relative_to(root))))
     issues.extend(_validate_schema(semantic_profiles, semantic_profiles_schema, registry, str(semantic_profiles_path.relative_to(root))))
     issues.extend(_validate_schema(qualification_methods, qualification_methods_schema, registry, str(qualification_methods_path.relative_to(root))))
+    issues.extend(_validate_schema(supply_chain_evidence, supply_chain_evidence_schema, registry, str(supply_chain_evidence_path.relative_to(root))))
     issues.extend(ValidationIssue("policies/standards-baseline.yaml", issue) for issue in _validate_standards_baseline(manifest, standards_baseline))
     from .capability_ledger import validate_capability_ledger
     issues.extend(ValidationIssue("policies/capability-ledger.yaml", issue) for issue in validate_capability_ledger(root, capability_ledger, capability_ledger_schema))
@@ -241,6 +246,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(_validate_schema(eval_corpus, eval_corpus_schema, registry, str(eval_corpus_path.relative_to(root))))
     issues.extend(ValidationIssue("evals/cases.yaml", issue) for issue in validate_eval_corpus(eval_corpus, eval_corpus_schema))
     issues.extend(ValidationIssue("policies/qualification-methods.yaml", issue) for issue in _validate_qualification_methods(manifest, qualification_methods))
+    issues.extend(ValidationIssue("policies/supply-chain-evidence.yaml", issue) for issue in _validate_supply_chain_evidence(manifest, supply_chain_evidence))
     try:
         bundle = build_bundle(root)
         issues.extend(_validate_schema(bundle, bundle_schema, registry, "control-bundle"))
@@ -334,6 +340,20 @@ def _validate_qualification_methods(manifest: dict[str, Any], policy: dict[str, 
         issues.append("method metrics must be unique")
     if set(metrics) != {str(metric) for metric in required}:
         issues.append("required_metrics must match the declared method metrics")
+    return issues
+
+
+def _validate_supply_chain_evidence(manifest: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    if policy.get("framework_version") != manifest.get("framework", {}).get("version"):
+        issues.append("framework_version must match canonical manifest")
+    scan = policy.get("vulnerability_scan")
+    if not isinstance(scan, dict) or scan.get("generated_at_must_not_exceed_evaluation") is not True:
+        issues.append("vulnerability_scan must require generated_at_must_not_exceed_evaluation")
+    roles = policy.get("distinct_signing_key_roles")
+    required_roles = {"supply_chain", "vulnerability", "provenance"}
+    if not isinstance(roles, list) or set(roles) != required_roles or len(roles) != len(required_roles):
+        issues.append("distinct_signing_key_roles must cover supply_chain, vulnerability, and provenance exactly once")
     return issues
 
 

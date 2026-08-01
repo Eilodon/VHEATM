@@ -23,7 +23,9 @@ from .supply_chain import (
     verify_provenance_statement,
     verify_supply_chain_attestation,
     verify_vulnerability_scan,
+    verify_vulnerability_scan_freshness,
 )
+from .supply_chain_policy import SupplyChainPolicyError, distinct_signing_key_roles
 
 
 class EvaluationError(ValueError):
@@ -487,6 +489,8 @@ def _verified_supply_chain_metrics(
     expected_bundle_root: str | None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None,
     verification_key_ids: Mapping[str, str] | None,
+    evaluated_at: str | None,
+    schema_root: Path | None,
 ) -> tuple[dict[str, Any], list[str]]:
     attestation = evidence.get("supply_chain_attestation")
     if not isinstance(attestation, Mapping):
@@ -501,6 +505,21 @@ def _verified_supply_chain_metrics(
             "supply-chain evidence is present but release, vulnerability, and provenance public keys are incomplete"
         ]
     try:
+        try:
+            required_roles = distinct_signing_key_roles(schema_root)
+        except SupplyChainPolicyError as exc:
+            raise SupplyChainError(f"supply-chain key-separation policy cannot be verified: {exc}") from exc
+        keys_by_role = {
+            "supply_chain": release_key,
+            "vulnerability": vulnerability_key,
+            "provenance": provenance_key,
+        }
+        for left_index, left_role in enumerate(required_roles):
+            for right_role in required_roles[left_index + 1 :]:
+                left_key = keys_by_role.get(left_role)
+                right_key = keys_by_role.get(right_role)
+                if left_key is not None and right_key is not None and _public_key_bytes(left_key) == _public_key_bytes(right_key):
+                    raise SupplyChainError(f"supply-chain signing keys for {left_role} and {right_role} must be distinct")
         if expected_bundle_root is None:
             raise SupplyChainError("current control bundle root is required to verify supply-chain evidence")
         if attestation.get("bundle_root") != expected_bundle_root:
@@ -514,6 +533,7 @@ def _verified_supply_chain_metrics(
             lock_digest=str(attestation.get("dependency_lock_digest", "")),
             key_id=_key_id(verification_key_ids, "vulnerability"),
         )
+        verify_vulnerability_scan_freshness(verified_scan, evaluated_at=str(evaluated_at or ""), root=schema_root)
         verified_attestation = verify_supply_chain_attestation(
             attestation,
             public_key=release_key,
@@ -554,6 +574,7 @@ def derive_verified_evidence_metrics(
     expected_bundle_root: str | None = None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
+    evaluated_at: str | None = None,
     schema_root: Path | None = None,
 ) -> dict[str, Any]:
     """Derive metrics only after cryptographic verification at this boundary.
@@ -585,6 +606,8 @@ def derive_verified_evidence_metrics(
             expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
+            evaluated_at=evaluated_at,
+            schema_root=validation_root,
         )
     return {**qualification_metrics, **supply_metrics}
 
@@ -604,6 +627,7 @@ def evaluate_release_gates(
     # Caller-provided metrics are deliberately not trusted. Keep them out of
     # the evaluator entirely so a complete-looking JSON object cannot mint GA.
     validation_root = resolve_control_root(schema_root)
+    timestamp = _release_timestamp(evaluated_at)
     schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
     qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
     supply_schema_errors = _schema_error_messages(schema_errors, _SUPPLY_CHAIN_EVIDENCE_FIELDS, "supply-chain")
@@ -625,6 +649,8 @@ def evaluate_release_gates(
             expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
+            evaluated_at=timestamp,
+            schema_root=validation_root,
         )
     metrics = {**qualification_metrics, **supply_metrics}
     verification_errors = qualification_errors + supply_errors
@@ -641,7 +667,7 @@ def evaluate_release_gates(
         else:
             status = "pass"
             rationale = "all frozen threshold predicates satisfied"
-        if verification_errors and status == "unknown":
+        if verification_errors and status in {"unknown", "fail"}:
             rationale = f"{rationale}; {'; '.join(verification_errors)}"
         gate_results.append({"gate_id": gate_id, "status": status, "missing_metrics": missing, "failed_metrics": failed, "rationale": rationale})
     summary = {"pass": sum(item["status"] == "pass" for item in gate_results), "fail": sum(item["status"] == "fail" for item in gate_results), "unknown": sum(item["status"] == "unknown" for item in gate_results), "ga_eligible": all(item["status"] == "pass" for item in gate_results)}
@@ -653,7 +679,6 @@ def evaluate_release_gates(
         "gates": gate_results,
         "summary": summary,
     }
-    timestamp = _release_timestamp(evaluated_at)
     report = {"schema_version": "1.0.0", **identity, "evaluated_at": timestamp}
     report["report_id"] = expected_release_report_id(report)
     return validate_release_report(report, schema_root=validation_root)

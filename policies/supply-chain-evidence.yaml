@@ -1,0 +1,11 @@
+schema_version: "1.0.0"
+policy_id: vheatm-supply-chain-evidence
+policy_version: "1.0.0"
+framework_version: "17.0.0-dev.1"
+vulnerability_scan:
+  max_age_seconds: 604800
+  generated_at_must_not_exceed_evaluation: true
+distinct_signing_key_roles:
+  - supply_chain
+  - vulnerability
+  - provenance

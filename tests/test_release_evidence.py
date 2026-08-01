@@ -342,6 +342,9 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
     judge_key = Ed25519PrivateKey.generate()
     judge_packet, judge_verdict, _ = _release_judge_fixture(private_receipt, signing_key=judge_key)
+    supply_chain_key = Ed25519PrivateKey.generate()
+    vulnerability_key = Ed25519PrivateKey.generate()
+    provenance_key = Ed25519PrivateKey.generate()
     values = {
         "mutation_rejection_rate": 1, "route_equivalence_rate": 1, "determinism_runs": 1000,
         "plan_digest_stability_rate": 1, "selection_digest_stability_rate": 1, "false_inactive_count": 0,
@@ -380,15 +383,15 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         generated_at="2026-08-01T00:00:00Z",
     )
     verified_scan = verify_vulnerability_scan(
-        sign_vulnerability_scan(scan, private_key=key, key_id="vulnerability-key"),
-        public_key=key.public_key(),
+        sign_vulnerability_scan(scan, private_key=vulnerability_key, key_id="vulnerability-key"),
+        public_key=vulnerability_key.public_key(),
         bundle_root=base_attestation["bundle_root"],
         lock_digest=base_attestation["dependency_lock_digest"],
         key_id="vulnerability-key",
     )
     attestation = sign_supply_chain_attestation(
         build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z", vulnerability_scan=verified_scan),
-        private_key=key,
+        private_key=supply_chain_key,
         key_id="supply-chain-key",
     )
     provenance = {
@@ -411,20 +414,52 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         "independent_judge_packets": [judge_packet],
         "independent_judge_verdicts": [judge_verdict],
         "supply_chain_attestation": attestation,
-        "vulnerability_scan": sign_vulnerability_scan(scan, private_key=key, key_id="vulnerability-key"),
-        "provenance_statement": sign_provenance_statement(provenance, private_key=key, key_id="provenance-key"),
+        "vulnerability_scan": sign_vulnerability_scan(scan, private_key=vulnerability_key, key_id="vulnerability-key"),
+        "provenance_statement": sign_provenance_statement(provenance, private_key=provenance_key, key_id="provenance-key"),
     }
     report = evaluate_release_gates(
         "17.0.0-dev.1",
         evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
         schema_root=ROOT,
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
     Draft202012Validator(load_json((ROOT / "schemas" / "release-gate-report.schema.json").read_text())).validate(report)
+
+    stale_report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        evidence,
+        evaluated_at="2026-08-10T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    stale_rg13 = next(item for item in stale_report["gates"] if item["gate_id"] == "RG-13")
+    assert stale_rg13["status"] == "fail"
+    assert "stale" in stale_rg13["rationale"]
+
+    same_key_evidence = {
+        **evidence,
+        "supply_chain_attestation": sign_supply_chain_attestation(attestation, private_key=key, key_id="supply-chain-key"),
+        "vulnerability_scan": sign_vulnerability_scan(scan, private_key=key, key_id="vulnerability-key"),
+        "provenance_statement": sign_provenance_statement(provenance, private_key=key, key_id="provenance-key"),
+    }
+    same_key_report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        same_key_evidence,
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    same_key_rg13 = next(item for item in same_key_report["gates"] if item["gate_id"] == "RG-13")
+    assert same_key_rg13["status"] == "fail"
+    assert "must be distinct" in same_key_rg13["rationale"]
 
     packet_missing = evaluate_release_gates(
         "17.0.0-dev.1",

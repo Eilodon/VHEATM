@@ -20,7 +20,9 @@ from vheatm_control.supply_chain import (
     verify_provenance_statement,
     verify_supply_chain_attestation,
     verify_vulnerability_scan,
+    verify_vulnerability_scan_freshness,
 )
+from vheatm_control.supply_chain_policy import distinct_signing_key_roles, vulnerability_scan_max_age_seconds
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +42,16 @@ def test_standards_baseline_is_present_and_schema_valid() -> None:
     assert all(item["namespace"] in {"normative", "community", "draft", "experimental"} for item in policy["standards"])
 
 
+def test_supply_chain_evidence_policy_is_canonical_and_fail_closed() -> None:
+    policy_path = ROOT / "policies" / "supply-chain-evidence.yaml"
+    schema_path = ROOT / "schemas" / "supply-chain-evidence.schema.json"
+    policy = load_yaml(policy_path.read_text(encoding="utf-8"))
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(policy)
+    assert vulnerability_scan_max_age_seconds(ROOT) == 604800
+    assert distinct_signing_key_roles(ROOT) == ("supply_chain", "vulnerability", "provenance")
+
+
 def test_supply_chain_attestation_binds_verified_uv_lock() -> None:
     lock_path = ROOT / "uv.lock"
     assert lock_path.is_file()
@@ -47,6 +59,19 @@ def test_supply_chain_attestation_binds_verified_uv_lock() -> None:
     assert attestation["dependency_lock_present"] is True
     assert attestation["dependency_lock_digest"] == hashlib.sha256(lock_path.read_bytes()).hexdigest()
     assert attestation["dependency_lock_path"] == "uv.lock"
+
+
+def test_vulnerability_scan_cannot_be_future_dated_against_evaluation() -> None:
+    scan = build_vulnerability_scan(
+        scanner_id="test-scanner",
+        scanner_version="1.0.0",
+        target_bundle_root="a" * 64,
+        target_lock_digest="b" * 64,
+        findings=[],
+        generated_at="2026-08-02T00:00:00Z",
+    )
+    with pytest.raises(SupplyChainError, match="after the release evaluation"):
+        verify_vulnerability_scan_freshness(scan, evaluated_at="2026-08-01T00:00:00Z", root=ROOT)
 
 
 def test_signed_attestation_and_vulnerability_scan_are_cryptographically_bound() -> None:

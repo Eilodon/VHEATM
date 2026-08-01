@@ -13,6 +13,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .bundle import build_bundle
+from .supply_chain_policy import SupplyChainPolicyError, vulnerability_scan_max_age_seconds
 
 
 class SupplyChainError(ValueError):
@@ -296,6 +297,30 @@ def verify_vulnerability_scan(
     verified = dict(scan)
     verified["verification_state"] = "verified"
     return verified
+
+
+def verify_vulnerability_scan_freshness(
+    scan: Mapping[str, Any], *, evaluated_at: str, root: Path | None = None
+) -> None:
+    """Enforce the canonical time-of-evaluation freshness boundary for a scan."""
+
+    if not isinstance(evaluated_at, str) or not evaluated_at:
+        raise SupplyChainError("vulnerability scan freshness requires an evaluation timestamp")
+    try:
+        generated = datetime.fromisoformat(str(scan.get("generated_at")).replace("Z", "+00:00"))
+        evaluated = datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
+        max_age = vulnerability_scan_max_age_seconds(root)
+    except (TypeError, ValueError, SupplyChainPolicyError) as exc:
+        raise SupplyChainError(f"vulnerability scan freshness policy cannot be verified: {exc}") from exc
+    if generated.tzinfo is None or evaluated.tzinfo is None:
+        raise SupplyChainError("vulnerability scan freshness timestamps must include a timezone")
+    generated = generated.astimezone(UTC)
+    evaluated = evaluated.astimezone(UTC)
+    age_seconds = (evaluated - generated).total_seconds()
+    if age_seconds < 0:
+        raise SupplyChainError("vulnerability scan was generated after the release evaluation")
+    if age_seconds > max_age:
+        raise SupplyChainError(f"vulnerability scan is stale: age exceeds canonical {max_age}-second window")
 
 
 def expected_provenance_statement_id(statement: Mapping[str, Any]) -> str:

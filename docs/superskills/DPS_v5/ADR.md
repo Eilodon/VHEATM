@@ -1363,3 +1363,78 @@ Start the next cycle when an RG metric/method changes or an external qualificati
 - A content-addressed method label is not a method contract until it resolves to canonical estimator and population semantics.
 - Measurement policy must be included in the same authority/bundle inventory as schemas and runtime policy.
 - Canonical method binding narrows false assurance without pretending to provide unavailable data or statistical independence.
+
+## ADR-20 — Bind RG-13 freshness and signing-role independence to canonical policy
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `supply-chain` `vulnerability` `freshness` `key-separation` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when vulnerability-feed SLAs, signing roles, scanner identity, or release-time semantics change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local policy/evaluator enforcement; `NOT_PRODUCTION_QUALIFIED` until external scanner freshness, key custody, and release operations provide real evidence.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — vulnerability feeds, scanner coverage, and key-rotation requirements are external release inputs.
+
+### Context
+
+RG-13 verified signatures, bundle/lock bindings, and a derived critical-CVE count, but it did not bind the scan to the release evaluation time. A signed empty scan could therefore remain eligible after its evidence window had expired. The release evaluator also accepted one public key for release, vulnerability, and provenance records, collapsing the intended authority separation into labels.
+
+### Decision
+
+Add `policies/supply-chain-evidence.yaml` and its schema as canonical, manifest-bound policy. It freezes a seven-day maximum vulnerability-scan age, rejects scans generated after evaluation, and requires distinct public keys for the `supply_chain`, `vulnerability`, and `provenance` roles. The release evaluator loads and validates this policy at the evidence boundary, verifies cryptographic records, then enforces freshness and key separation before deriving RG-13 metrics. Freshness violations and role reuse produce an explicit RG-13 failure with the verification rationale; absent external evidence remains blocking.
+
+### Options Considered
+
+- Trust the scan signature and target lock digest without a time bound: rejected because authenticity does not establish currentness.
+- Compare only the scan and attestation timestamps: rejected because neither is an evaluation-time policy or an upper-bound freshness guarantee.
+- Require different key ID strings: rejected because labels do not prove distinct key material.
+- Generate a local “fresh” scan or embedded signing keys: rejected because local artifacts cannot stand in for external scanner coverage or key custody.
+
+### Impact
+
+Schemas changed: `schemas/supply-chain-evidence.schema.json`.
+Canonical policy changed: `policies/supply-chain-evidence.yaml`.
+Components changed: supply-chain policy loader, vulnerability freshness verifier, RG-13 evaluator, validator, bundle/package inventory, and release evidence tests.
+Breaking change: **YES** for RG-13 evidence that is older than the canonical window, future-dated relative to evaluation, or signed by reused role keys.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `supply-chain policy → typed evidence verification → RG-13 → release report → pilot authorization`.
+Cascade Review: ✅ Done — stale-scan and same-key RED regressions, policy/schema/manifest binding tests, full evaluator verification, and packaging checks cover the changed boundary.
+
+### Consequences
+
+- A valid signature no longer makes an old vulnerability result current.
+- Public key bytes, rather than role-name metadata, establish signing-role separation.
+- The seven-day value is a frozen release policy input, not evidence that a real external scanner has run or that its dependency coverage is complete.
+- Policy loading at evaluation adds local I/O/schema cost; any future cache must be invalidated by the canonical bundle root and policy identity.
+- External key custody, scanner feed freshness/coverage, private qualification data, provider qualification, host enforcement, and pilot success remain open and keep GA fail-closed.
+
+### Evidence
+
+- [verified 2026-08-01] RED release regression showed a signed scan generated nine days earlier still made RG-13 pass.
+- [verified 2026-08-01] RED release regression showed one key could sign all three supply-chain roles and still make RG-13 pass.
+- [verified 2026-08-01] GREEN tests enforce the canonical seven-day window, future-date rejection, distinct public-key material, policy schema, manifest binding, and diagnostic rationale.
+- [verified 2026-08-01] No external scanner result, production key custody, or GA evidence was created by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External scanner feed and coverage, key custody/rotation/revocation, private/time-sliced gold data, allowlisted provider qualification, host namespace capability, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a vulnerability feed, scanner allowlist/coverage contract, key-custody service, or freshness SLA changes; bind its signed authority and rerun RG-00…RG-15 before accepting new release evidence.
+
+### Cycle Retrospective
+
+- A signature authenticates a historical statement; it does not make that statement fresh.
+- Independence must be checked against cryptographic key material, not only key IDs or role labels.
+- Canonical release policy needs both a measurement rule and a time/authority boundary before a derived gate can pass.

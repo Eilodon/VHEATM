@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/supply-chain-evidence.schema.json",
+  "title": "VHEATM supply-chain evidence policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "policy_version", "framework_version", "vulnerability_scan", "distinct_signing_key_roles"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "policy_id": {"type": "string", "pattern": "^vheatm-[a-z0-9-]+$"},
+    "policy_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "vulnerability_scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_age_seconds", "generated_at_must_not_exceed_evaluation"],
+      "properties": {
+        "max_age_seconds": {"type": "integer", "minimum": 1},
+        "generated_at_must_not_exceed_evaluation": {"const": true}
+      }
+    },
+    "distinct_signing_key_roles": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"enum": ["supply_chain", "vulnerability", "provenance"]}
+    }
+  }
+}
