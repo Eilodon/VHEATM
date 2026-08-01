@@ -32,8 +32,14 @@ jobs:
           python-version: "3.12"
       - name: Reconstruct validated patch
         run: |
+          echo "00a3ecb530b9bdbd46509377d6bb4a67e936686fc07eebb2299d21452da9292d  .github/p3c.patch.gz.b64.part-00" | sha256sum --check -
+          echo "9f1691de66a60f7c250532369864aa79bc3a7090cc113f765aa716b0d151460c  .github/p3c.patch.gz.b64.part-01" | sha256sum --check -
+          echo "e12b84c6462d6ff1153b8dbb81b3d65be023c68b1d9b68e2d1877dcca72223ae  .github/p3c.patch.gz.b64.part-02" | sha256sum --check -
+          echo "698c2faeb10317b38bb6fcd5a8cea1f90c8b48affc036525d95f92264721388a  .github/p3c.patch.gz.b64.part-03" | sha256sum --check -
+          echo "05fda26cefcf7043df597eab0b6ca4d7e10caa78ca405a746d663b0214143783  .github/p3c.patch.gz.b64.part-04" | sha256sum --check -
           cat .github/p3c.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/p3c.patch
           echo "a555b8ac00269de3fdf7d39bdfc09d352cbc7f2db82bec0f78544f337bd6bcd4  /tmp/p3c.patch" | sha256sum --check -
+          git rm -f docs/python-linkage.md schemas/python-linkage.schema.json
           git apply --check /tmp/p3c.patch
           git apply /tmp/p3c.patch
       - name: Install
@@ -58,5 +64,3 @@ jobs:
           git rm .github/p3c.patch.gz.b64.part-*
           git commit -m "feat: add conservative Python linkage graph"
           git push origin HEAD:feat/v17-p3c-python-linkage
-
-# Trigger after workflow registration.
