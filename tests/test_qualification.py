@@ -17,6 +17,7 @@ from vheatm_control.qualification import (
     verify_qualification_evidence,
     verify_manifest,
 )
+from vheatm_control.qualification_methods import QualificationMethodError, expected_method_digest, method_definition, validate_method_digest
 from vheatm_control.serialization import load_json
 from vheatm_control.qualification_private import expected_private_case_digest, expected_private_corpus_digest, expected_private_corpus_id, ingest_private_corpus
 
@@ -52,7 +53,7 @@ def test_private_time_sliced_manifest_and_measurements_are_signed_and_bound(tmp_
         "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
     }
     judge_verdict["verdict_id"] = expected_verdict_id(judge_verdict)
-    measurements = [{"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 100, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]}]
+    measurements = [{"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 100, "confidence_lower": 0.96, "method_digest": expected_method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]}]
     evidence = build_qualification_evidence(manifest=verified_manifest, private_corpus_receipt_id=receipt["receipt_id"], evaluator_id="eval:v17", evaluator_version="1.0.0", independent_judge_id="judge:v17", judge_verdict_refs=[judge_verdict["verdict_id"]], measurements=measurements, generated_at="2026-08-01T00:00:00Z")
     signed = sign_qualification_evidence(evidence, private_key=key, key_id="evidence-key")
     verified = verify_qualification_evidence(signed, manifest=verified_manifest, public_key=key.public_key(), key_id="evidence-key")
@@ -60,6 +61,17 @@ def test_private_time_sliced_manifest_and_measurements_are_signed_and_bound(tmp_
     assert verified["metrics"]["critical_recall_lower_ci"] == 0.96
     Draft202012Validator(load_json((ROOT / "schemas" / "qualification-manifest.schema.json").read_text(encoding="utf-8"))).validate(verified_manifest)
     Draft202012Validator(load_json((ROOT / "schemas" / "qualification-evidence.schema.json").read_text(encoding="utf-8"))).validate(verified)
+
+
+def test_measurement_method_digest_is_bound_to_canonical_method_policy() -> None:
+    definition = method_definition("critical_recall_lower_ci", root=ROOT)
+    assert definition["framework_version"] == "17.0.0-dev.1"
+    assert definition["policy_id"] == "vheatm-qualification-methods"
+    digest = expected_method_digest("critical_recall_lower_ci", root=ROOT)
+    assert len(digest) == 64
+    validate_method_digest("critical_recall_lower_ci", digest, root=ROOT)
+    with pytest.raises(QualificationMethodError, match="does not match canonical method"):
+        validate_method_digest("critical_recall_lower_ci", "c" * 64, root=ROOT)
 
 
 def test_qualification_requires_verified_manifest_and_rejects_tampering() -> None:

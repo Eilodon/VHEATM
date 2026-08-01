@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 13 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 14 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -20,6 +20,7 @@
 - **Release-report identity boundary:** the schema, ordered RG-00…RG-15 gate set, derived summary, and evaluation timestamp that must agree before a report can authorize a pilot. <!-- from ADR: ADR-16 -->
 - **Canonical semantic profile binding:** the schema-valid semantic policy and manifest-version match required before RPN, FMEA→QBR, QBR, or BRS calculations can return a score. <!-- from ADR: ADR-17 -->
 - **Signed independent verdict:** a complete blind-judge verdict carrying a valid signature from a judge key distinct from the qualification evaluator key, required before it contributes release metrics. <!-- from ADR: ADR-18 -->
+- **Canonical qualification method:** a manifest-bound measurement definition whose estimator, confidence method, sample basis, and minimum population are hashed into the method digest required by RG evidence. <!-- from ADR: ADR-19 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -38,6 +39,7 @@
 - A report ID must bind every identity-bearing field, including schema version and evaluation time; generated reports must pass the same schema boundary as caller-supplied reports. <!-- from ADR: ADR-16 -->
 - Semantic formulas consume only the schema-valid profile bound to the canonical manifest version; invalid or mismatched profiles fail closed, and unknown BRS inputs remain unknown. <!-- from ADR: ADR-17 -->
 - Content-addressed judge identity and packet binding are insufficient for release evidence; persisted verdicts require a distinct judge signature, while unsigned candidates remain non-qualifying. <!-- from ADR: ADR-18 -->
+- RG measurements must resolve to the canonical qualification-method policy before signatures or threshold predicates can expose their values; a signed arbitrary method digest remains ineligible. <!-- from ADR: ADR-19 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -56,3 +58,4 @@
 - [2026-08] A release report can be schema-invalid or share an ID across evaluation times | Validate the generated and pilot-bound report, derive the summary, and include timestamp/schema fields in the identity projection. <!-- from ADR: ADR-16 -->
 - [2026-08] A policy profile can validate while runtime calculators ignore it | Test a non-default profile override across RPN/FMEA/QBR/BRS and bind the profile version to the manifest before accepting a score. <!-- from ADR: ADR-17 -->
 - [2026-08] An isolated judge can emit a valid-looking record that is later replaced | Authenticate persisted verdicts with a dedicated judge key and reject reuse of the evaluator key before deriving qualification metrics. <!-- from ADR: ADR-18 -->
+- [2026-08] A signed measurement can name an arbitrary method digest | Bind every RG method digest to the schema-valid, manifest-versioned estimator policy before deriving release metrics. <!-- from ADR: ADR-19 -->

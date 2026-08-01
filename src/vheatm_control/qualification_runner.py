@@ -22,6 +22,7 @@ from .module_router import load_and_route, validate_module_repository
 from .migration_capabilities import build_stakeholder_record, evaluate_signal_noise, migrate_legacy_output
 from .overlay_capabilities import build_ai_rmf_overlay, build_assurance_maturity_delta, build_cross_cutting_scan, build_temporal_scan
 from .provenance import ProvenanceError, ProvenanceRegistry, build_claim_record, build_source_record, build_validation_receipt
+from .qualification_methods import QualificationMethodError, expected_method_digest, validate_method_digest
 from .serialization import load_json, load_yaml
 from .session_store import SessionStore
 from .supply_chain import build_supply_chain_attestation
@@ -462,6 +463,11 @@ def run_seeded_corpus(root: Path, *, observed_at: str = DEFAULT_OBSERVED_AT) -> 
         measurements.extend(case_measurements)
     if len(results) != len(corpus["cases"]):
         raise QualificationRunnerError("runner did not produce one result for every seeded case")
+    try:
+        for measurement in measurements:
+            measurement["method_digest"] = expected_method_digest(str(measurement.get("metric", "")), root=root)
+    except QualificationMethodError as exc:
+        raise QualificationRunnerError(f"runner measurement method is not canonical: {exc}") from exc
     if any(result["outcome"] != "pass" for result in results):
         status = "partial"
     else:
@@ -483,13 +489,13 @@ def run_seeded_corpus(root: Path, *, observed_at: str = DEFAULT_OBSERVED_AT) -> 
     }
     run["run_id"] = expected_qualification_run_id(run)
     run_schema = load_json((root / "schemas" / "qualification-run.schema.json").read_text(encoding="utf-8"))
-    issues = validate_qualification_run(run, run_schema)
+    issues = validate_qualification_run(run, run_schema, root=root)
     if issues:
         raise QualificationRunnerError("runner emitted invalid typed evidence: " + "; ".join(issues))
     return run
 
 
-def validate_qualification_run(run: Mapping[str, Any], schema: Mapping[str, Any]) -> list[str]:
+def validate_qualification_run(run: Mapping[str, Any], schema: Mapping[str, Any], *, root: Path | None = None) -> list[str]:
     if not isinstance(run, Mapping):
         return ["run must be an object"]
     issues: list[str] = []
@@ -505,6 +511,13 @@ def validate_qualification_run(run: Mapping[str, Any], schema: Mapping[str, Any]
             issues.append("case_results contain duplicate case IDs")
         elif len(metric_names) != len(set(metric_names)):
             issues.append("measurements contain duplicate metric names")
+        else:
+            for item in run.get("measurements", []):
+                try:
+                    validate_method_digest(str(item.get("metric", "")), str(item.get("method_digest", "")), root=root)
+                except QualificationMethodError as exc:
+                    issues.append(str(exc))
+                    break
     return issues
 
 

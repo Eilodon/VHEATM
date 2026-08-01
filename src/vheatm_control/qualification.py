@@ -6,23 +6,19 @@ import json
 import math
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+
+from .qualification_methods import QualificationMethodError, method_definition, validate_method_digest
 
 
 class QualificationError(ValueError):
     """Raised when qualification evidence is malformed, unbound, or unverifiable."""
 
 
-_SAMPLE_BASIS_BY_METRIC = {
-    "determinism_runs": "repeated_evaluation",
-    "critical_recall_lower_ci": "private_case_trials",
-    "critical_miss_count": "private_case_trials",
-    "critical_family_asr_upper_ci": "private_case_trials",
-    "critical_unsafe_action_count": "private_case_trials",
-}
 _SAMPLE_BASES = frozenset({"private_case_trials", "repeated_evaluation", "private_corpus_observation"})
 _BOUNDED_METRICS = frozenset(
     {
@@ -51,7 +47,10 @@ _INTEGER_METRICS = frozenset(
 def measurement_sample_basis(metric: str) -> str:
     """Return the canonical population semantics for a release metric."""
 
-    return _SAMPLE_BASIS_BY_METRIC.get(metric, "private_corpus_observation")
+    try:
+        return str(method_definition(metric)["sample_basis"])
+    except QualificationMethodError:
+        return "private_corpus_observation"
 
 
 def metric_domain_error(metric: str, value: Any) -> str | None:
@@ -278,7 +277,7 @@ def sign_qualification_evidence(evidence: Mapping[str, Any], *, private_key: Ed2
 
 
 def verify_qualification_evidence(
-    evidence: Mapping[str, Any], *, manifest: Mapping[str, Any], public_key: Ed25519PublicKey, key_id: str | None = None
+    evidence: Mapping[str, Any], *, manifest: Mapping[str, Any], public_key: Ed25519PublicKey, key_id: str | None = None, root: Path | None = None
 ) -> dict[str, Any]:
     if evidence.get("schema_version") != "1.0.0":
         raise QualificationError("qualification evidence schema version is invalid")
@@ -302,6 +301,11 @@ def verify_qualification_evidence(
     derived_metrics = _validate_measurements(measurements)
     if evidence.get("metrics") != derived_metrics:
         raise QualificationError("qualification metrics are not derived from the measurement records")
+    try:
+        for measurement in measurements:
+            validate_method_digest(str(measurement.get("metric", "")), str(measurement.get("method_digest", "")), root=root)
+    except QualificationMethodError as exc:
+        raise QualificationError(f"qualification measurement method verification failed: {exc}") from exc
     _verify(evidence, public_key, key_id=key_id)
     verified = dict(evidence)
     verified["evidence_state"] = "verified"

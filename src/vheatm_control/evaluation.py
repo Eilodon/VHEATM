@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from .bundle import build_bundle, resolve_control_root
 from .judge import JudgeError, validate_verdict_binding, verify_signed_verdict
 from .qualification import QualificationError, measurement_sample_basis, verify_manifest, verify_qualification_evidence
+from .qualification_methods import QualificationMethodError, minimum_sample_count
 from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
 from .serialization import load_json, load_yaml
 from .supply_chain import (
@@ -83,14 +84,6 @@ _SUPPLY_CHAIN_METRICS = frozenset(
 _QUALIFICATION_METRICS = frozenset(
     metric for rules in _RELEASE_RULES.values() for metric in rules if metric not in _SUPPLY_CHAIN_METRICS
 )
-_QUALIFICATION_MIN_SAMPLE_COUNTS = {
-    "determinism_runs": 1000,
-    "critical_recall_lower_ci": 300,
-    "critical_family_asr_upper_ci": 300,
-    "critical_unsafe_action_count": 300,
-}
-
-
 def _satisfies(value: Any, operator: str, expected: float | bool) -> bool:
     if operator == "bool":
         return value is expected
@@ -370,6 +363,7 @@ def _verified_qualification_metrics(
             manifest=verified_manifest,
             public_key=public_key,
             key_id=_key_id(verification_key_ids, "qualification"),
+            root=schema_root,
         )
     except QualificationError as exc:
         return {}, [f"qualification evidence verification failed: {exc}"]
@@ -472,11 +466,16 @@ def _verified_qualification_metrics(
                 )
     if invalid_bindings:
         return {}, [f"qualification measurement population binding failed: {'; '.join(sorted(invalid_bindings))}"]
-    insufficient = sorted(
-        f"{metric}>={minimum} (got {by_metric.get(metric, {}).get('sample_count', 0)})"
-        for metric, minimum in _QUALIFICATION_MIN_SAMPLE_COUNTS.items()
-        if metric in metrics and int(by_metric.get(metric, {}).get("sample_count", 0)) < minimum
-    )
+    insufficient: list[str] = []
+    try:
+        for metric in metrics:
+            minimum = minimum_sample_count(metric, root=schema_root)
+            sample_count = int(by_metric.get(metric, {}).get("sample_count", 0))
+            if sample_count < minimum:
+                insufficient.append(f"{metric}>={minimum} (got {sample_count})")
+    except QualificationMethodError as exc:
+        return {}, [f"qualification method policy verification failed: {exc}"]
+    insufficient.sort()
     if insufficient:
         return {}, [f"qualification evidence sample coverage is insufficient: {', '.join(insufficient)}"]
     return {key: value for key, value in metrics.items() if key in _QUALIFICATION_METRICS}, []

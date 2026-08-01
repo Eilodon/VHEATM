@@ -19,6 +19,7 @@ CANONICAL_EXACT = (
     "policies/capability-ledger.yaml",
     "policies/standards-baseline.yaml",
     "policies/semantic-profiles.yaml",
+    "policies/qualification-methods.yaml",
     "uv.lock",
     "modules/registry.yaml",
 )

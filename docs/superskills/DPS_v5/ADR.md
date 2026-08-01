@@ -1289,3 +1289,77 @@ Start the next cycle when a production judge signer/key-custody service is conne
 - Process isolation protects execution while it is running; it does not authenticate a persisted record after the process exits.
 - Independence must be represented by a separate key boundary, not only different provider/model strings.
 - Release evaluators must verify the strongest evidence boundary before deriving population coverage or threshold metrics.
+
+## ADR-19 — Bind RG measurement methods to a canonical policy
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `release-gates` `measurement-integrity` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when an RG metric, confidence method, population rule, or qualification service changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local method-identity enforcement; `NOT_PRODUCTION_QUALIFIED` until private data, independent judging, statistical review, and external key custody are available.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — measurement estimators and confidence methods are release-bound policy inputs.
+
+### Context
+
+Qualification measurements carried a 64-hex `method_digest`, but the runtime only checked its shape. A signed evidence document could therefore claim RG-05 or RG-08 values while naming no canonical estimator, confidence method, sample population, or minimum sample floor. The signature protected caller-authored bytes, not the measurement protocol.
+
+### Decision
+
+Add `policies/qualification-methods.yaml` and `schemas/qualification-methods.schema.json` as canonical, manifest-version-bound method policy. Every declared RG-00…RG-15 qualification metric has a unique method definition containing sample basis, estimator, confidence method, and minimum sample count. The method digest is the SHA-256 identity of that exact definition. Qualification verification rejects a missing/unknown method digest before signature-derived metrics are exposed; evaluator sample floors and sample-basis semantics are read from the same policy. The public seeded runner emits and validates the same canonical method digests.
+
+### Options Considered
+
+- Accept any well-formed SHA-256 method digest: rejected because formatting is not protocol identity.
+- Keep method names and sample floors in evaluator Python: rejected because policy changes would silently drift from evidence validation.
+- Trust the signed `confidence_lower` field as proof of statistical correctness: rejected because a signature authenticates a claim but does not independently recompute its estimator or prove its population.
+- Use public seeded replay as private qualification: rejected because it remains `public_seeded`/`unverified` and has no independent gold/judge authority.
+
+### Impact
+
+Schemas changed: `schemas/qualification-methods.schema.json`.
+Canonical policy changed: `policies/qualification-methods.yaml`.
+Components changed: qualification method loader, qualification verifier, RG evaluator, public seeded runner, repository validator, bundle/package inventory, and regression tests.
+Breaking change: **YES** for qualification evidence with arbitrary method digests or evidence produced under an undeclared measurement protocol.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `method policy → method digest → typed qualification verification → RG sample floors/bases → release report → pilot authorization`.
+Cascade Review: ✅ Done — direct release regression, direct method-policy test, public replay mutation test, validator/bundle checks, pattern-globalization scan, and full verification cover the changed boundary.
+
+### Consequences
+
+- A valid signature can no longer make an undeclared measurement protocol eligible for RG metrics.
+- Policy edits intentionally change method identities and invalidate evidence that was produced under a different canonical protocol.
+- The local verifier still does not recompute private outcomes or establish independent statistical validity; those remain external qualification prerequisites and fail closed.
+- Loading the method policy at verification boundaries adds schema/I/O work. This is accepted for correctness; any future cache must be invalidated by the canonical bundle root.
+
+### Evidence
+
+- [verified 2026-08-01] RED release regression showed an arbitrary 64-hex method digest allowed RG-05 to pass.
+- [verified 2026-08-01] GREEN tests reject the arbitrary digest, bind public seeded measurements to canonical method identities, and reject method-policy framework drift.
+- [verified 2026-08-01] Full repository verification passed with 249 tests; canonical validator, low-risk evaluate/route, public replay, lock check, and wheel/sdist build all passed.
+- [verified 2026-08-01] No private gold data, external signer, recomputed confidence interval, or GA evidence was created by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External private/time-sliced gold data, independent judge custody, statistical method review, fresh vulnerability evidence, provider qualification, host namespace capability, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when an RG metric/method changes or an external qualification service supplies recomputed observations; bind its method-policy digest and independent data population before accepting new evidence.
+
+### Cycle Retrospective
+
+- A content-addressed method label is not a method contract until it resolves to canonical estimator and population semantics.
+- Measurement policy must be included in the same authority/bundle inventory as schemas and runtime policy.
+- Canonical method binding narrows false assurance without pretending to provide unavailable data or statistical independence.

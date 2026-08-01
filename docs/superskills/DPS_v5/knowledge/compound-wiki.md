@@ -277,3 +277,24 @@ modules: [MOD-AGENT-SECURITY, MOD-ARCHITECTURE-DECISIONS, MOD-TRANSFORMATION-VER
 - Qualification metrics require a signed verdict from a judge key distinct from the evaluator key; unsigned candidates remain non-qualifying: added to CONTEXT.md ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-19 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canonical-qualification-method-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical qualification method: added ✅
+
+### Bug Patterns
+- A signed measurement could carry an arbitrary method digest and still authorize RG metrics: observed and fixed by canonical method-policy binding; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Method digest shape is not measurement-protocol identity: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- RG sample bases and minimum floors must be loaded from the manifest-bound qualification-method policy; signed arbitrary protocols remain non-qualifying: added to CONTEXT.md ✅
+
+---

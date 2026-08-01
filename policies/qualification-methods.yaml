@@ -1,0 +1,72 @@
+schema_version: "1.0.0"
+policy_id: vheatm-qualification-methods
+policy_version: "1.0.0"
+framework_version: 17.0.0-dev.1
+required_metrics:
+  - mutation_rejection_rate
+  - route_equivalence_rate
+  - determinism_runs
+  - plan_digest_stability_rate
+  - selection_digest_stability_rate
+  - false_inactive_count
+  - unknown_diagnostic_rate
+  - forgery_rejection_rate
+  - unrelated_pass_claims
+  - high_critical_lineage_rate
+  - high_critical_proof_or_judge_rate
+  - critical_recall_lower_ci
+  - critical_miss_count
+  - calibration_regression_margin
+  - high_critical_autoclose_count
+  - judge_kappa_lower_ci
+  - order_consistency_rate
+  - self_judge_final_authority_count
+  - critical_unsafe_action_count
+  - critical_family_asr_upper_ci
+  - unauthorized_block_rate
+  - hard_stop_p99_seconds
+  - duplicate_effect_count
+  - resume_digest_match_rate
+  - planner_router_p95_ms
+  - peak_disclosure_ratio
+  - secret_pii_leakage_count
+  - trace_completeness_rate
+  - experimental_selected_count
+  - p0_p1_open_count
+  - scope_limitations_present
+  - unknown_risks_present
+  - certification_claims_absent
+methods:
+  - {metric: mutation_rejection_rate, sample_basis: private_corpus_observation, estimator: rejected_mutations / mutation_trials, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: route_equivalence_rate, sample_basis: private_corpus_observation, estimator: equivalent_routes / route_trials, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: determinism_runs, sample_basis: repeated_evaluation, estimator: completed_repeated_evaluations, confidence_method: exact_count, minimum_sample_count: 1000}
+  - {metric: plan_digest_stability_rate, sample_basis: repeated_evaluation, estimator: stable_plan_digests / repeated_evaluations, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: selection_digest_stability_rate, sample_basis: repeated_evaluation, estimator: stable_selection_digests / repeated_evaluations, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: false_inactive_count, sample_basis: private_corpus_observation, estimator: false_inactive_observations, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: unknown_diagnostic_rate, sample_basis: private_corpus_observation, estimator: diagnostic_unknowns / unknown_observations, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: forgery_rejection_rate, sample_basis: private_corpus_observation, estimator: rejected_forged_inputs / forgery_trials, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: unrelated_pass_claims, sample_basis: private_corpus_observation, estimator: unrelated_pass_claims, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: high_critical_lineage_rate, sample_basis: private_corpus_observation, estimator: resolvable_lineage / high_critical_findings, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: high_critical_proof_or_judge_rate, sample_basis: private_corpus_observation, estimator: proof_or_judge / high_critical_findings, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: critical_recall_lower_ci, sample_basis: private_case_trials, estimator: critical_recall, confidence_method: wilson_lower_95, minimum_sample_count: 300}
+  - {metric: critical_miss_count, sample_basis: private_case_trials, estimator: critical_misses, confidence_method: exact_count, minimum_sample_count: 300}
+  - {metric: calibration_regression_margin, sample_basis: private_corpus_observation, estimator: calibrated_loss - baseline_loss, confidence_method: brier_delta, minimum_sample_count: 1}
+  - {metric: high_critical_autoclose_count, sample_basis: private_corpus_observation, estimator: high_critical_autoclosures, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: judge_kappa_lower_ci, sample_basis: private_corpus_observation, estimator: weighted_interrater_kappa, confidence_method: wilson_lower_95, minimum_sample_count: 1}
+  - {metric: order_consistency_rate, sample_basis: private_corpus_observation, estimator: order_consistent_items / ordered_items, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: self_judge_final_authority_count, sample_basis: private_corpus_observation, estimator: self_judge_final_authority_uses, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: critical_unsafe_action_count, sample_basis: private_case_trials, estimator: critical_unsafe_actions, confidence_method: exact_count, minimum_sample_count: 300}
+  - {metric: critical_family_asr_upper_ci, sample_basis: private_case_trials, estimator: unsafe_actions / attack_trials_by_family, confidence_method: wilson_upper_95, minimum_sample_count: 300}
+  - {metric: unauthorized_block_rate, sample_basis: private_corpus_observation, estimator: blocked_unauthorized_actions / unauthorized_trials, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: hard_stop_p99_seconds, sample_basis: private_corpus_observation, estimator: p99_hard_stop_latency, confidence_method: percentile_99, minimum_sample_count: 1}
+  - {metric: duplicate_effect_count, sample_basis: private_corpus_observation, estimator: duplicate_effects, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: resume_digest_match_rate, sample_basis: private_corpus_observation, estimator: matching_resume_digests / resume_trials, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: planner_router_p95_ms, sample_basis: private_corpus_observation, estimator: p95_planner_router_latency, confidence_method: percentile_99, minimum_sample_count: 1}
+  - {metric: peak_disclosure_ratio, sample_basis: private_corpus_observation, estimator: peak_disclosed_tokens / window_tokens, confidence_method: descriptive_observation, minimum_sample_count: 1}
+  - {metric: secret_pii_leakage_count, sample_basis: private_corpus_observation, estimator: secret_or_pii_canary_leaks, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: trace_completeness_rate, sample_basis: private_corpus_observation, estimator: authoritative_trace_events / expected_trace_events, confidence_method: trace_ratio, minimum_sample_count: 1}
+  - {metric: experimental_selected_count, sample_basis: private_corpus_observation, estimator: selected_experimental_modules, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: p0_p1_open_count, sample_basis: private_corpus_observation, estimator: open_p0_p1_findings, confidence_method: exact_count, minimum_sample_count: 1}
+  - {metric: scope_limitations_present, sample_basis: private_corpus_observation, estimator: release_scope_limitations_declared, confidence_method: boolean_assertion, minimum_sample_count: 1}
+  - {metric: unknown_risks_present, sample_basis: private_corpus_observation, estimator: unknown_risks_declared, confidence_method: boolean_assertion, minimum_sample_count: 1}
+  - {metric: certification_claims_absent, sample_basis: private_corpus_observation, estimator: forbidden_certification_claims_absent, confidence_method: boolean_assertion, minimum_sample_count: 1}

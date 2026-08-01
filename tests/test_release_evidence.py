@@ -19,6 +19,7 @@ from vheatm_control.qualification import (
 )
 from vheatm_control.serialization import load_json
 from vheatm_control.qualification_private import expected_private_case_digest, expected_private_corpus_digest, expected_private_corpus_id, ingest_private_corpus
+from vheatm_control.qualification_methods import expected_method_digest
 from vheatm_control.supply_chain import (
     build_supply_chain_attestation,
     build_vulnerability_scan,
@@ -32,6 +33,10 @@ from vheatm_control.supply_chain import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _method_digest(metric: str) -> str:
+    return expected_method_digest(metric, root=ROOT)
 
 
 def test_release_evaluator_rejects_non_rfc3339_evaluated_at() -> None:
@@ -133,8 +138,8 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
         independent_judge_id="judge:v17",
         judge_verdict_refs=[verdict["verdict_id"]],
         measurements=[
-            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
-            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": _method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": _method_digest("critical_miss_count"), "evidence_refs": [receipt["receipt_id"]]},
         ],
         generated_at="2026-08-01T00:00:00Z",
     )
@@ -176,6 +181,44 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
     assert "distinct" in same_key_rg05["rationale"]
 
 
+def test_release_gates_reject_measurement_with_unknown_method_digest(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, receipt = _release_private_fixture(tmp_path, key)
+    verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
+    judge_key = Ed25519PrivateKey.generate()
+    judge_packet, verdict, _ = _release_judge_fixture(receipt, signing_key=judge_key)
+    evidence = build_qualification_evidence(
+        manifest=verified_manifest,
+        private_corpus_receipt_id=receipt["receipt_id"],
+        evaluator_id="eval:v17",
+        evaluator_version="1.0.0",
+        independent_judge_id="judge:v17",
+        judge_verdict_refs=[verdict["verdict_id"]],
+        measurements=[
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+        ],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {
+            "qualification_manifest": signed_manifest,
+            "private_corpus_receipt": receipt,
+            "qualification_evidence": sign_qualification_evidence(evidence, private_key=key, key_id="qualification-key"),
+            "independent_judge_packets": [judge_packet],
+            "independent_judge_verdicts": [verdict],
+        },
+        evaluated_at="2026-08-01T00:00:00Z",
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        schema_root=ROOT,
+    )
+    rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
+    assert rg05["status"] == "unknown"
+    assert "method" in rg05["rationale"]
+
+
 def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_path: Path) -> None:
     key = Ed25519PrivateKey.generate()
     signed_manifest, receipt = _release_private_fixture(tmp_path, key, count=1)
@@ -190,8 +233,8 @@ def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_pat
         independent_judge_id="judge:v17",
         judge_verdict_refs=[verdict["verdict_id"]],
         measurements=[
-            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
-            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": _method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": _method_digest("critical_miss_count"), "evidence_refs": [receipt["receipt_id"]]},
         ],
         generated_at="2026-08-01T00:00:00Z",
     )
@@ -228,8 +271,8 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
         independent_judge_id="judge:v17",
         judge_verdict_refs=[verdict["verdict_id"]],
         measurements=[
-            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
-            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": _method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": _method_digest("critical_miss_count"), "evidence_refs": [receipt["receipt_id"]]},
         ],
         generated_at="2026-08-01T00:00:00Z",
     )
@@ -269,8 +312,8 @@ def test_release_gates_reject_critical_trials_without_independent_case_coverage(
         independent_judge_id="judge:v17",
         judge_verdict_refs=[verdict["verdict_id"]],
         measurements=[
-            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
-            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": _method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": _method_digest("critical_miss_count"), "evidence_refs": [receipt["receipt_id"]]},
         ],
         generated_at="2026-08-01T00:00:00Z",
     )
@@ -313,7 +356,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         "scope_limitations_present": True, "unknown_risks_present": True, "certification_claims_absent": True,
     }
     measurements = [
-        {"metric": name, "value": value, "sample_count": 300 if name in {"critical_recall_lower_ci", "critical_miss_count", "critical_family_asr_upper_ci", "critical_unsafe_action_count"} else 1000, "confidence_lower": float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1 else 0.0, "method_digest": "c" * 64, "evidence_refs": [private_receipt["receipt_id"], f"EV-{name}"]}
+        {"metric": name, "value": value, "sample_count": 300 if name in {"critical_recall_lower_ci", "critical_miss_count", "critical_family_asr_upper_ci", "critical_unsafe_action_count"} else 1000, "confidence_lower": float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1 else 0.0, "method_digest": _method_digest(name), "evidence_refs": [private_receipt["receipt_id"], f"EV-{name}"]}
         for name, value in values.items()
     ]
     qualification = build_qualification_evidence(
