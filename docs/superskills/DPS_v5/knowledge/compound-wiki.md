@@ -146,3 +146,26 @@ modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD
 - Critical qualification metrics must reference the verified private receipt and remain within its population; domain bounds are enforced before RG derivation: added to CONTEXT.md ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-13 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: judge-packet-evidence-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Blind judge packet: added ✅
+- Independent judge coverage: added ✅
+
+### Bug Patterns
+- A signed verdict could be detached from its blind packet or cover unpresented private cases: observed and fixed at the evaluator trust boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A verdict identity does not prove what context or cases were judged: added to CONTEXT.md Domain Gotchas ✅
+- Packet sidecars are part of immutable release provenance: added to CONTEXT.md Architectural Decisions ✅
+
+### Architectural Decisions Promoted
+- Qualification metrics require exact packet/verdict binding and private-case intersection coverage: added to CONTEXT.md ✅
+
+---
