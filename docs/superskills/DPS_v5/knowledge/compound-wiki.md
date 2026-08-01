@@ -658,3 +658,27 @@ modules: [MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS]
 - Keep privileged host qualification as an external candidate handoff; never expand the runtime trust boundary just to manufacture RG-09 evidence: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-36 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
+---
+
+## Cycle: external-signer-key-custody-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- External signer protocol: added ✅
+- Signer request snapshot: added ✅
+
+### Bug Patterns
+- A signer transport could mutate the shared request and make an unrelated payload signature appear valid: observed and fixed by passing a transport copy and verifying against the original snapshot; no PATTERN-DEBT entry after global scan.
+
+### Gotchas Captured
+- A signing primitive is not signer authority, and a callback boundary can rewrite bytes: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Keep private key custody outside the runtime behind a bounded Unix-socket protocol, while requiring the external trust registry before any release role is accepted: added to CONTEXT.md Architectural Decisions ✅
+- Treat transport/service errors as unavailable and never fall back to local signing: added to CONTEXT.md ✅
+
+---

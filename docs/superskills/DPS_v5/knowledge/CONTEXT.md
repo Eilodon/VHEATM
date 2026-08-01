@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 27 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 28 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -41,6 +41,8 @@
 - **External authority root:** the deployment-supplied public key used to verify a trusted key registry; it is an external trust input, never a local fixture or self-declared release fact. <!-- from ADR: ADR-32 -->
 - **Candidate scanner evidence:** a real scanner result that is content-addressed for investigation but remains non-qualifying until trusted scanner provenance, role-key custody, and a bundle-bound authority registry verify it. <!-- from ADR: ADR-34 -->
 - **Candidate host qualification:** a schema-valid HQR/HAT observed on a capability-bearing host that proves the local enforcement path but remains non-qualifying until deployment identity, authority custody, population adequacy, and trusted registry binding are supplied. <!-- from ADR: ADR-35 -->
+- **External signer protocol:** the typed request/response boundary that sends canonical payload bytes to a separate key-custody process without exposing private key material to the VHEATM runtime. <!-- from ADR: ADR-36 -->
+- **Signer request snapshot:** the immutable client-side request retained across a transport callback so response verification cannot be redirected to callback-mutated bytes. <!-- from ADR: ADR-36 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -78,6 +80,8 @@
 - Signed release evidence must resolve role keys through an externally signed trusted key registry; direct caller-supplied role keys fail closed, and the registry identity is part of the release report binding. <!-- from ADR: ADR-32 -->
 - A zero-finding scanner result and an installed host capability are observations, not release authority; external provenance and exact enforcement preflight must be verified before RG-13/RG-09 can change from `unknown`. <!-- from ADR: ADR-34 -->
 - A capable qualification host may prove the enforcement path without authorizing production RG-09; HQR/HAT must bind the actual deployment and resolve its signer through the trusted registry before metrics contribute. <!-- from ADR: ADR-35 -->
+- A signing primitive is not a key-custody authority; production signing must cross a bounded external service boundary and release verification must still resolve the signer through the trusted registry. <!-- from ADR: ADR-36 -->
+- Process/callback inputs are untrusted mutable data; retain an immutable request snapshot and verify identity, digest, purpose, bundle, and signature against that snapshot. <!-- from ADR: ADR-36 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -115,3 +119,4 @@
 - [2026-08] A valid signature proves document integrity but not signer authority | Require a separately signed, bundle/framework/time-bound role-key registry and keep its external authority root explicit; missing or unverifiable registry data remains unknown. <!-- from ADR: ADR-32 -->
 - [2026-08] A zero-finding scanner report can still be untrusted, and an installed sandbox binary can still lack namespace capability | Bind scanner output to trusted provenance/registry and record the exact host preflight result; never promote either observation alone to RG-13/RG-09. <!-- from ADR: ADR-34 -->
 - [2026-08] The default host can lack namespace capability while a privileged qualification container succeeds | Keep the candidate HQR/HAT bound to that actual deployment and never add a privileged runtime fallback just to make RG-09 pass. <!-- from ADR: ADR-35 -->
+- [2026-08] A transport callback can mutate the request it receives and return a self-consistent signature over replacement bytes | Pass a copy across the process seam and verify against the original content-addressed request; service errors remain unavailable rather than falling back to local signing. <!-- from ADR: ADR-36 -->
