@@ -1636,7 +1636,7 @@ Cascade Review: ✅ Done — digest-drift RED regression, request-binding RED re
 
 - [verified 2026-08-01] RED regression showed a changed backend was not classified as digest drift before the fix.
 - [verified 2026-08-01] GREEN sandbox/broker tests pass with request-bound executable digests and FD-passed backend launches.
-- [verified 2026-08-01] Full repository suite passes at 257 tests; canonical validator passes; no production host or GA evidence was created.
+- [verified 2026-08-01] Full repository suite passes at 258 tests; canonical validator passes; no production host or GA evidence was created.
 
 ### Owner
 

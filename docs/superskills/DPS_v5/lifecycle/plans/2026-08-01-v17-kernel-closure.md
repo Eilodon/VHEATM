@@ -50,7 +50,7 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 257 passed.
+- `.venv/bin/pytest -o addopts=''` — 258 passed.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
