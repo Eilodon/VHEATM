@@ -1,4 +1,5 @@
 import json
+import hmac
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -6,8 +7,15 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 from vheatm_control.lifecycle import AuditLifecycle
-from vheatm_control.policy import ApprovalVerifier, PolicyEngine, request_digest, sign_approval_token
 from vheatm_control.provenance import ProvenanceRegistry, build_claim_record, build_source_record
+from vheatm_control.tool_broker import (
+    BrokerCapabilities,
+    InMemoryTokenLedger,
+    ToolBroker,
+    approval_signing_payload,
+    expected_approval_token_id,
+    request_digest,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
@@ -46,31 +54,37 @@ def test_approval_and_decision_match_contracts() -> None:
         "request_id": "REQ-1",
         "requester": "agent",
         "tool_class": "write",
-        "scope": "workspace:/repo:file",
-        "diff_paths": ["file"],
+        "scope": "workspace:repo",
+        "diff_paths": ["repo/file"],
         "rollback_plan": "restore file",
     }
-    token = sign_approval_token(
-        {
-            "requester": "agent",
-            "tool_class": "write",
-            "exact_scope": "workspace:/repo:file",
-            "request_digest": request_digest(request),
-            "issued_at": "2026-07-31T00:00:00Z",
-            "expires_at": "2026-08-01T00:00:00Z",
-            "approved_by": "human",
-            "nonce": "one",
-        },
-        key=key,
-        key_id="key-1",
+    token = {
+        "token_id": "APR-" + "0" * 64,
+        "schema_version": "1.0.0",
+        "requester": "agent",
+        "tool_class": "write",
+        "exact_scope": request["scope"],
+        "request_digest": request_digest(request),
+        "issued_at": "2026-07-31T00:00:00Z",
+        "expires_at": "2026-08-01T00:00:00Z",
+        "approved_by": "human",
+        "nonce": "one",
+        "single_use": True,
+        "signature": {"algorithm": "hmac-sha256", "key_id": "key-1", "value": "0" * 64},
+    }
+    token["token_id"] = expected_approval_token_id(token)
+    token["signature"]["value"] = hmac.new(key, approval_signing_payload(token), "sha256").hexdigest()
+    broker = ToolBroker.from_root(
+        ROOT,
+        keyring={"key-1": key},
+        capabilities=BrokerCapabilities(),
+        token_ledger=InMemoryTokenLedger(),
+        clock=lambda: datetime(2026, 7, 31, 1, tzinfo=UTC),
     )
-    policy = {"tools": {"classes": {name: {} for name in ["read", "execute", "write", "network", "secrets"]}}, "egress": {}}
-    decision = PolicyEngine(policy, approval_verifier=ApprovalVerifier({"key-1": key})).authorize(
-        request, approval_token=token, now=datetime(2026, 7, 31, 1, tzinfo=UTC)
-    )
+    decision = broker.evaluate(request, token)
     validate(request, "tool-request.schema.json")
     validate(token, "approval-token.schema.json")
-    validate(decision.to_document(), "policy-decision.schema.json")
+    validate(decision, "policy-decision.schema.json")
 
 
 def test_hardened_registry_matches_contract() -> None:

@@ -641,3 +641,71 @@ Start the next cycle by routing all remaining policy callers through `ToolBroker
 - A shared receipt helper is a real trust boundary only when it validates the decision semantics, not just request ID and allow/deny.
 - Authorization failure must have a typed outcome that cannot be confused with a provider outage or a valid deny receipt.
 - Globalizing the guard across sandbox and provider adapters exposed the duplicate legacy policy authority as the next architectural blocker.
+
+## ADR-10 — Retire the duplicate policy engine from the runtime authority path
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `policy-authority` `tool-broker` `migration` `single-source-of-truth`
+**Change Classification:** `ARCHITECTURE CHANGE`
+**Review date:** 2026-09-01 — or earlier when a compatibility consumer requires a reviewed adapter.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for runtime authority consolidation; `WATCHFUL` for downstream callers of the retired API.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `SPECIALIST REVIEW`
+**VOLATILITY:** `WATCHFUL` — external integrations may still need an explicit reviewed adapter.
+
+### Context
+
+The approved roadmap requires one policy authority, but `src/vheatm_control/policy.py` still contained an independent `PolicyEngine`, approval verifier, ledger, and guarded executor alongside `tool_broker.ToolBroker`. Even though current runtime adapters used the broker, the legacy module remained importable and could produce decisions with different request/scope/approval semantics. That is an authority-split blocker and makes a passing test suite insufficient evidence of policy consistency.
+
+### Decision
+
+Make `ToolBroker` the only runtime policy implementation. Replace `src/vheatm_control/policy.py` with a compatibility export surface for the canonical broker and explicit retired-name errors; move the former implementation to `docs/migration/legacy-policy.py.txt` as non-authoritative provenance material. Migrate contract tests to instantiate the canonical broker and validate its decision/schema directly. No runtime module may import or execute the archived policy implementation.
+
+### Options Considered
+
+- Keep both engines and document that callers should prefer the broker: rejected because importability itself preserves an authority fork and future callers can select the weaker path.
+- Delete the legacy module and archive: rejected because migration comparison and downstream diagnosis need the historical material preserved outside runtime packaging.
+- Make `ToolBroker` silently emulate every old API: rejected because it would preserve ambiguous semantics and hide the required migration boundary.
+
+### Impact
+
+Runtime changed: `src/vheatm_control/policy.py` is now a canonical broker shim; the old implementation is outside the runtime package under `docs/migration`.
+Tests changed: policy and contract tests now exercise `ToolBroker`, token receipts, and explicit retired API behavior.
+Breaking change: YES — imports of `PolicyEngine`, `ApprovalVerifier`, `GuardedExecutor`, and related legacy names must migrate to `ToolBroker`/sandbox APIs.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `policy authority → approval decision → action receipt → sandbox/provider enforcement`; the runtime now has one implementation and one semantic decision contract.
+Cascade Review: ✅ Done — source import scan, package/runtime path inspection, schema validation, and full tests cover the migration boundary.
+
+### Consequences
+
+- Future policy changes have one implementation, one schema boundary, and one receipt contract to review.
+- Legacy behavior remains available for provenance comparison but cannot be imported as runtime authority or enter the canonical bundle through the Python package.
+- Downstream callers using the retired API will fail explicitly and must migrate; this is intentional rather than silently adapting divergent semantics.
+
+### Evidence
+
+- [verified 2026-08-01] Runtime/source scan finds no non-test imports of `PolicyEngine`, `ApprovalVerifier`, `GuardedExecutor`, or `sign_approval_token` outside the archived migration text.
+- [verified 2026-08-01] Policy/contract tests pass against `ToolBroker`; full repository verification passes at 231 tests and repository validation passes.
+- [verified 2026-08-01] The archived implementation is `.txt` migration material and the shim exposes canonical broker symbols only.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Remaining local work is independent RG measurement breadth and real qualification evidence; external debt remains private corpus/judge, key custody, vulnerability feed, provider qualification, host namespace capability, shadow/canary observations, and UX research.
+
+### Next Cycle Trigger
+
+Start the next cycle by expanding independent RG-00…RG-15 measurement coverage and auditing every release/pilot claim against verified evidence, while retaining `unknown`/`blocked` for unavailable external prerequisites.
+
+### Cycle Retrospective
+
+- A compatibility module is safe only when it cannot create a second authority decision.
+- Archiving legacy code as non-runtime text preserves provenance without preserving an executable bypass.
+- Removing duplicate policy tests reduces count but improves evidence quality because the remaining tests exercise the canonical authority.
