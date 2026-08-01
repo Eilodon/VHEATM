@@ -477,7 +477,7 @@ class SessionStore:
                 raise SessionStoreError("session journal sequence or event identity is invalid")
             if event["session_id"] != session_id or event["prev_hash"] != previous_hash:
                 raise SessionStoreError("session journal hash chain has a gap")
-            expected_id = f"EVT-{hashlib.sha256(_canonical_bytes({key: value for key, value in event.items() if key not in {"event_id", "event_hash"}})).hexdigest().upper()}"
+            expected_id = f"EVT-{hashlib.sha256(_canonical_bytes({key: value for key, value in event.items() if key not in {'event_id', 'event_hash'}})).hexdigest().upper()}"
             if event["event_id"] != expected_id or event["event_hash"] != _hash_event(event):
                 raise SessionStoreError(f"session journal event integrity failed at sequence {index}")
             if event["from_state"] != state:
