@@ -771,3 +771,26 @@ modules: [MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
 - All RG-13 artifacts persist canonical framework scope, and verified scan composition plus release evaluation reject scope drift before metrics contribute: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-41 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
+
+---
+
+## Cycle: pilot-drill-and-terminal-state-integrity
+
+### New Domain Terms Added to CONTEXT.md
+- Pilot drill completeness: added ✅
+
+### Bug Patterns
+- Pilot readiness accepted only four of the five roadmap recovery drills and allowed empty drill evidence; schema-only consumers could also accept incomplete terminal states: observed and fixed at runtime and schema boundaries; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Pilot record identity does not make an incomplete state complete; profile and terminal payload invariants must be schema-bound: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Shadow/canary readiness requires all five drills with evidence, and profile/terminal-state semantics are enforced independently of helper functions: added to CONTEXT.md Architectural Decisions ✅
+
+---

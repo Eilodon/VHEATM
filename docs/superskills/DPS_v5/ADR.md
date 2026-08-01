@@ -2933,3 +2933,77 @@ Start the external evidence handoff when a trusted scanner/provenance producer a
 - Signer metadata is not evidence until it is persisted in the signed record and included in its immutable identity.
 - Supply-chain composition should reject scope drift before the release evaluator so invalid evidence cannot circulate as a plausible candidate.
 - A zero-finding scan is still only an observation until scanner provenance, role-key custody, and trust-registry authority are independently verified.
+
+## ADR-41 — Enforce complete pilot drills and terminal-state invariants
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `shadow` `canary` `recovery` `schema`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-02 — or earlier when pilot drills, provider qualification, or lifecycle schemas change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local pilot runtime/schema enforcement; `NOT_PRODUCTION_QUALIFIED` because no real qualified provider or successful external shadow/canary observation is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `SCHEMA`
+**VOLATILITY:** `WATCHFUL` — pilot evidence, provider state, operational drill records, and release authority are external inputs.
+
+### Context
+
+The roadmap requires incident, rollback, evidence-store outage, clock-skew, and provider-outage drills before a shadow/canary pilot is ready. The runtime required only the first four and accepted empty drill evidence references. The pilot schema also allowed direct consumers to submit a `complete` record without observations or a completion timestamp, or a `rollback` record without rollback metadata, and did not bind shadow/canary mode to its read-only/tool-enabled flags.
+
+### Decision
+
+Require all five named drills and at least one non-empty evidence reference for each at pilot preparation. Add schema conditions so shadow always remains read-only with tools disabled, canary always has tools enabled, `complete` requires non-empty observations and `completed_at`, and `rollback` requires `rollback_reason` and `rollback_at`. Keep the existing immutable pilot identity and runtime transition checks; this is an additional direct-schema defense.
+
+### Options Considered
+
+- Keep four drills for backward-compatible fixtures: rejected because provider outage is an explicit roadmap failure mode.
+- Validate only in `prepare_pilot`: rejected because persisted/schema-only consumers could bypass the helper.
+- Require drill IDs but allow empty refs: rejected because a drill without evidence cannot establish that it occurred.
+- Infer terminal payloads from status: rejected because missing observations/timestamps must remain invalid, not synthesized.
+
+### Impact
+
+Schemas changed: `schemas/pilot-run.schema.json`
+Components changed: pilot preparation, pilot schema, pilot contract tests
+Breaking change: **YES** for pilot records missing the fifth drill, drill evidence, or terminal/profile fields; **NO** for migrated valid fixtures.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: MEDIUM
+Cascades: `recovery drills → pilot readiness → shadow/canary lifecycle → persisted observation evidence`
+Cascade Review: ✅ Done — RED/GREEN runtime and direct-schema regressions cover missing provider-outage, empty refs, profile drift, and incomplete terminal payloads.
+
+### Consequences
+
+- A `ready` pilot now represents the complete roadmap drill set rather than a four-drill partial.
+- Schema consumers cannot reinterpret a shadow record as tool-enabled or accept a terminal status without its required evidence payload.
+- This improves pilot integrity but does not create a real provider, external authority, or successful observation.
+- Canary remains fail-closed until a qualified allowlisted provider and independently verified release evidence are supplied.
+
+### Evidence
+
+- [verified 2026-08-02] RED test initially passed incorrectly when the provider-outage drill was removed; empty drill evidence was also accepted.
+- [verified 2026-08-02] Pilot suite passes with `8 passed`; full suite passes with `317 passed in 67.81s`.
+- [verified 2026-08-02] `vheatm-validate --root .` passes with the expanded pilot schema.
+- [verified 2026-08-02] No qualified provider or successful shadow/canary observation was available; no pilot completion or GA evidence is promoted.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Qualified provider, real shadow/canary observation, external authority, private qualification, trusted host deployment, scanner provenance, UX-04, and original V16 archive remain open or external.
+
+### Next Cycle Trigger
+
+When an actual provider and evidence authority are supplied, run all five drills in the target deployment, retain typed refs for each, then re-evaluate the full release report before any canary transition.
+
+### Cycle Retrospective
+
+- A lifecycle record's status is not proof of its payload; schema conditions must encode the required evidence for terminal states.
+- Recovery coverage is incomplete when provider outage is omitted, even if incident and storage drills pass.
+- Runtime helper validation and direct persisted-record schema validation are separate defenses and both are required.

@@ -59,13 +59,14 @@
 - Qualification manifests and evidence now persist framework/bundle scope; their external signer path rejects scope mismatch and the release evaluator requires the manifest to bind the current bundle.
 - Blind judge packets/verdicts can persist framework/bundle scope in their content IDs; external judge signing requires that scope, and release qualification rejects verdicts whose scope is absent or mismatched.
 - Supply-chain attestation, vulnerability-scan, and provenance records now persist the canonical framework version; producer signing, verified-scan attachment, canonical bundle binding, and RG-13 evaluation reject scope drift.
+- Pilot preparation now requires all five roadmap drills, non-empty drill evidence, and schema-bound shadow/canary profile plus terminal-state invariants.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts='' -q` — 315 passed in 65.82s.
+- `.venv/bin/pytest -o addopts='' -q` — 317 passed in 67.81s.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
@@ -91,6 +92,7 @@ Fresh evidence for this cycle:
 - Authority-producer boundary — host-attestation and trust-registry producers delegate through `SignerClient`; five focused regressions cover host/trust signing, exact framework binding, and mixed-key rejection. The external service, authority root, rotation, and deployment custody remain unavailable.
 - Qualification/judge producer boundary — qualification manifest/evidence and judge verdict external-signing paths bind purpose, framework, bundle, and key; release-evidence regressions cover scope propagation and mismatch rejection. Operational signer custody and external qualification remain unavailable.
 - Supply-chain scope boundary — attestation, vulnerability, and provenance schemas persist `framework_version`; external signer mismatch, foreign verified-scan attachment, and evaluator mismatch regressions remain fail-closed. Operational signer/scanner authority remains unavailable.
+- Pilot boundary — provider-outage drill, non-empty drill evidence, read-only/tool-enabled profile flags, and complete/rollback payload requirements are enforced by runtime and `pilot-run.schema.json`.
 - `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` — pass; all module digests match.
 - `uv build --wheel --sdist` — pass; both wheel and sdist contain the updated supply-chain schemas/runtime.
 - Low-risk evaluate/route — pass; selected 15, unselected 7, unresolved 0, 3374/4096 estimated tokens, `completion_blocked=false`.
