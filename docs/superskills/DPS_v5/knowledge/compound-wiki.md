@@ -682,3 +682,25 @@ modules: [MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
 - Treat transport/service errors as unavailable and never fall back to local signing: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-37 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
+---
+
+## Cycle: bundle-bound-supply-chain-signer-integration
+
+### New Domain Terms Added to CONTEXT.md
+- Bundle-bound signer delegation: added ✅
+
+### Bug Patterns
+- A signer protocol can exist while artifact producers still accept only in-process private keys: observed and fixed by routing attestation, vulnerability, and provenance builders through the external signer seam; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Signer availability failure must not activate a local fallback, and a signature without role/bundle binding is not release authority: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Bundle-bound supply-chain artifact builders use one external signer boundary with explicit purpose separation; fixture private-key paths remain non-authoritative: added to CONTEXT.md Architectural Decisions ✅
+
+---

@@ -2635,3 +2635,77 @@ Start the next signer qualification cycle when an operational absolute Unix-sock
 - A signing primitive is not a key-custody boundary; the caller must be unable to supply private material to the production client.
 - Callback seams need immutable snapshots because even a local test transport can mutate a shared mapping and make an unrelated signature appear valid.
 - Protocol completion and authority completion are separate milestones; the former can be verified locally while the latter must remain unknown until externally handed off.
+
+## ADR-37 — Route bundle-bound supply-chain signing through the external signer client
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `supply-chain` `signer-service` `key-custody` `fail-closed`
+**Change Classification:** `IMPLEMENTATION`
+**Review date:** 2026-09-02 — or earlier when an operational signer service, scanner authority, or trust-registry handoff is supplied.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local delegation and response verification; `NOT_PRODUCTION_QUALIFIED` because no operational signer, scanner authority, or trusted release registry is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `PACKAGE`
+**VOLATILITY:** `WATCHFUL` — signer custody, role separation, scanner provenance, and authority rotation are deployment inputs.
+
+### Context
+
+The supply-chain artifact builders could verify Ed25519 documents, but their signing API only accepted an in-process private key. That left the new signer/key-custody protocol disconnected from the bundle-bound attestation, vulnerability scan, and provenance paths. Keeping a local key fallback when an external service is unavailable would also turn an authority outage into an unreviewed signing path.
+
+### Decision
+
+Add an explicit external-signer option to the three bundle-bound supply-chain signing functions. The service path requires the canonical framework version and expected Ed25519 public key, sends the exact signed subject together with the artifact bundle root and role purpose (`supply_chain`, `vulnerability`, or `provenance`), and returns only a cryptographically verified signer receipt. Service errors are converted to `SupplyChainError` and never fall back to a private key; combining local and external key inputs is rejected. Existing private-key arguments remain available only for deterministic fixture compatibility and do not establish release authority.
+
+### Options Considered
+
+- Keep local private-key signing as the only path: rejected because it bypasses the external custody boundary.
+- Fall back to a local key after signer outage: rejected because an unavailable authority must remain unavailable.
+- Add a generic signer callback without bundle/purpose binding: rejected because a valid signature could be replayed across release roles or bundles.
+- Reimplement signing in each artifact builder: rejected because it would duplicate the boundary and risk inconsistent outage/verification semantics.
+
+### Impact
+
+Schemas changed: none
+Components changed: `src/vheatm_control/supply_chain.py`, `tests/test_release_blockers.py`, lifecycle evidence
+Breaking change: **NO** for existing fixture callers; **YES** for external signing when framework version, expected public key, or a valid signer response is absent.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `bundle-bound artifact → canonical signed subject → SignerClient → role purpose/key/bundle binding → Ed25519 verification → release evaluator`
+Cascade Review: ✅ Done — focused RED/GREEN regressions, the existing signer boundary, role-purpose binding, outage fail-closed behavior, and full repository verification cover the changed surface.
+
+### Consequences
+
+- The three supply-chain artifact types share one external key-custody seam and cannot silently switch authority paths.
+- The local fixture path remains useful for deterministic unit tests but is visibly separate from production trust establishment.
+- This change does not create a scanner signature, signer authority, trust registry, or GA evidence; those prerequisites remain external and unknown.
+- Qualification, judge, and host signing helpers remain fixture or authority-specific until their records have the same bundle-bound service contract and external handoff.
+
+### Evidence
+
+- [verified 2026-08-02] RED regressions initially failed because all three signing functions rejected the `signer=` boundary; after implementation, the external signer integration and outage fail-closed tests pass.
+- [verified 2026-08-02] Targeted release-blocker/evidence suite passes with `20 passed in 21.99s`; the full suite passes with `304 passed in 62.34s`.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .`, `git diff --check`, and Python compilation pass; the service path verifies the exact bundle-bound payload for attestation, vulnerability, and provenance records.
+- [verified 2026-08-02] No operational signer service, trusted scanner identity, authority root, or release registry was available; no production RG-13 or GA claim is created.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External signer custody, scanner/provenance authority, trusted registry, private qualification, provider/judge qualification, host authority, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next supply-chain signing cycle when an operational signer endpoint and externally controlled role keys are supplied; exercise all three purposes against the current bundle, verify role separation and rotation through the trusted registry, then attach scanner/provenance evidence before deriving RG-13.
+
+### Cycle Retrospective
+
+- Wiring a protocol into a producer is a distinct closure step: a verified transport alone does not prove every artifact builder uses it.
+- Bundle and purpose binding must be passed at the producer boundary, not reconstructed by a downstream evaluator.
+- Fixture compatibility can remain, but its authority limits must be explicit and tested at the external boundary.

@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 28 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 29 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -43,6 +43,7 @@
 - **Candidate host qualification:** a schema-valid HQR/HAT observed on a capability-bearing host that proves the local enforcement path but remains non-qualifying until deployment identity, authority custody, population adequacy, and trusted registry binding are supplied. <!-- from ADR: ADR-35 -->
 - **External signer protocol:** the typed request/response boundary that sends canonical payload bytes to a separate key-custody process without exposing private key material to the VHEATM runtime. <!-- from ADR: ADR-36 -->
 - **Signer request snapshot:** the immutable client-side request retained across a transport callback so response verification cannot be redirected to callback-mutated bytes. <!-- from ADR: ADR-36 -->
+- **Bundle-bound signer delegation:** the supply-chain producer boundary that sends attestation, vulnerability, or provenance subjects through the external signer with the current bundle root and role purpose, while retaining local private-key paths only as non-authoritative fixtures. <!-- from ADR: ADR-37 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -74,10 +75,13 @@
 - RG-09 may derive `hard_stop_p99_seconds` only from a verified HAT; private qualification evidence and an unverified local HQR cannot self-attest deployment enforcement. <!-- from ADR: ADR-29 -->
 - The HAT signed subject must include signature algorithm and key ID; unsigned key labels can be relabeled without cryptographic failure. <!-- from ADR: ADR-29 -->
 - Python's JSON Schema validator accepts `NaN` as a `number`; reject non-finite JSON constants at parsing and typed-run boundaries rather than relying on schema minimums. <!-- from ADR: ADR-29 -->
+- Bundle-bound supply-chain producers must pass the artifact's current bundle root and role purpose into the signer client; downstream signature verification cannot repair a producer that signed through an unbound authority path. <!-- from ADR: ADR-37 -->
+- An external signer outage must remain an error; silently falling back to an in-process private key would convert unavailable authority into unreviewed release evidence. <!-- from ADR: ADR-37 -->
 - Provider endpoint, adapter profile, and configuration digest must be canonical policy bindings checked before broker/transport and before pilot evidence; a `qualified` state also requires evidence references. <!-- from ADR: ADR-30 -->
 - Independent judge packets must bind provider version, endpoint, adapter profile, and configuration digest to the canonical provider policy; a pending local descriptor proves identity only and cannot establish external qualification. <!-- from ADR: ADR-33 -->
 - Private qualification evidence must bind its content address and signature to the current control-bundle root; release evaluation requires the caller to supply that root and leaves metrics unavailable when it is absent or mismatched. <!-- from ADR: ADR-31 -->
 - Signed release evidence must resolve role keys through an externally signed trusted key registry; direct caller-supplied role keys fail closed, and the registry identity is part of the release report binding. <!-- from ADR: ADR-32 -->
+- Bundle-bound supply-chain, vulnerability, and provenance builders share the external signer protocol; fixture private-key signing remains non-authoritative and cannot substitute for scanner/provenance authority. <!-- from ADR: ADR-37 -->
 - A zero-finding scanner result and an installed host capability are observations, not release authority; external provenance and exact enforcement preflight must be verified before RG-13/RG-09 can change from `unknown`. <!-- from ADR: ADR-34 -->
 - A capable qualification host may prove the enforcement path without authorizing production RG-09; HQR/HAT must bind the actual deployment and resolve its signer through the trusted registry before metrics contribute. <!-- from ADR: ADR-35 -->
 - A signing primitive is not a key-custody authority; production signing must cross a bounded external service boundary and release verification must still resolve the signer through the trusted registry. <!-- from ADR: ADR-36 -->

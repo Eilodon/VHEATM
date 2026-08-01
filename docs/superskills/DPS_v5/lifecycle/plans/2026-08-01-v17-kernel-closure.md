@@ -54,13 +54,14 @@
 - Signed release evidence now requires an externally signed `KRG-*` trust-key registry: role public keys, key IDs, framework, current bundle, validity, revocation state, and authority signature are verified before metrics can contribute; direct caller-supplied role keys fail closed, and the registry ID binds the release report.
 - Independent judge packets now bind the judge provider version, exact HTTPS endpoint, adapter profile, and configuration digest to the canonical provider allowlist before packet identity or verdict evidence can be consumed; the local `judge.test` descriptor remains `pending`.
 - External signer/key custody now has a typed fail-closed protocol: canonical payloads cross only an absolute, non-symlink AF_UNIX transport, request/response schemas bind purpose/key/bundle/digest, the client snapshots requests before transport, and Ed25519 verification is performed against the original bytes. No private key enters this client, and no local signer service is available to authorize release evidence.
+- Bundle-bound supply-chain, vulnerability, and provenance builders can now delegate signing to the external `SignerClient`; signer outages, malformed authority inputs, and mixed local/external key paths fail closed, while private-key helpers remain fixture-only compatibility paths.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 268 passed.
+- `.venv/bin/pytest -o addopts='' -q` — 304 passed in 62.34s.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
@@ -82,7 +83,7 @@ Fresh evidence for this cycle:
 - Trust-registry regression — a signed registry resolves only active, in-window role keys bound to the exact framework/bundle; missing authority, wrong bundle, revoked/expired keys, and direct caller keys leave signed evidence unknown. Registry identity is included in release evidence bindings, while the authority root remains an external prerequisite.
 - Judge-provider binding regression — an unallowlisted judge provider is rejected before packet identity is created; packet replay/verification rechecks version, endpoint, adapter profile, and configuration binding. Targeted judge/release tests pass, while external judge qualification remains unavailable.
 - Independent-judge runtime boundary — the local callback is used only as the spawn-process test seam; packet identity, signed verdict verification, and the trusted registry remain mandatory before qualification consumption. It is not treated as an external judge deployment or qualification shortcut.
-- Signer boundary — six focused tests cover content-addressed requests, no private-key material, response binding, crypto verification, bounded Unix-socket framing, unavailable-service fail-closed behavior, and transport mutation; the external service/authority/key-rotation handoff remains unavailable.
+- Signer/supply-chain boundary — eight focused tests cover content-addressed requests, no private-key material, response binding, crypto verification, bounded Unix-socket framing, unavailable-service fail-closed behavior, transport mutation, and external signing of all three bundle-bound supply-chain artifact types; the external service/authority/key-rotation handoff remains unavailable.
 
 ## Latest prerequisite probe (2026-08-02)
 
