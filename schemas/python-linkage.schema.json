@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/python-linkage.schema.json",
+  "title": "VHEATM conservative Python linkage bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "linkage_id",
+    "linkage_type",
+    "input_probe_id",
+    "input_probe_root_hash",
+    "source_roots",
+    "status",
+    "generated_at",
+    "summary",
+    "modules",
+    "module_collisions",
+    "imports",
+    "calls",
+    "errors",
+    "root_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "linkage_id": {"type": "string", "pattern": "^LNK-[A-F0-9]{16}$"},
+    "linkage_type": {"const": "python_import_graph_v1"},
+    "input_probe_id": {"type": "string", "pattern": "^PRB-[A-F0-9]{16}$"},
+    "input_probe_root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_roots": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "status": {"enum": ["complete", "blocked"]},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modules",
+        "module_collisions",
+        "imports",
+        "internal_imports",
+        "ambiguous_imports",
+        "external_imports",
+        "calls",
+        "candidate_calls",
+        "ambiguous_calls",
+        "unresolved_calls",
+        "errors"
+      ],
+      "properties": {
+        "modules": {"type": "integer", "minimum": 0},
+        "module_collisions": {"type": "integer", "minimum": 0},
+        "imports": {"type": "integer", "minimum": 0},
+        "internal_imports": {"type": "integer", "minimum": 0},
+        "ambiguous_imports": {"type": "integer", "minimum": 0},
+        "external_imports": {"type": "integer", "minimum": 0},
+        "calls": {"type": "integer", "minimum": 0},
+        "candidate_calls": {"type": "integer", "minimum": 0},
+        "ambiguous_calls": {"type": "integer", "minimum": 0},
+        "unresolved_calls": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0}
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/module"}
+    },
+    "module_collisions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/collision"}
+    },
+    "imports": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/import_edge"}
+    },
+    "calls": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/call_resolution"}
+    },
+    "errors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/error"}
+    },
+    "root_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["line", "column", "end_line", "end_column"],
+      "properties": {
+        "line": {"type": "integer", "minimum": 1},
+        "column": {"type": "integer", "minimum": 0},
+        "end_line": {"type": "integer", "minimum": 1},
+        "end_column": {"type": "integer", "minimum": 0}
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "path", "source_root", "is_package", "source_id"],
+      "properties": {
+        "module": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "source_root": {"type": "string", "minLength": 1},
+        "is_package": {"type": "boolean"},
+        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "module", "symbol", "qualified_name", "path", "source_id", "definition_line", "definition_column"],
+      "properties": {
+        "kind": {"enum": ["module", "symbol"]},
+        "module": {"type": "string", "minLength": 1},
+        "symbol": {"type": ["string", "null"]},
+        "qualified_name": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "source_id": {"type": "string", "pattern": "^SRC-[A-F0-9]{16}$"},
+        "definition_line": {"type": ["integer", "null"], "minimum": 1},
+        "definition_column": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "paths"],
+      "properties": {
+        "module": {"type": "string", "minLength": 1},
+        "paths": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "import_edge": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_module",
+            "source_path",
+            "kind",
+            "requested",
+            "binding",
+            "state",
+            "targets",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "source_module": {"type": "string", "minLength": 1},
+            "source_path": {"type": "string", "minLength": 1},
+            "kind": {"enum": ["import", "from"]},
+            "requested": {"type": "string", "minLength": 1},
+            "binding": {"type": ["string", "null"]},
+            "state": {
+              "enum": [
+                "internal_module",
+                "internal_symbol",
+                "ambiguous",
+                "external",
+                "unresolved_relative",
+                "unresolved_internal",
+                "wildcard"
+              ]
+            },
+            "targets": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/target"}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "call_resolution": {
+      "allOf": [
+        {"$ref": "#/$defs/location"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_module",
+            "source_path",
+            "caller",
+            "callee",
+            "state",
+            "reason",
+            "targets",
+            "line",
+            "column",
+            "end_line",
+            "end_column"
+          ],
+          "properties": {
+            "source_module": {"type": "string", "minLength": 1},
+            "source_path": {"type": "string", "minLength": 1},
+            "caller": {"type": "string", "minLength": 1},
+            "callee": {"type": ["string", "null"]},
+            "state": {"enum": ["candidate", "ambiguous", "unresolved"]},
+            "reason": {
+              "enum": [
+                "unique_structural_candidate",
+                "mixed_internal_external_bindings",
+                "multiple_internal_targets",
+                "dynamic_callee",
+                "lexical_shadowing_not_modeled",
+                "wildcard_import_scope",
+                "external_target",
+                "internal_target_not_found",
+                "unknown_binding"
+              ]
+            },
+            "targets": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/target"}
+            },
+            "line": {"type": "integer", "minimum": 1},
+            "column": {"type": "integer", "minimum": 0},
+            "end_line": {"type": "integer", "minimum": 1},
+            "end_column": {"type": "integer", "minimum": 0}
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "code", "message"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "code": {
+          "enum": [
+            "input_probe_blocked",
+            "unmapped_file",
+            "unimportable_module",
+            "empty_source_root"
+          ]
+        },
+        "message": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
