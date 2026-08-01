@@ -2614,7 +2614,7 @@ Cascade Review: ✅ Done — TDD RED/GREEN coverage, STRIDE mutation review, sch
 
 - [verified 2026-08-02] RED test `test_signer_client_rejects_transport_mutation_of_the_original_request` failed with `DID NOT RAISE SignerServiceError` before the request snapshot was added.
 - [verified 2026-08-02] Six signer tests pass, including content-addressed request/no-key-material, response cryptographic binding, unavailable-service fail-closed, bounded Unix-socket transport, and transport-mutation rejection.
-- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` pass; full `.venv/bin/pytest -o addopts='' -q` passes with `301 passed in 63.03s`.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` pass; full `.venv/bin/pytest -o addopts='' -q` passes with `302 passed in 62.42s` after the transport-mutation regression.
 - [verified 2026-08-02] `uv build --wheel --sdist` includes `signer_service.py`, `signer-request.schema.json`, and `signer-response.schema.json`; the regenerated bundle contains 200 canonical entries.
 - [verified 2026-08-02] No operational signer service or trusted signer registry was available, so this change creates no signed GA/RG-13/RG-09 evidence.
 
