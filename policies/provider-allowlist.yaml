@@ -6,6 +6,14 @@ providers:
   - provider_id: local.python
     provider_versions: ["1.0.0"]
     qualification_state: pending
+    adapter_profile: local-python-v1
+    endpoint: https://local.python.invalid/analyze
+    config_digest: 22392372401ece05cde4f8459685ebe43c8d4541ed3de98b23a0e35b2412f05a
+    qualification_evidence_refs: []
   - provider_id: remote.test
     provider_versions: ["1.0.0"]
     qualification_state: pending
+    adapter_profile: remote-json-v1
+    endpoint: https://provider.example.test/analyze
+    config_digest: f8897ec81fff73eb5b173a5289b6e194ab76d9d91f6bb8a76cc0bf84c69024f0
+    qualification_evidence_refs: []

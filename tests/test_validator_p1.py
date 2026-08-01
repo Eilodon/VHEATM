@@ -6,6 +6,7 @@ import yaml
 from vheatm_control.models import Manifest
 from vheatm_control.capability_ledger import corpus_digest
 from vheatm_control.validator import _validate_activations
+from vheatm_control.validator import _validate_provider_allowlist
 from vheatm_control.validator import _validate_legacy_source, validate_repository
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,13 @@ def test_provider_allowlist_is_manifest_bound() -> None:
     assert _validate_provider_allowlist(manifest, policy) == []
     policy["framework_version"] = "16.0.0"
     assert any("canonical manifest" in issue for issue in _validate_provider_allowlist(manifest, policy))
+
+
+def test_provider_allowlist_cannot_mark_qualification_without_evidence() -> None:
+    manifest = yaml.safe_load((ROOT / "manifests" / "vheatm-v17.yaml").read_text())
+    policy = yaml.safe_load((ROOT / "policies" / "provider-allowlist.yaml").read_text())
+    policy["providers"][0]["qualification_state"] = "qualified"
+    assert any("qualification evidence refs" in issue for issue in _validate_provider_allowlist(manifest, policy))
 
 
 def test_unknown_activation_identifier_is_rejected() -> None:

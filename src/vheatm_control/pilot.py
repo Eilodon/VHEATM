@@ -166,7 +166,10 @@ def complete_pilot(
             provider_entry = provider_descriptor(str(run.get("provider_id")), str(run.get("provider_version")))
         except ProviderPolicyError as exc:
             raise PilotError(f"pilot provider is not allowlisted: {exc}") from exc
-        if pilot.get("profile") == "canary" and provider_entry.get("qualification_state") != "qualified":
+        if pilot.get("profile") == "canary" and (
+            provider_entry.get("qualification_state") != "qualified"
+            or not provider_entry.get("qualification_evidence_refs")
+        ):
             raise PilotError("canary requires a qualified allowlisted provider")
         if run.get("status") != "completed":
             raise PilotError("pilot completion cannot use blocked or unknown provider runs")

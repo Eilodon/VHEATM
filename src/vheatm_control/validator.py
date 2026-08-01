@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -445,6 +447,26 @@ def _validate_provider_allowlist(manifest: dict[str, Any], policy: dict[str, Any
         issues.append("provider_id/provider_version entries must be unique")
     if any(item.get("qualification_state") not in {"pending", "qualified", "revoked"} for item in providers if isinstance(item, dict)):
         issues.append("provider qualification_state is invalid")
+    for item in providers:
+        if not isinstance(item, dict):
+            continue
+        if item.get("qualification_state") == "qualified" and not item.get("qualification_evidence_refs"):
+            issues.append(f"provider {item.get('provider_id')} cannot be qualified without qualification evidence refs")
+        endpoint = item.get("endpoint")
+        parsed_endpoint = urlparse(endpoint) if isinstance(endpoint, str) else None
+        if (
+            not isinstance(endpoint, str)
+            or parsed_endpoint is None
+            or parsed_endpoint.scheme != "https"
+            or not parsed_endpoint.hostname
+            or parsed_endpoint.username
+            or parsed_endpoint.password
+        ):
+            issues.append(f"provider {item.get('provider_id')} endpoint must be canonical HTTPS")
+        if not isinstance(item.get("config_digest"), str) or not re.fullmatch(r"[a-f0-9]{64}", item.get("config_digest", "")):
+            issues.append(f"provider {item.get('provider_id')} config_digest must be lowercase SHA-256")
+        if not isinstance(item.get("adapter_profile"), str) or not re.fullmatch(r"[a-z][a-z0-9.-]{2,63}", item.get("adapter_profile", "")):
+            issues.append(f"provider {item.get('provider_id')} adapter_profile is invalid")
     return issues
 
 

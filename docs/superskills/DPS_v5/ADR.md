@@ -2112,3 +2112,79 @@ Start the next cycle when a controlled qualification host supplies a signed atte
 - A signed HQR handoff is stronger than a self-declared metric but still does not establish trust without external key custody.
 - Bind the complete run digest and current bundle at the consuming gate; a signature over a label is not subject binding.
 - Treat verification state as a derived transition and keep local test evidence separate from production qualification.
+
+## ADR-30 — Bind external provider adapters to canonical endpoint, configuration, and qualification evidence
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `providers` `trust-boundary` `endpoint-binding` `configuration-binding` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-02 — or earlier when a provider version, endpoint, adapter profile, or qualification authority changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local descriptor binding and fail-closed execution; `NOT_PRODUCTION_QUALIFIED` because no external provider qualification evidence or trusted qualification authority is present.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `VOLATILE` — provider endpoints, configuration, adapter implementations, and qualification evidence rotate independently of the control bundle.
+
+### Context
+
+ADR-22 bound provider ID/version and qualification state to the canonical allowlist, but a caller could still construct an allowlisted adapter with a different HTTPS endpoint or configuration. A broker allow receipt authorized the requested destination; it did not prove that the destination and configuration were the canonical implementation represented by the provider descriptor. Persisted runs likewise did not revalidate those fields against policy before entering pilot evidence.
+
+### Decision
+
+Extend each canonical provider entry with an adapter profile, exact HTTPS endpoint, canonical configuration digest, and qualification evidence references. `provider_config_digest` is the single deterministic JSON digest helper used by adapters and policy. `ExternalAnalyzerProvider` validates all descriptor fields before invoking the broker or transport; a mismatch emits a typed blocked run with no authorization or network side effect. Provider runs persist the adapter profile and `verify_provider_run` revalidates endpoint, configuration digest, profile, receipt, and response identity before pilot consumption. A `qualified` policy state is schema- and validator-bound to at least one qualification evidence reference. The current `local.python` and `remote.test` entries remain `pending`; no provider or canary success is claimed.
+
+### Options Considered
+
+- Treat the broker's allow receipt as provider identity: rejected because it authorizes a request, not the implementation endpoint/configuration.
+- Permit the caller to select any HTTPS endpoint for an allowlisted ID/version: rejected because TLS does not bind endpoint ownership or adapter configuration to the canonical descriptor.
+- Store only a configuration digest and omit endpoint/profile: rejected because endpoint routing and adapter implementation class are separate identity-bearing inputs.
+- Mark the local test provider `qualified` to exercise canary: rejected because local fixtures do not establish external qualification evidence.
+
+### Impact
+
+Schemas changed: `schemas/provider-allowlist.schema.json`, `schemas/provider-run.schema.json`
+Canonical policy changed: `policies/provider-allowlist.yaml`
+Components changed: provider policy loader, external provider adapter, persisted provider-run verifier, pilot canary guard, repository validator, provider/pilot tests
+Breaking change: **YES** for provider adapters/runs that omit or drift from the canonical endpoint, config digest, or adapter profile.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `canonical provider policy → adapter preflight → broker/transport → persisted run verification → pilot shadow/canary`
+Cascade Review: ✅ Done — global call-site search, adapter pre-broker regressions, persisted-run drift regression, policy/schema validation, pilot completion, and full provider/pilot checks cover the changed boundary.
+
+### Consequences
+
+- An allowlisted ID/version cannot be redirected to a caller-selected endpoint or configuration while retaining a completed provider run.
+- A provider run remains content-addressed only after its descriptor and authorization chain agree; rehashing a tampered run cannot promote it.
+- Qualification evidence references are now required before a policy entry may claim `qualified`, while evidence content and external authority remain deployment inputs.
+- The canonical entries remain pending, so shadow contract observation is possible but canary remains fail-closed.
+- Version entries currently share the descriptor fields of their provider policy item; a provider version with a different endpoint/config/profile must use a separate policy item and pass uniqueness validation.
+
+### Evidence
+
+- [verified 2026-08-02] RED regressions established that the pre-change adapter could reach the broker/transport with endpoint and configuration drift; GREEN regressions show both are blocked before either side effect.
+- [verified 2026-08-02] Profile drift, non-finite configuration values, persisted config drift, and qualified-without-evidence policy states are rejected by tests and validators.
+- [verified 2026-08-02] `.venv/bin/pytest -o addopts='' -q tests/test_providers.py tests/test_pilot.py tests/test_validator_p1.py` passes with `29 passed`; `.venv/bin/vheatm-validate --root .` passes.
+- [verified 2026-08-02] Both canonical provider entries remain `pending`; no external provider qualification, signed qualification handoff, or canary success was fabricated.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External provider authority, signed qualification evidence, key custody/rotation, vulnerability freshness/coverage, private/time-sliced qualification, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a provider policy item changes from `pending` to `qualified` or a new provider/version is proposed; require a verifiable external qualification record, authority/key binding, revocation/rotation rule, and a fresh shadow/canary pilot before allowing the state transition.
+
+### Cycle Retrospective
+
+- A broker receipt can be valid while the adapter is pointed at the wrong endpoint; authorization and implementation identity must be checked separately.
+- Configuration digests must be produced by one canonical helper; independently reimplemented JSON serialization creates silent binding drift.
+- Keep pending local fixtures useful for shadow tests, but never make a test endpoint or test evidence satisfy the external qualification boundary.

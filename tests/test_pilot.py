@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator
 
 from vheatm_control.evaluation import evaluate_release_gates, expected_release_report_id
 from vheatm_control.pilot import PilotError, complete_pilot, expected_pilot_id, prepare_pilot, rollback_pilot
+from vheatm_control.provider_policy import provider_config_digest
 from vheatm_control.providers import build_provider_run, expected_provider_run_id
 from vheatm_control.serialization import load_json
 from vheatm_control.tool_broker import build_tool_receipt
@@ -92,7 +93,7 @@ def test_shadow_rejects_duplicate_release_gate_ids() -> None:
 def test_shadow_completion_requires_real_read_only_observation() -> None:
     pilot = prepare_pilot(session_root="b" * 64, plan_id="PLN-" + "c" * 64, release_report=_report(), drills=_drills(), rollback_plan="rollback")
     network_request = {
-        "schema_version": "1.0.0", "request_id": "NET-" + "b" * 64, "requester": "local.python",
+        "schema_version": "1.0.0", "request_id": "NET-" + "b" * 64, "requester": "remote.test",
         "tool_class": "network", "scope": "workspace:", "destination": "https://provider.example.test/analyze",
         "data_classes": ["source_digests"], "redacted": True,
     }
@@ -105,16 +106,17 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     receipt = build_tool_receipt(network_request, decision, recorded_at="2026-08-01T00:00:00Z")
     provider_run = build_provider_run(
         request=request,
-        provider_id="local.python",
+        provider_id="remote.test",
         provider_version="1.0.0",
-        config_digest="c" * 64,
+        config_digest=provider_config_digest({"model": "fixed", "temperature": 0}),
+        adapter_profile="remote-json-v1",
         network_receipt=receipt,
         status="completed",
         response={"candidate": True},
         error=None,
         generated_at="2026-08-01T00:00:00Z",
     )
-    observation = {"observation_id": "OBS-1", "status": "pass", "provider_id": "local.python", "provider_run_refs": [provider_run["run_id"]], "sample_count": 10, "read_only_confirmed": True, "evidence_refs": ["EV-shadow-1"], "observed_at": "2026-08-01T00:00:00Z"}
+    observation = {"observation_id": "OBS-1", "status": "pass", "provider_id": "remote.test", "provider_run_refs": [provider_run["run_id"]], "sample_count": 10, "read_only_confirmed": True, "evidence_refs": ["EV-shadow-1"], "observed_at": "2026-08-01T00:00:00Z"}
     complete = complete_pilot(pilot, observations=[observation], provider_runs=[provider_run], completed_at="2026-08-01T00:01:00Z")
     assert complete["status"] == "complete"
     assert complete["pilot_id"] != pilot["pilot_id"]

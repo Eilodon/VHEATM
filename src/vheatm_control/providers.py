@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, Mapping
 
 from .analyzers import snapshot_digest
-from .provider_policy import ProviderPolicyError, provider_descriptor
+from .provider_policy import ProviderPolicyError, provider_config_digest, validate_provider_binding
 from .serialization import load_json
 from .tool_broker import action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest, validate_policy_decision
 
@@ -168,6 +168,7 @@ def build_provider_run(
     provider_id: str,
     provider_version: str,
     config_digest: str,
+    adapter_profile: str = "remote-json-v1",
     network_receipt: Mapping[str, Any] | None,
     status: str,
     response: Mapping[str, Any] | None,
@@ -178,6 +179,8 @@ def build_provider_run(
         raise ProviderAdapterError("provider status is invalid")
     if len(config_digest) != 64 or any(char not in "0123456789abcdef" for char in config_digest):
         raise ProviderAdapterError("provider config_digest must be lowercase SHA-256")
+    if not isinstance(adapter_profile, str) or not re.fullmatch(r"[a-z][a-z0-9.-]{2,63}", adapter_profile):
+        raise ProviderAdapterError("provider adapter_profile is invalid")
     network_request = request.get("network_request")
     _validate_network_request(network_request)
     if request.get("network_request_id") != network_request.get("request_id"):
@@ -190,6 +193,7 @@ def build_provider_run(
         "provider_id": provider_id,
         "provider_version": provider_version,
         "config_digest": config_digest,
+        "adapter_profile": adapter_profile,
         "request_digest": request_digest(request),
         "network_request": deepcopy(dict(network_request)),
         "network_receipt": deepcopy(dict(network_receipt)) if isinstance(network_receipt, Mapping) else None,
@@ -207,7 +211,7 @@ def build_provider_run(
 def verify_provider_run(run: Mapping[str, Any]) -> None:
     """Re-verify a persisted provider run before it can become pilot evidence."""
 
-    required = {"schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
+    required = {"schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "adapter_profile", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
     if not isinstance(run, Mapping) or run.get("schema_version") != "1.0.0" or not required.issubset(run):
         raise ProviderAdapterError("provider run is incomplete")
     if set(run) - required - {"error"}:
@@ -221,20 +225,28 @@ def verify_provider_run(run: Mapping[str, Any]) -> None:
         raise ProviderAdapterError("provider run provider_id is invalid")
     if not isinstance(run.get("provider_version"), str) or not run["provider_version"].strip():
         raise ProviderAdapterError("provider run provider_version is invalid")
-    try:
-        provider_descriptor(provider_id, str(run["provider_version"]))
-    except ProviderPolicyError as exc:
-        raise ProviderAdapterError(str(exc)) from exc
     for field in ("config_digest", "request_digest", "response_digest"):
         value = run.get(field)
         if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
             raise ProviderAdapterError(f"provider run {field} is invalid")
+    if not isinstance(run.get("adapter_profile"), str) or not re.fullmatch(r"[a-z][a-z0-9.-]{2,63}", str(run["adapter_profile"])):
+        raise ProviderAdapterError("provider run adapter_profile is invalid")
     if run.get("status") not in {"completed", "blocked", "unknown"}:
         raise ProviderAdapterError("provider run status is invalid")
     if run.get("epistemic_status") != ("candidate" if run.get("status") == "completed" else "unknown"):
         raise ProviderAdapterError("provider run epistemic status is invalid")
     network_request = run.get("network_request")
     _validate_network_request(network_request)
+    try:
+        validate_provider_binding(
+            provider_id,
+            str(run["provider_version"]),
+            endpoint=str(network_request["destination"]),
+            config_digest=str(run["config_digest"]),
+            adapter_profile=str(run["adapter_profile"]),
+        )
+    except ProviderPolicyError as exc:
+        raise ProviderAdapterError(str(exc)) from exc
     _validate_network_receipt(network_request, run.get("network_receipt"), status=str(run.get("status")))
     response = run.get("response")
     if response is not None and not isinstance(response, Mapping):
@@ -265,10 +277,17 @@ class ExternalAnalyzerProvider:
     transport: ProviderTransport | None = None
     timeout_seconds: float = 10.0
     max_response_bytes: int = 1_048_576
+    adapter_profile: str = "remote-json-v1"
 
     def __post_init__(self) -> None:
         if not self.provider_id or not self.provider_version or not self.endpoint.startswith("https://"):
             raise ProviderAdapterError("provider identity and HTTPS endpoint are required")
+        if not isinstance(self.config, Mapping):
+            raise ProviderAdapterError("provider config must be a JSON object")
+        try:
+            provider_config_digest(self.config)
+        except ProviderPolicyError as exc:
+            raise ProviderAdapterError(f"provider config is not canonical JSON: {exc}") from exc
         parsed = urlparse(self.endpoint)
         if parsed.username or parsed.password or not parsed.hostname:
             raise ProviderAdapterError("provider endpoint must be an HTTPS URL without userinfo")
@@ -290,7 +309,7 @@ class ExternalAnalyzerProvider:
 
     @property
     def config_digest(self) -> str:
-        return _digest(dict(self.config))
+        return provider_config_digest(self.config)
 
     def run(self, analyzer_request: Mapping[str, Any], *, approval_token: Mapping[str, Any] | None = None) -> dict[str, Any]:
         required = {"request_id", "analyzer_id", "provider_id", "provider_version", "requested_paths", "source_snapshot", "snapshot_digest", "session_root"}
@@ -317,11 +336,17 @@ class ExternalAnalyzerProvider:
         }
         generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         try:
-            provider_descriptor(self.provider_id, self.provider_version)
+            validate_provider_binding(
+                self.provider_id,
+                self.provider_version,
+                endpoint=self.endpoint,
+                config_digest=self.config_digest,
+                adapter_profile=self.adapter_profile,
+            )
         except ProviderPolicyError as exc:
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=None, status="blocked", response=None,
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=None, status="blocked", response=None,
                 error=f"provider authorization unavailable: {exc}", generated_at=generated_at,
             )
         try:
@@ -331,13 +356,13 @@ class ExternalAnalyzerProvider:
         except Exception as exc:  # authorization boundary failures are typed blocked outcomes
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=None, status="blocked", response=None,
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=None, status="blocked", response=None,
                 error=f"provider authorization unavailable: {exc}", generated_at=generated_at,
             )
         if decision.get("decision") != "allow":
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=receipt, status="blocked", response=None,
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=receipt, status="blocked", response=None,
                 error=str(decision.get("reason", "network policy denied provider")),
                 generated_at=str(decision.get("evaluated_at", datetime.now(UTC).isoformat().replace("+00:00", "Z"))),
             )
@@ -357,23 +382,23 @@ class ExternalAnalyzerProvider:
         except Exception as exc:  # provider outage is an explicit unknown boundary
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=receipt, status="unknown", response=None,
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=receipt, status="unknown", response=None,
                 error=f"provider outage: {exc}", generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
         if not isinstance(response, Mapping):
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=receipt, status="unknown", response=None,
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=receipt, status="unknown", response=None,
                 error="provider response must be an object", generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
         if response.get("request_id") != analyzer_request["request_id"] or response.get("provider_id") != self.provider_id or response.get("provider_version") != self.provider_version:
             return build_provider_run(
                 request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-                config_digest=self.config_digest, network_receipt=receipt, status="unknown", response=dict(response),
+                config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=receipt, status="unknown", response=dict(response),
                 error="provider response identity mismatch", generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
         return build_provider_run(
             request=request, provider_id=self.provider_id, provider_version=self.provider_version,
-            config_digest=self.config_digest, network_receipt=receipt, status="completed", response=dict(response),
+            config_digest=self.config_digest, adapter_profile=self.adapter_profile, network_receipt=receipt, status="completed", response=dict(response),
             error=None, generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         )
