@@ -19,18 +19,19 @@
 - Blind independent-judge packet/verdict contracts with spawn-process isolation, randomized order, provider/model/config binding, timeout blocking, divergence detection, and HITL escalation.
 - Capability ledger for all 33 legacy corpus files; 22 are corrected/owned and 11 remain explicitly `missing` rather than being silently promoted.
 - Seeded evaluation corpus, frozen RG-00…RG-15 metric evaluator, canonical SBOM evidence, and a shadow/canary pilot record with rollback and outage/clock-skew drills.
+- Machine-readable standards baseline with namespace/review semantics, plus a canonical `uv.lock` bound into the bundle and supply-chain attestation.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 174 passed.
-- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `6a7c3af65570204e64511dc6656ffeeb5ff094920ab36a4154c0cac7dccd288d` with 149 canonical entries.
+- `.venv/bin/pytest -o addopts=''` — 187 passed.
+- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `9ad5fb4f3f765b337820e3ba270e9428cea1812915319ab41b9adc532ae7c797` with 155 canonical entries.
 - Session, analyzer, judge, capability, release-gate, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
-- Wheel/sdist and offline packaged checks must be rerun after this tranche; canonical assets now include the migration corpus and seeded eval corpus.
+- `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards baseline, standards schema, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell, or target-code import/execution in the control runtime; judge code is the explicit spawn-process trust boundary and activation remains parser-backed (`ast.literal_eval` only).
 
 ## Explicitly not complete
 
-Open release work is intentionally evidence-dependent: a real sandbox action adapter/reference monitor, dependency lock, release signing/key service, vulnerability scan evidence, private/time-sliced gold data, and a successful shadow pilot are not fabricated here. The current implementation can produce their required typed records, but no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.
+Open release work is intentionally evidence-dependent: a real sandbox action adapter/reference monitor, release signing/key service, vulnerability scan evidence, private/time-sliced gold data, external provider qualification, and a successful shadow pilot are not fabricated here. The current implementation can produce their required typed records, and the dependency lock is now verified, but no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.

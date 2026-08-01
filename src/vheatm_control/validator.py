@@ -54,6 +54,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "structural-probe.schema.json",
         "session-event.schema.json",
         "supply-chain-attestation.schema.json",
+        "standards-baseline.schema.json",
         "tool-request.schema.json",
         "tool-receipt.schema.json",
         "vheatm-manifest.schema.json",
@@ -170,11 +171,13 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     manifest_path = root / "manifests" / "vheatm-v17.yaml"
     policy_path = root / "policies" / "runtime-boundaries.yaml"
     capability_ledger_path = root / "policies" / "capability-ledger.yaml"
+    standards_baseline_path = root / "policies" / "standards-baseline.yaml"
+    dependency_lock_path = root / "uv.lock"
     eval_corpus_path = root / "evals" / "cases.yaml"
     module_registry_path = root / "modules" / "registry.yaml"
     skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, eval_corpus_path, module_registry_path, skill_path]
+    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -188,12 +191,14 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         manifest = _load_yaml(manifest_path)
         policy = _load_yaml(policy_path)
         capability_ledger = _load_yaml(capability_ledger_path)
+        standards_baseline = _load_yaml(standards_baseline_path)
         eval_corpus = _load_yaml(eval_corpus_path)
         manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
         policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
         context_schema = _load_json(schema_dir / "audit-context.schema.json")
         bundle_schema = _load_json(schema_dir / "control-bundle.schema.json")
         capability_ledger_schema = _load_json(schema_dir / "capability-ledger.schema.json")
+        standards_baseline_schema = _load_json(schema_dir / "standards-baseline.schema.json")
         eval_corpus_schema = _load_json(schema_dir / "eval-corpus.schema.json")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return [ValidationIssue("canonical", str(exc))]
@@ -202,6 +207,8 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(_validate_schema(manifest, manifest_schema, registry, str(manifest_path.relative_to(root))))
     issues.extend(_validate_schema(policy, policy_schema, registry, str(policy_path.relative_to(root))))
     issues.extend(_validate_schema(capability_ledger, capability_ledger_schema, registry, str(capability_ledger_path.relative_to(root))))
+    issues.extend(_validate_schema(standards_baseline, standards_baseline_schema, registry, str(standards_baseline_path.relative_to(root))))
+    issues.extend(ValidationIssue("policies/standards-baseline.yaml", issue) for issue in _validate_standards_baseline(manifest, standards_baseline))
     from .capability_ledger import validate_capability_ledger
     issues.extend(ValidationIssue("policies/capability-ledger.yaml", issue) for issue in validate_capability_ledger(root, capability_ledger, capability_ledger_schema))
     from .evaluation import validate_eval_corpus
@@ -258,6 +265,23 @@ def _validate_runtime_policy_invariants(policy: dict[str, Any]) -> list[Validati
         issues.append(ValidationIssue("runtime policy", "approval tokens must be single-use"))
     if policy.get("taint", {}).get("propagation") != "transitive":
         issues.append(ValidationIssue("runtime policy", "taint propagation must be transitive"))
+    return issues
+
+
+def _validate_standards_baseline(manifest: dict[str, Any], policy: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    if policy.get("framework_version") != manifest.get("framework", {}).get("version"):
+        issues.append("framework_version must match canonical manifest")
+    standards = policy.get("standards", [])
+    if not isinstance(standards, list) or not standards:
+        return issues + ["standards must contain at least one entry"]
+    for item in standards:
+        namespace = item.get("namespace")
+        status = item.get("status")
+        if namespace == "normative" and status != "pinned":
+            issues.append(f"normative standard {item.get('id', '<unknown>')} must be pinned")
+        if namespace in {"draft", "experimental"} and item.get("certification_claims_allowed") is not False:
+            issues.append(f"{namespace} standard {item.get('id', '<unknown>')} cannot authorize certification claims")
     return issues
 
 

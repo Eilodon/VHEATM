@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Verify dependency lock
+        run: uv lock --check --prerelease=allow
       - name: Tag must match pyproject.toml version
         run: |
           tag="${GITHUB_REF_NAME#v}"

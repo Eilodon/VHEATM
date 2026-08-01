@@ -23,6 +23,8 @@ _EXACT_PATHS = (
     "manifests/vheatm-v17.yaml",
     "policies/runtime-boundaries.yaml",
     "policies/capability-ledger.yaml",
+    "policies/standards-baseline.yaml",
+    "uv.lock",
     "modules/registry.yaml",
 )
 _GLOB_PATHS = (

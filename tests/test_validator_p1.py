@@ -28,7 +28,7 @@ def test_unknown_activation_identifier_is_rejected() -> None:
 def test_validator_reports_duplicate_canonical_yaml_without_traceback(tmp_path):
     import shutil
 
-    for name in ["SKILL.md", "Makefile", "pyproject.toml", "manifests", "policies", "modules", "schemas", "src", "evals", "docs"]:
+    for name in ["SKILL.md", "Makefile", "pyproject.toml", "uv.lock", "manifests", "policies", "modules", "schemas", "src", "evals", "docs"]:
         source = ROOT / name
         target = tmp_path / name
         shutil.copytree(source, target) if source.is_dir() else shutil.copy2(source, target)

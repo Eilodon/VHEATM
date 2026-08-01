@@ -36,10 +36,11 @@ def test_release_gates_can_derive_eligibility_only_from_all_frozen_metrics() -> 
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
 
 
-def test_supply_chain_evidence_is_canonical_but_not_signed_or_locked_yet(tmp_path) -> None:
+def test_supply_chain_evidence_is_canonical_and_locked_but_not_signed_yet(tmp_path) -> None:
     attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
     schema = load_json((ROOT / "schemas" / "supply-chain-attestation.schema.json").read_text())
     Draft202012Validator(schema).validate(attestation)
     assert attestation["signed_release"] is False
-    assert attestation["dependency_lock_present"] is False
+    assert attestation["dependency_lock_present"] is True
+    assert attestation["dependency_lock_path"] == "uv.lock"
     assert attestation["sbom"]

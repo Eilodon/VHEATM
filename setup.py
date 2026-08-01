@@ -17,6 +17,8 @@ CANONICAL_EXACT = (
     "manifests/vheatm-v17.yaml",
     "policies/runtime-boundaries.yaml",
     "policies/capability-ledger.yaml",
+    "policies/standards-baseline.yaml",
+    "uv.lock",
     "modules/registry.yaml",
 )
 CANONICAL_GLOBS = (

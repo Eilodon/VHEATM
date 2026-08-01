@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/standards-baseline.schema.json",
+  "title": "VHEATM normative standards baseline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "policy_version", "framework_version", "coverage_status", "standards"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "policy_id": {"type": "string", "pattern": "^vheatm-[a-z0-9-]+$"},
+    "policy_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "coverage_status": {"enum": ["complete", "partial"]},
+    "standards": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "version", "namespace", "status", "authority", "source_url", "role", "certification_claims_allowed", "review_trigger"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]+$"},
+          "title": {"type": "string", "minLength": 1},
+          "version": {"type": "string", "minLength": 1},
+          "namespace": {"enum": ["normative", "community", "draft", "experimental"]},
+          "status": {"enum": ["pinned", "review_required", "community", "draft", "experimental"]},
+          "authority": {"type": "string", "minLength": 1},
+          "source_url": {"type": "string", "pattern": "^https?://"},
+          "role": {"type": "string", "minLength": 1},
+          "certification_claims_allowed": {"const": false},
+          "review_trigger": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

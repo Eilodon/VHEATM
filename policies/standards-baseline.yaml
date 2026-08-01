@@ -1,0 +1,146 @@
+schema_version: "1.0.0"
+policy_id: vheatm-standards-baseline
+policy_version: "1.0.0"
+framework_version: "17.0.0-dev.1"
+coverage_status: partial
+standards:
+  - id: NIST-AI-RMF-1.0
+    title: NIST AI Risk Management Framework
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://www.nist.gov/itl/ai-risk-management-framework
+    role: AI risk governance and lifecycle controls
+    certification_claims_allowed: false
+    review_trigger: NIST publishes a superseding final framework
+  - id: NIST-AI-600-1
+    title: NIST Generative AI Profile
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf
+    role: generative-AI risk controls and evaluation considerations
+    certification_claims_allowed: false
+    review_trigger: NIST publishes a superseding final profile
+  - id: NIST-SSDF-1.1
+    title: Secure Software Development Framework
+    version: "1.1"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://csrc.nist.gov/pubs/sp/800/218/final
+    role: secure software development and release process
+    certification_claims_allowed: false
+    review_trigger: NIST revises SP 800-218
+  - id: NIST-SP-800-218A
+    title: Secure Software Development Practices for Generative AI and Dual-Use Foundation Models
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://csrc.nist.gov/pubs/sp/800/218/a/final
+    role: AI-specific secure development practices
+    certification_claims_allowed: false
+    review_trigger: NIST revises SP 800-218A
+  - id: NIST-AI-800-3
+    title: AI Evaluation Guidance
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://www.nist.gov/artificial-intelligence/ai-research
+    role: evaluation design and evidence interpretation
+    certification_claims_allowed: false
+    review_trigger: NIST publishes final evaluation guidance
+  - id: NIST-AI-800-4
+    title: AI Monitoring Guidance
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://doi.org/10.6028/NIST.AI.800-4
+    role: operational monitoring and post-deployment evidence
+    certification_claims_allowed: false
+    review_trigger: NIST publishes final monitoring guidance
+  - id: SLSA-1.2
+    title: Supply-chain Levels for Software Artifacts
+    version: "1.2"
+    namespace: normative
+    status: pinned
+    authority: OpenSSF
+    source_url: https://slsa.dev/spec/v1.2/
+    role: build provenance and artifact integrity
+    certification_claims_allowed: false
+    review_trigger: SLSA publishes a superseding stable specification
+  - id: SPDX-3.0
+    title: SPDX specification
+    version: "3.0"
+    namespace: normative
+    status: pinned
+    authority: SPDX
+    source_url: https://spdx.dev/specifications/
+    role: software bill of materials interchange
+    certification_claims_allowed: false
+    review_trigger: SPDX publishes a superseding stable specification
+  - id: CYCLONEDX-1.7
+    title: CycloneDX specification
+    version: "1.7"
+    namespace: normative
+    status: pinned
+    authority: OWASP
+    source_url: https://cyclonedx.org/specification/overview/
+    role: software bill of materials interchange
+    certification_claims_allowed: false
+    review_trigger: CycloneDX publishes a superseding stable specification
+  - id: NIST-PRIVACY-1.0
+    title: NIST Privacy Framework
+    version: "1.0"
+    namespace: normative
+    status: pinned
+    authority: NIST
+    source_url: https://www.nist.gov/privacy-framework
+    role: privacy risk management and canary design
+    certification_claims_allowed: false
+    review_trigger: NIST revises the Privacy Framework
+  - id: W3C-TRACE-CONTEXT-1.1
+    title: W3C Trace Context
+    version: "1.1"
+    namespace: normative
+    status: pinned
+    authority: W3C
+    source_url: https://www.w3.org/TR/trace-context-1/
+    role: cross-component trace correlation
+    certification_claims_allowed: false
+    review_trigger: W3C publishes a superseding recommendation
+  - id: OWASP-AGENTIC-TOP10-2026
+    title: OWASP Top 10 for Agentic Applications
+    version: "2026"
+    namespace: community
+    status: community
+    authority: OWASP
+    source_url: https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/
+    role: threat taxonomy and adversarial evaluation input
+    certification_claims_allowed: false
+    review_trigger: OWASP changes community status or publishes a stable revision
+  - id: NIST-AI-800-2-DRAFT
+    title: NIST AI evaluation draft guidance
+    version: draft
+    namespace: draft
+    status: draft
+    authority: NIST
+    source_url: https://www.nist.gov/artificial-intelligence
+    role: non-normative research input only
+    certification_claims_allowed: false
+    review_trigger: NIST publishes a final version
+  - id: OPENTELEMETRY-GENAI-EXPERIMENTAL
+    title: OpenTelemetry GenAI conventions
+    version: experimental
+    namespace: experimental
+    status: experimental
+    authority: OpenTelemetry
+    source_url: https://opentelemetry.io/docs/
+    role: optional trace vocabulary research input only
+    certification_claims_allowed: false
+    review_trigger: conventions become a stable recommendation

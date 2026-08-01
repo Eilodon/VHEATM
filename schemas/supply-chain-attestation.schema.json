@@ -4,7 +4,7 @@
   "title": "VHEATM supply-chain evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "attestation_id", "bundle_root", "sbom", "sbom_digest", "dependencies", "dependency_lock_present", "signed_release", "verification_state", "generated_at"],
+  "required": ["schema_version", "attestation_id", "bundle_root", "sbom", "sbom_digest", "dependencies", "dependency_lock_present", "dependency_lock_path", "dependency_lock_digest", "signed_release", "verification_state", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "attestation_id": {"type": "string", "pattern": "^SCA-[A-F0-9]{64}$"},
@@ -13,6 +13,7 @@
     "sbom_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "dependencies": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "specifier"], "properties": {"name": {"type": "string", "minLength": 1}, "specifier": {"type": "string", "minLength": 1}}}},
     "dependency_lock_present": {"type": "boolean"},
+    "dependency_lock_path": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._/-]+$"},
     "dependency_lock_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
     "signed_release": {"type": "boolean"},
     "signature_key_id": {"type": ["string", "null"], "minLength": 1},
