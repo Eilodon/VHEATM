@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 30 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 31 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -45,6 +45,7 @@
 - **Signer request snapshot:** the immutable client-side request retained across a transport callback so response verification cannot be redirected to callback-mutated bytes. <!-- from ADR: ADR-36 -->
 - **Bundle-bound signer delegation:** the supply-chain producer boundary that sends attestation, vulnerability, or provenance subjects through the external signer with the current bundle root and role purpose, while retaining local private-key paths only as non-authoritative fixtures. <!-- from ADR: ADR-37 -->
 - **Authority-producer signer boundary:** the host-attestation and trust-registry producer boundary that derives signer framework/bundle scope from its own canonical record before requesting an external signature. <!-- from ADR: ADR-38 -->
+- **Persisted qualification scope:** the framework version and current bundle root carried in qualification/judge records and included in their identities before release evaluation may consume their signatures. <!-- from ADR: ADR-39 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -79,12 +80,14 @@
 - Bundle-bound supply-chain producers must pass the artifact's current bundle root and role purpose into the signer client; downstream signature verification cannot repair a producer that signed through an unbound authority path. <!-- from ADR: ADR-37 -->
 - An external signer outage must remain an error; silently falling back to an in-process private key would convert unavailable authority into unreviewed release evidence. <!-- from ADR: ADR-37 -->
 - A signer request's framework scope must equal the authority-bearing record's canonical framework; a valid signature under the wrong release scope is still an invalid producer result. <!-- from ADR: ADR-38 -->
+- Signer request metadata that is not persisted in the signed record cannot establish release scope; make missing qualification/judge scope non-qualifying at the evaluator boundary. <!-- from ADR: ADR-39 -->
 - Provider endpoint, adapter profile, and configuration digest must be canonical policy bindings checked before broker/transport and before pilot evidence; a `qualified` state also requires evidence references. <!-- from ADR: ADR-30 -->
 - Independent judge packets must bind provider version, endpoint, adapter profile, and configuration digest to the canonical provider policy; a pending local descriptor proves identity only and cannot establish external qualification. <!-- from ADR: ADR-33 -->
 - Private qualification evidence must bind its content address and signature to the current control-bundle root; release evaluation requires the caller to supply that root and leaves metrics unavailable when it is absent or mismatched. <!-- from ADR: ADR-31 -->
 - Signed release evidence must resolve role keys through an externally signed trusted key registry; direct caller-supplied role keys fail closed, and the registry identity is part of the release report binding. <!-- from ADR: ADR-32 -->
 - Bundle-bound supply-chain, vulnerability, and provenance builders share the external signer protocol; fixture private-key signing remains non-authoritative and cannot substitute for scanner/provenance authority. <!-- from ADR: ADR-37 -->
 - Host attestations and trusted key registries share the external signer protocol and reject caller-supplied framework mismatches before authority-bearing output is emitted. <!-- from ADR: ADR-38 -->
+- Qualification/judge scope is part of content identity; changing framework or bundle scope must create a new packet/evidence identity rather than relabeling an old signature. <!-- from ADR: ADR-39 -->
 - A zero-finding scanner result and an installed host capability are observations, not release authority; external provenance and exact enforcement preflight must be verified before RG-13/RG-09 can change from `unknown`. <!-- from ADR: ADR-34 -->
 - A capable qualification host may prove the enforcement path without authorizing production RG-09; HQR/HAT must bind the actual deployment and resolve its signer through the trusted registry before metrics contribute. <!-- from ADR: ADR-35 -->
 - A signing primitive is not a key-custody authority; production signing must cross a bounded external service boundary and release verification must still resolve the signer through the trusted registry. <!-- from ADR: ADR-36 -->

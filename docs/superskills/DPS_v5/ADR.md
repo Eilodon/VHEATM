@@ -2756,7 +2756,7 @@ Cascade Review: ✅ Done — RED/GREEN producer tests, exact framework mismatch 
 
 - Host and authority records now use the same process/key-custody seam as supply-chain evidence.
 - A caller cannot relabel a host or registry signing request to another framework without a producer-side rejection.
-- Qualification manifests/evidence and judge verdicts remain the next producer integration surface; they lack a complete persisted framework/bundle binding in their current schemas and remain fixture/authority-specific.
+- Qualification manifests/evidence and judge verdicts now persist the framework/bundle scope required for external signing; unscoped legacy fixture records remain non-qualifying at the release boundary.
 - This does not create a trusted authority root, operational signer, host population evidence, or GA release claim.
 
 ### Evidence
@@ -2777,10 +2777,85 @@ PATTERN-DEBT entries introduced or affected by this change: none registered. Qua
 
 ### Next Cycle Trigger
 
-Start the next signer-producer cycle when qualification or judge records gain explicit current framework/bundle fields; route those producers through `SignerClient`, add exact mismatch/outage regressions, and rerun the full RG-00…RG-15 evidence suite before consuming their signatures.
+Start the next signer-producer cycle when an operational signer endpoint and externally controlled qualification/judge keys are supplied; run the scope-bound request/response probe and rerun the full RG-00…RG-15 evidence suite before consuming their signatures.
 
 ### Cycle Retrospective
 
 - A service boundary is incomplete if authority-bearing producers can still bypass it with private key objects.
 - Metadata sent to a signer must be checked against the producer's canonical identity before transport; response binding alone cannot repair a wrong caller scope.
 - Keep records simple and content-addressed, but require the signer request scope to be an exact projection of the record rather than caller-only metadata.
+
+## ADR-39 — Persist framework/bundle scope for qualification and judge signer paths
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `independent-judge` `signer-service` `release-gates`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-02 — or earlier when qualification/judge authority, packet schemas, or signer custody changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local schema/identity and evaluator enforcement; `NOT_PRODUCTION_QUALIFIED` because no private corpus, independent judge service, operational signer, or trusted authority is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `SCHEMA`
+**VOLATILITY:** `WATCHFUL` — qualification population, judge deployment, bundle scope, key custody, and release authority are external inputs.
+
+### Context
+
+The external signer protocol had purpose names for qualification and judge, but qualification manifests/evidence and blind judge verdicts did not consistently persist the framework and current bundle scope in their own content-addressed records. A signer response could therefore be valid for a caller-provided scope that downstream verification could not recover. Release evaluation also accepted otherwise valid signed records without requiring that scope to match the current release.
+
+### Decision
+
+Add optional bundle scope to private qualification manifests and blind judge packets, persist `framework_version` in qualification evidence, and propagate packet scope into judge verdict identity. Qualification manifest/evidence and judge verdict producers now support `SignerClient`; external paths require an expected Ed25519 public key, exact producer scope, and purpose binding (`qualification` or `judge`), while local private-key paths remain fixture compatibility. Release evaluation now passes the current framework/bundle scope into manifest and signed-verdict verification, leaving unscoped or mismatched evidence unavailable.
+
+### Options Considered
+
+- Bind framework/bundle only in the signer request: rejected because the request/receipt is not persisted as release evidence and downstream evaluators cannot reconstruct caller-only metadata.
+- Make every legacy fixture immediately external-only: rejected because deterministic local fixtures remain useful for contract tests, provided the release boundary rejects unscoped records.
+- Add scope only to qualification evidence: rejected because the judge verdict is an independent signed authority and must carry the same release scope before it contributes metrics.
+- Trust packet/verdict field presence without including it in content IDs: rejected because scope mutation would become metadata relabeling rather than a new immutable record.
+
+### Impact
+
+Schemas changed: `schemas/qualification-manifest.schema.json`, `schemas/qualification-evidence.schema.json`, `schemas/judge-packet.schema.json`, `schemas/judge-verdict.schema.json`
+Components changed: qualification signing/verification, judge packet/verdict identity and signing, release evaluator scope checks, release evidence fixtures/tests
+Breaking change: **YES** for qualification/judge release evidence that omits current framework/bundle scope; **NO** for local unscoped fixture helpers outside the release boundary.
+
+IMPACT RADIUS: **CRITICAL**
+BLAST RADIUS: WIDE
+Cascades: `private manifest / blind packet → scoped content ID → signed evidence/verdict → release scope verification → RG-04…RG-07`
+Cascade Review: ✅ Done — RED/GREEN external signing tests, content-ID binding, release fixture migration, schema validation, and full qualification/release regression coverage cover the changed boundary.
+
+### Consequences
+
+- Qualification and judge signer purposes now have a producer-visible framework/bundle scope rather than caller-only metadata.
+- Release evaluation can distinguish a current scoped record from a valid signature replayed from an unscoped or different bundle.
+- Existing local fixtures remain available, but release qualification requires scoped manifests, evidence, packets, and verdicts.
+- This does not supply private gold data, independent judge observations, signer custody, trusted key registry authority, or GA evidence.
+
+### Evidence
+
+- [verified 2026-08-02] RED qualification test initially failed because `build_private_time_slice_manifest` and `sign_qualification_evidence` had no external signer/scope API; RED judge test initially failed because `build_blind_packet` had no scope fields.
+- [verified 2026-08-02] Qualification/judge/release targeted suite passes with `38 passed in 23.92s`; external signer tests cover manifest, evidence, verdict, exact scope, and mixed-key rejection.
+- [verified 2026-08-02] Full `.venv/bin/pytest -o addopts='' -q` passes with `313 passed in 63.45s` after the qualification/judge scope migration.
+- [verified 2026-08-02] Release evaluation now supplies `expected_bundle_root` and framework version to manifest/verdict verification; unscoped records remain unavailable.
+- [verified 2026-08-02] No external corpus, judge deployment, signer service, or trusted authority was available; no RG-04…RG-07 or GA claim is promoted by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External private/time-sliced corpus, independent judge/provider qualification, operational signer custody, authority root/rotation, trusted host deployment, scanner provenance, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next qualification/judge cycle when a real private corpus or independently qualified judge service is supplied; bind its deployment/key identities to the current bundle, run the complete RG-00…RG-15 measurement matrix, and preserve unknown/blocking status for every missing observation.
+
+### Cycle Retrospective
+
+- If signer metadata is not persisted in the signed record, downstream verification cannot prove the scope the signer actually authorized.
+- Optional scope is a practical migration path only when the release boundary makes absence non-qualifying; do not treat schema compatibility as release eligibility.
+- Content-addressed scope must be included in packet/verdict identities so a scope edit creates a new record instead of relabeling old evidence.

@@ -726,3 +726,25 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
 - Authority-bearing host and trust-registry records use the external signer boundary, while qualification/judge records remain separate until their schemas persist complete framework/bundle scope: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-39 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-INDEPENDENT-JUDGE, MOD-AGENT-SECURITY]
+---
+
+## Cycle: persisted-qualification-judge-scope
+
+### New Domain Terms Added to CONTEXT.md
+- Persisted qualification scope: added ✅
+
+### Bug Patterns
+- Qualification/judge signer metadata could be valid yet absent from the persisted record, leaving downstream release evaluation unable to prove scope: observed and fixed with scoped identities and evaluator checks; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Optional migration fields are safe only when missing values remain non-qualifying at the release boundary: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Framework and bundle scope must persist in qualification/judge identities and be verified against the current release before signatures contribute metrics: added to CONTEXT.md Architectural Decisions ✅
+
+---
