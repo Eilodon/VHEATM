@@ -119,9 +119,16 @@ def prepare_pilot(
         if status not in {"pass", "fail", "unknown"}:
             raise PilotError(f"invalid pilot drill status: {status}")
         seen.add(drill_id)
-        normalized_drills.append({"drill_id": drill_id, "status": status, "evidence_refs": sorted(set(str(ref) for ref in raw.get("evidence_refs", [])))})
-    if not {"incident", "rollback", "evidence_store_outage", "clock_skew"}.issubset(seen):
-        raise PilotError("pilot requires incident, rollback, evidence-store outage, and clock-skew drills")
+        raw_evidence_refs = raw.get("evidence_refs")
+        if not isinstance(raw_evidence_refs, Sequence) or isinstance(raw_evidence_refs, (str, bytes, bytearray)):
+            raise PilotError(f"pilot drill {drill_id} requires evidence_refs")
+        evidence_refs = sorted(set(str(ref) for ref in raw_evidence_refs))
+        if not evidence_refs or any(not ref.strip() for ref in evidence_refs):
+            raise PilotError(f"pilot drill {drill_id} requires evidence_refs")
+        normalized_drills.append({"drill_id": drill_id, "status": status, "evidence_refs": evidence_refs})
+    required_drills = {"incident", "rollback", "evidence_store_outage", "clock_skew", "provider_outage"}
+    if not required_drills.issubset(seen):
+        raise PilotError("pilot requires incident, rollback, evidence-store outage, clock-skew, and provider-outage drills")
     normalized_drills.sort(key=lambda item: item["drill_id"])
     tools_enabled = profile == "canary"
     status = "ready" if profile == "shadow" and all(item["status"] == "pass" for item in normalized_drills) else "blocked"

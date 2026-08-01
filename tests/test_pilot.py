@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from vheatm_control.evaluation import evaluate_release_gates, expected_release_report_id
 from vheatm_control.pilot import PilotError, complete_pilot, expected_pilot_id, prepare_pilot, rollback_pilot
@@ -22,7 +22,46 @@ def _report(eligible: bool = False):
 
 
 def _drills(status="pass"):
-    return [{"drill_id": name, "status": status, "evidence_refs": [f"EV-{name}"]} for name in ["incident", "rollback", "evidence_store_outage", "clock_skew"]]
+    return [{"drill_id": name, "status": status, "evidence_refs": [f"EV-{name}"]} for name in ["incident", "rollback", "evidence_store_outage", "clock_skew", "provider_outage"]]
+
+
+def test_pilot_requires_provider_outage_drill_and_evidence_refs() -> None:
+    missing_provider_outage = [drill for drill in _drills() if drill["drill_id"] != "provider_outage"]
+    with pytest.raises(PilotError, match="provider-outage"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=_report(),
+            drills=missing_provider_outage,
+            rollback_plan="rollback",
+        )
+    empty_evidence = _drills()
+    empty_evidence[0] = {**empty_evidence[0], "evidence_refs": []}
+    with pytest.raises(PilotError, match="evidence_refs"):
+        prepare_pilot(
+            session_root="b" * 64,
+            plan_id="PLN-" + "c" * 64,
+            release_report=_report(),
+            drills=empty_evidence,
+            rollback_plan="rollback",
+        )
+
+
+def test_pilot_schema_binds_profile_and_terminal_state_payloads() -> None:
+    schema = load_json((Path("schemas") / "pilot-run.schema.json").read_text())
+    pilot = prepare_pilot(
+        session_root="b" * 64,
+        plan_id="PLN-" + "c" * 64,
+        release_report=_report(),
+        drills=_drills(),
+        rollback_plan="rollback",
+    )
+    invalid_complete = {**pilot, "status": "complete"}
+    with pytest.raises(ValidationError, match="observations"):
+        Draft202012Validator(schema).validate(invalid_complete)
+    invalid_profile = {**pilot, "profile": "canary"}
+    with pytest.raises(ValidationError, match="False"):
+        Draft202012Validator(schema).validate(invalid_profile)
 
 
 def test_shadow_pilot_is_read_only_and_requires_recovery_drills() -> None:
