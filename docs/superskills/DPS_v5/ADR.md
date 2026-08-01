@@ -3007,3 +3007,76 @@ When an actual provider and evidence authority are supplied, run all five drills
 - A lifecycle record's status is not proof of its payload; schema conditions must encode the required evidence for terminal states.
 - Recovery coverage is incomplete when provider outage is omitted, even if incident and storage drills pass.
 - Runtime helper validation and direct persisted-record schema validation are separate defenses and both are required.
+
+## ADR-42 — Make the canonical manifest the only framework-version authority
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `manifest` `release-gates` `evidence-integrity` `framework-authority`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-02 — or earlier when manifest loading, release evaluation, or report identity changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `INVARIANT-FORCED`
+**CONFIDENCE:** `HIGH` for local evaluator/report enforcement; `NOT_PRODUCTION_QUALIFIED` because external release authority and evidence remain unavailable.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `MANIFEST`
+**VOLATILITY:** `WATCHFUL` — the canonical manifest version changes only through a bundle/release mutation.
+
+### Context
+
+The release evaluator accepted a caller-provided `framework_version` and included it in the content-addressed report. A caller could therefore produce a structurally valid report labeled with a version other than the canonical manifest. Evidence verifiers bound individual records to their own declared scope, but the release entry point itself did not establish which framework version was authoritative.
+
+### Decision
+
+At `evaluate_release_gates`, `derive_verified_evidence_metrics`, and `validate_release_report`, resolve `manifests/vheatm-v17.yaml` from the control root and require exact framework-version equality before trust resolution, metric derivation, report identity acceptance, or pilot consumption. Missing/malformed manifests and mismatches raise typed `EvaluationError`; no caller label can replace the manifest value.
+
+### Options Considered
+
+- Trust the caller because the report ID is content-addressed: rejected; integrity of a wrong label is not authority.
+- Compare only signed evidence records: rejected; empty or partially signed release inputs would still permit a noncanonical report identity.
+- Infer the version from the first evidence object: rejected; evidence is untrusted input and may be absent or inconsistent.
+- Silently rewrite the caller version to the manifest value: rejected; mutation must be explicit and a mismatch must remain observable/fail closed.
+
+### Impact
+
+Components changed: release evaluator, verified-evidence metric derivation, release-report validator, framework-authority regression fixtures
+Breaking change: **YES** for callers passing a noncanonical framework label; **NO** for canonical V17 callers.
+
+IMPACT RADIUS: **CRITICAL**
+BLAST RADIUS: WIDE
+Cascades: `canonical manifest → evaluation scope → evidence/trust resolution → report identity → pilot authorization`
+Cascade Review: ✅ Done — RED/GREEN evaluator and direct-report tests cover noncanonical version rejection; existing raw seeded/host fixtures were migrated to the canonical version.
+
+### Consequences
+
+- The framework version in a release report is now derived from one canonical machine-readable authority.
+- Noncanonical labels fail before they can influence trusted-key resolution or gate metrics.
+- Manifest availability is now part of the release evaluator's typed failure surface.
+- This does not create external authority, private qualification, provider qualification, or GA evidence.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression initially did not raise for `17.0.0-wrong`; the evaluator now rejects it with a canonical-manifest error.
+- [verified 2026-08-02] Direct report-validator mismatch regression passes; full suite passes with `319 passed in 65.76s`.
+- [verified 2026-08-02] `vheatm-validate --root .` passes and canonical manifest remains `17.0.0-dev.1`.
+- [verified 2026-08-02] No external release authority or GA evidence is created by this enforcement.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External authority/key custody, private qualification, provider/judge qualification, host deployment, scanner provenance, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+When the canonical manifest version changes, regenerate the bundle, rerun all evidence scope and report identity tests, and reject any stale evidence or caller label before release evaluation.
+
+### Cycle Retrospective
+
+- Content-addressing a caller-supplied version proves only that the caller was consistent with itself.
+- Canonical authority checks belong at every entry point that can derive or consume release identity, not only in the final report builder.
+- A typed failure for a missing authority document preserves fail-closed semantics without inventing an `unknown` version.

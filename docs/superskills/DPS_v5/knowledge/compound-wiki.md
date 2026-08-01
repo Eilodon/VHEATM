@@ -794,3 +794,26 @@ modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
 - Shadow/canary readiness requires all five drills with evidence, and profile/terminal-state semantics are enforced independently of helper functions: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-42 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CONTEXT-CONTRACT, MOD-CLOSURE-METRICS]
+
+---
+
+## Cycle: canonical-framework-authority-at-release-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical framework authority: added ✅
+
+### Bug Patterns
+- Release evaluation and report validation trusted caller-supplied framework labels instead of the manifest version, allowing a self-consistent but noncanonical release identity: observed and fixed with manifest-bound checks at all release entry points; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A signed/evidence scope mismatch must fail before trust resolution or gate derivation, not only after report creation: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Framework version authority is derived only from the canonical manifest; evaluator/report boundaries reject caller drift: added to CONTEXT.md Architectural Decisions ✅
+
+---

@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 33 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 34 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -48,6 +48,7 @@
 - **Persisted qualification scope:** the framework version and current bundle root carried in qualification/judge records and included in their identities before release evaluation may consume their signatures. <!-- from ADR: ADR-39 -->
 - **Persisted supply-chain scope:** the canonical framework version carried in attestation, vulnerability-scan, and provenance records and compared at producer, bundle, and release-evaluation boundaries. <!-- from ADR: ADR-40 -->
 - **Pilot drill completeness:** the five required shadow/canary recovery drills, each with non-empty evidence references, that must exist before a pilot can become ready. <!-- from ADR: ADR-41 -->
+- **Canonical framework authority:** the manifest-derived framework version that release evaluation, report validation, and signed evidence scope must equal; caller-supplied versions are not authoritative. <!-- from ADR: ADR-42 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -96,6 +97,7 @@
 - Process/callback inputs are untrusted mutable data; retain an immutable request snapshot and verify identity, digest, purpose, bundle, and signature against that snapshot. <!-- from ADR: ADR-36 -->
 - Supply-chain signer scope must be recoverable from the signed record; persist `framework_version` in every RG-13 artifact and reject verified scans or provenance that drift from the attestation/release. <!-- from ADR: ADR-40 -->
 - Pilot schema and runtime must bind profile flags and terminal payloads: shadow is read-only, canary enables tools, complete requires observations/timestamp, and rollback requires reason/timestamp. <!-- from ADR: ADR-41 -->
+- Release evaluator/report validation must compare framework version to the canonical manifest before deriving metrics or accepting a report identity. <!-- from ADR: ADR-42 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -136,3 +138,4 @@
 - [2026-08] A transport callback can mutate the request it receives and return a self-consistent signature over replacement bytes | Pass a copy across the process seam and verify against the original content-addressed request; service errors remain unavailable rather than falling back to local signing. <!-- from ADR: ADR-36 -->
 - [2026-08] A signer request can carry the right framework while the persisted artifact carries none or another version | Include `framework_version` in each supply-chain identity and compare it at producer, canonical-bundle, and RG-13 evaluation boundaries. <!-- from ADR: ADR-40 -->
 - [2026-08] A pilot could be marked ready with only four recovery drills or empty drill evidence, and a direct schema consumer could accept an incomplete terminal record | Require all five roadmap drills, non-empty refs, profile flag invariants, and terminal-state payloads at both runtime and schema boundaries. <!-- from ADR: ADR-41 -->
+- [2026-08] A caller could label release evidence with a framework version that was not the manifest version | Read the canonical manifest at evaluation/report boundaries and reject mismatches before trust resolution or gate derivation. <!-- from ADR: ADR-42 -->
