@@ -1217,3 +1217,75 @@ Start the next cycle whenever the semantic-profile schema or manifest version ch
 - A canonical policy file is not authoritative if consumers duplicate its semantics in code.
 - A profile override test is a compact regression for policy/runtime drift: it must change every calculator that claims profile authority.
 - Version binding prevents a valid profile from one framework generation from silently controlling another.
+
+## ADR-18 — Require an independently signed judge verdict at the release boundary
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `independent-judge` `qualification` `signing` `release-gates`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when judge evidence, key custody, or qualification schemas change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local persisted-evidence rejection; `NOT_PRODUCTION_QUALIFIED` until an external judge signer/key-custody service supplies real evidence.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — judge signer identity and key custody are release-bound external inputs.
+
+### Context
+
+The blind judge packet and verdict were content-addressed and packet-bound, but a caller could construct the same `JVR-*` identity and label it `independent_candidate` without proving that a separate judge process produced it. The evaluator accepted that self-created verdict whenever the packet item IDs matched the private receipt. A distinct `independent_judge_id` string was metadata, not an authorization or provenance boundary.
+
+### Decision
+
+Persisted independent judge verdicts that contribute to qualification must carry an Ed25519 signature verified with a dedicated judge public key and key ID. The release evaluator verifies the signature before packet binding and metric population checks. The qualification verification key and judge verification key must be different public keys; missing, mismatched, or unsigned judge evidence leaves qualification metrics unavailable and the affected gates `unknown`. `run_independent_judge()` continues to emit an unsigned candidate; signing is a separate controlled step at the judge/key-custody boundary.
+
+### Options Considered
+
+- Trust `verdict_id`, packet identity, and `independent_judge_id`: rejected because all are reproducible caller-controlled content or labels.
+- Reuse the qualification/evaluator signing key: rejected because it collapses evaluator and judge independence.
+- Sign candidate verdicts inside the local runner with an embedded key: rejected because key custody would be in the runtime and would not establish independent authority.
+- Accept unsigned verdicts and rely on process isolation alone: rejected because persisted evidence can be replaced after process completion.
+
+### Impact
+
+Schemas changed: `schemas/judge-verdict.schema.json` declares optional signature fields for unsigned runtime candidates and signed persisted verdicts.
+Components changed: judge sign/verify helpers, release evaluator, evaluator CLI judge-key inputs, release evidence fixtures/tests.
+Breaking change: **YES** for release evidence that supplies unsigned judge verdicts or reuses the qualification verification key.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `judge process → signed verdict → qualification evidence → RG-04/RG-05/RG-07 → shadow/canary authorization`.
+Cascade Review: ✅ Done — RED unsigned-verdict release regression, GREEN signature/tamper regression, distinct-key enforcement, schema validation, and full repository verification cover the boundary.
+
+### Consequences
+
+- A content-addressed verdict no longer becomes independent qualification evidence without a separate cryptographic signer.
+- Local tests can prove signing and rejection behavior, but cannot mint production judge authority or private gold evidence.
+- Shadow/canary and GA remain blocked when external judge key custody or private/time-sliced evidence is unavailable.
+- Candidate verdicts remain useful for local process tests, but only signed verdicts are eligible for release-gate metric derivation.
+
+### Evidence
+
+- [verified 2026-08-01] RED release regression showed an unsigned, packet-bound `JVR-*` verdict made RG-05 pass under the old boundary.
+- [verified 2026-08-01] GREEN tests verify signed verdict round-trip, tamper rejection, distinct qualification/judge keys, and unsigned release evidence remaining `unknown`.
+- [verified 2026-08-01] No judge private key, private gold corpus, or production qualification claim is created by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External judge key custody, private/time-sliced gold data, provider qualification, fresh vulnerability evidence, host namespace capability, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a production judge signer/key-custody service is connected or the verdict schema gains new identity-bearing fields; add a signer rotation/revocation regression and rerun RG-00…RG-15 before accepting new evidence.
+
+### Cycle Retrospective
+
+- Process isolation protects execution while it is running; it does not authenticate a persisted record after the process exits.
+- Independence must be represented by a separate key boundary, not only different provider/model strings.
+- Release evaluators must verify the strongest evidence boundary before deriving population coverage or threshold metrics.

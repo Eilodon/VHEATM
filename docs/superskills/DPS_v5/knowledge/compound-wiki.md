@@ -256,3 +256,24 @@ modules: [MOD-ARCHITECTURE-DECISIONS, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-V
 - RPN, FMEA→QBR, QBR, and BRS calculations require a profile/schema/manifest binding and fail closed on invalid or mismatched policy: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-18 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-ARCHITECTURE-DECISIONS, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: signed-independent-judge-verdict-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Signed independent verdict: added ✅
+
+### Bug Patterns
+- A content-addressed judge verdict could be caller-created and accepted as independent evidence: observed and fixed by a distinct Ed25519 judge signature at the release boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Process isolation does not authenticate a persisted record after process exit: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Qualification metrics require a signed verdict from a judge key distinct from the evaluator key; unsigned candidates remain non-qualifying: added to CONTEXT.md ✅
+
+---

@@ -37,6 +37,7 @@
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 - Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.
 - Private qualification ingestion now verifies a signed manifest, an absolute/file locator, exact time-slice membership, case digests, corpus identity, and framework binding before emitting a payload-free `PQR-*` receipt; qualification evidence and release reports must bind to and re-verify that receipt.
+- Independent judge verdicts contributing to qualification now require a distinct Ed25519 judge signature at the release boundary; unsigned or evaluator-key-reused verdicts remain unknown and cannot authorize RG-04/RG-05/RG-07.
 - Semantic migration now has schema-bound, non-authoritative records for signal/noise decisions, FAST/Standard/Full legacy-output mapping, enterprise stakeholder ownership, cross-cutting L7 obligations, ordered temporal/L4 scans, AI-RMF governance, and assurance maturity deltas; unknown and tainted states remain explicit.
 
 ## Verification gates
@@ -44,7 +45,7 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 243 passed.
+- `.venv/bin/pytest -o addopts=''` — 245 passed.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs; visibility remains `public_seeded` and evidence state `unverified`.
 - Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root is regenerated after this canonical adapter/schema change and remains content-addressed.

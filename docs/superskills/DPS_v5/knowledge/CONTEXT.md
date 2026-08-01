@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 12 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 13 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -19,6 +19,7 @@
 - **Canary evidence revalidation:** the pre-rollout recomputation of the release report from typed evidence, verification keys, bundle root, and evaluator version before tools may be enabled. <!-- from ADR: ADR-15 -->
 - **Release-report identity boundary:** the schema, ordered RG-00…RG-15 gate set, derived summary, and evaluation timestamp that must agree before a report can authorize a pilot. <!-- from ADR: ADR-16 -->
 - **Canonical semantic profile binding:** the schema-valid semantic policy and manifest-version match required before RPN, FMEA→QBR, QBR, or BRS calculations can return a score. <!-- from ADR: ADR-17 -->
+- **Signed independent verdict:** a complete blind-judge verdict carrying a valid signature from a judge key distinct from the qualification evaluator key, required before it contributes release metrics. <!-- from ADR: ADR-18 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -36,6 +37,7 @@
 - A self-consistent all-pass report is not a canary authorization; canary preparation must re-evaluate the underlying evidence and require exact report equality. <!-- from ADR: ADR-15 -->
 - A report ID must bind every identity-bearing field, including schema version and evaluation time; generated reports must pass the same schema boundary as caller-supplied reports. <!-- from ADR: ADR-16 -->
 - Semantic formulas consume only the schema-valid profile bound to the canonical manifest version; invalid or mismatched profiles fail closed, and unknown BRS inputs remain unknown. <!-- from ADR: ADR-17 -->
+- Content-addressed judge identity and packet binding are insufficient for release evidence; persisted verdicts require a distinct judge signature, while unsigned candidates remain non-qualifying. <!-- from ADR: ADR-18 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -53,3 +55,4 @@
 - [2026-08] A release report can be rehashed after changing all gates to pass | Re-run the canonical evaluator with the original evidence and bundle/key bindings before enabling tools. <!-- from ADR: ADR-15 -->
 - [2026-08] A release report can be schema-invalid or share an ID across evaluation times | Validate the generated and pilot-bound report, derive the summary, and include timestamp/schema fields in the identity projection. <!-- from ADR: ADR-16 -->
 - [2026-08] A policy profile can validate while runtime calculators ignore it | Test a non-default profile override across RPN/FMEA/QBR/BRS and bind the profile version to the manifest before accepting a score. <!-- from ADR: ADR-17 -->
+- [2026-08] An isolated judge can emit a valid-looking record that is later replaced | Authenticate persisted verdicts with a dedicated judge key and reject reuse of the evaluator key before deriving qualification metrics. <!-- from ADR: ADR-18 -->
