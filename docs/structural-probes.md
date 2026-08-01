@@ -4,9 +4,18 @@
 
 ## Evidence boundary
 
-The probe records exact source SHA-256 digests, content-addressed `SRC-*` records, normalized symbol/import/call facts, and a formatting-insensitive AST digest. Calls are syntactic facts only: dotted names are preserved when statically visible, while computed call targets are marked `dynamic: true` rather than guessed.
+The probe records exact source SHA-256 digests, content-addressed `SRC-*` records, normalized symbol/import/call facts, a lexical scope graph, binding events, and a formatting-insensitive AST digest. Calls are syntactic facts only: dotted names are preserved when statically visible, while computed call targets are marked `dynamic: true` rather than guessed.
 
-The bundle does not assign gate states, severity, exploitability, runtime reachability, or dataflow conclusions. A gate result may reference a resulting source only after the audit process verifies that the evidence is relevant to that gate.
+Each file now includes:
+
+- `scopes`: module, class, function, async-function, lambda, and comprehension scopes with structural and lookup parents;
+- `bindings`: parameters, imports, class/function definitions, assignments, annotations, named expressions, deletes, loop/with/except targets, pattern captures, and comprehension targets;
+- `global_names`, `nonlocal_names`, and `local_names` for each scope;
+- `control_context` on calls and bindings when syntax is branch-, loop-, try-, match-, comprehension-, or short-circuit-dependent.
+
+Function defaults, decorators, annotations, class bases, and class keywords are visited in their enclosing scope. Function-like scopes defined inside a class skip the class namespace for unqualified lexical lookup, matching Python's scope boundary conservatively. Comprehension targets are isolated in a comprehension scope.
+
+The probe does not assign gate states, severity, exploitability, runtime reachability, or dataflow conclusions. Binding facts do not prove that a statement executed; control-dependent events remain explicitly marked for the linker to handle conservatively.
 
 ## Safety and failure behavior
 
@@ -16,7 +25,7 @@ Missing paths, syntax errors, unreadable files, rejected symlinks, or limit viol
 
 ## Reproducibility
 
-Supply the audit lifecycle timestamp through `--captured-at`. With identical source bytes, requested paths, limits, and timestamp, the complete JSON document is deterministic. The source digest binds exact bytes; `ast_digest` changes only when the normalized structural facts change.
+Supply the audit lifecycle timestamp through `--captured-at`. With identical source bytes, requested paths, limits, and timestamp, the complete JSON document is deterministic. The source digest binds exact bytes; `ast_digest` changes only when normalized structural facts change. Scope identifiers use traversal-stable qualified names and counters rather than source offsets, so comments and formatting do not perturb the structural digest.
 
 ```bash
 vheatm-probe-python \

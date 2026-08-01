@@ -25,7 +25,7 @@ def test_collects_normalized_symbols_imports_and_calls(tmp_path: Path) -> None:
     )
     bundle = probe_workspace(tmp_path, ["src"], captured_at=CAPTURED_AT)
     assert bundle["status"] == "complete"
-    assert bundle["summary"] == {"discovered_files": 1, "parsed_files": 1, "symbols": 2, "imports": 2, "calls": 5, "errors": 0}
+    assert bundle["summary"] == {"discovered_files": 1, "parsed_files": 1, "scopes": 3, "symbols": 2, "imports": 2, "bindings": 7, "calls": 5, "errors": 0}
     file_record = bundle["files"][0]
     assert [item["qualified_name"] for item in file_record["symbols"]] == ["Service", "Service.handle"]
     assert file_record["symbols"][1]["kind"] == "async_method"
@@ -139,3 +139,76 @@ def test_semantic_verifier_accepts_generated_bundle_and_rejects_tampering(tmp_pa
     bundle["files"][0]["calls"][0]["callee"] = "service.stop"
     with pytest.raises(ProbeError, match="AST digest mismatch"):
         verify_probe_bundle(bundle)
+
+
+def test_collects_lexical_scopes_declarations_and_binding_events(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "sample.py",
+        """from helpers import run
+
+def outer(value):
+    alias = run
+    if value:
+        alias = fallback
+    def inner():
+        nonlocal alias
+        return alias()
+    return inner
+""",
+    )
+    file_record = probe_workspace(tmp_path, ["sample.py"], captured_at=CAPTURED_AT)["files"][0]
+    scopes = {item["qualified_name"]: item for item in file_record["scopes"]}
+    assert scopes["outer"]["local_names"] == ["alias", "inner", "value"]
+    assert scopes["outer.inner"]["nonlocal_names"] == ["alias"]
+    assert scopes["outer.inner"]["lookup_parent_scope"] == scopes["outer"]["scope_id"]
+    bindings = {(item["scope_id"], item["name"], item["line"]): item for item in file_record["bindings"]}
+    first_alias = bindings[(scopes["outer"]["scope_id"], "alias", 4)]
+    conditional_alias = bindings[(scopes["outer"]["scope_id"], "alias", 6)]
+    assert first_alias["value"] == "run" and first_alias["control_context"] == []
+    assert conditional_alias["control_context"] == ["if"]
+    call = file_record["calls"][0]
+    assert call["scope_id"] == scopes["outer.inner"]["scope_id"]
+    assert call["caller"] == "outer.inner"
+
+
+def test_function_defaults_are_collected_in_enclosing_scope(tmp_path: Path) -> None:
+    _write(tmp_path / "sample.py", "def build(value=factory()):\n    return value\n")
+    file_record = probe_workspace(tmp_path, ["sample.py"], captured_at=CAPTURED_AT)["files"][0]
+    assert file_record["calls"][0]["callee"] == "factory"
+    assert file_record["calls"][0]["scope_id"] == "<module>"
+    assert file_record["calls"][0]["caller"] == "<module>"
+
+
+def test_comprehensions_have_isolated_binding_scope(tmp_path: Path) -> None:
+    _write(tmp_path / "sample.py", "items = [transform(item) for item in source()]\n")
+    file_record = probe_workspace(tmp_path, ["sample.py"], captured_at=CAPTURED_AT)["files"][0]
+    calls = {item["callee"]: item for item in file_record["calls"]}
+    assert calls["source"]["scope_id"] == "<module>"
+    assert calls["transform"]["scope_id"].startswith("comprehension:")
+    target = next(item for item in file_record["bindings"] if item["kind"] == "comprehension_target")
+    assert target["name"] == "item"
+    assert target["control_context"] == ["comprehension"]
+
+
+def test_try_star_and_or_patterns_emit_single_conservative_bindings(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "sample.py",
+        """try:
+    work()
+except* ValueError as problem:
+    handle(problem)
+
+match payload:
+    case {"left": captured} | {"right": captured}:
+        consume(captured)
+""",
+    )
+    file_record = probe_workspace(tmp_path, ["sample.py"], captured_at=CAPTURED_AT)["files"][0]
+    problem = [item for item in file_record["bindings"] if item["name"] == "problem"]
+    captured = [item for item in file_record["bindings"] if item["name"] == "captured"]
+    assert len(problem) == 1
+    assert problem[0]["kind"] == "except_target"
+    assert problem[0]["control_context"] == ["try"]
+    assert len(captured) == 1
+    assert captured[0]["kind"] == "pattern_capture"
+    assert captured[0]["control_context"] == ["match"]

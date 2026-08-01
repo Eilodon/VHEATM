@@ -241,16 +241,215 @@ def _parameters(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[dict[str, 
     return result
 
 
-class _FactCollector(ast.NodeVisitor):
+class _DeclarationCollector(ast.NodeVisitor):
     def __init__(self) -> None:
-        self.scope: list[str] = []
-        self.class_depth = 0
+        self.globals: set[str] = set()
+        self.nonlocals: set[str] = set()
+
+    def visit_Global(self, node: ast.Global) -> Any:
+        self.globals.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> Any:
+        self.nonlocals.update(node.names)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
+        return None
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
+        return None
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> Any:
+        return None
+
+    def visit_Lambda(self, node: ast.Lambda) -> Any:
+        return None
+
+
+def _scope_declarations(nodes: Sequence[ast.stmt]) -> tuple[list[str], list[str]]:
+    collector = _DeclarationCollector()
+    for node in nodes:
+        collector.visit(node)
+    return sorted(collector.globals), sorted(collector.nonlocals)
+
+
+def _binding_targets(node: ast.AST | None) -> list[tuple[str, ast.AST]]:
+    if isinstance(node, ast.Name):
+        return [(node.id, node)]
+    if isinstance(node, (ast.Tuple, ast.List)):
+        result: list[tuple[str, ast.AST]] = []
+        for item in node.elts:
+            result.extend(_binding_targets(item))
+        return result
+    if isinstance(node, ast.Starred):
+        return _binding_targets(node.value)
+    return []
+
+
+def _pattern_bindings(node: ast.pattern) -> list[tuple[str, ast.AST]]:
+    result: list[tuple[str, ast.AST]] = []
+    if isinstance(node, ast.MatchAs):
+        if node.pattern is not None:
+            result.extend(_pattern_bindings(node.pattern))
+        if node.name is not None:
+            result.append((node.name, node))
+    elif isinstance(node, ast.MatchStar):
+        if node.name is not None:
+            result.append((node.name, node))
+    elif isinstance(node, ast.MatchMapping):
+        for pattern in node.patterns:
+            result.extend(_pattern_bindings(pattern))
+        if node.rest is not None:
+            result.append((node.rest, node))
+    elif isinstance(node, ast.MatchSequence):
+        for pattern in node.patterns:
+            result.extend(_pattern_bindings(pattern))
+    elif isinstance(node, ast.MatchClass):
+        for pattern in [*node.patterns, *node.kwd_patterns]:
+            result.extend(_pattern_bindings(pattern))
+    elif isinstance(node, ast.MatchOr):
+        for pattern in node.patterns:
+            result.extend(_pattern_bindings(pattern))
+    return result
+
+
+class _FactCollector(ast.NodeVisitor):
+    _FUNCTION_LIKE = frozenset({"function", "async_function", "lambda", "comprehension"})
+
+    def __init__(self) -> None:
         self.symbols: list[dict[str, Any]] = []
         self.imports: list[dict[str, Any]] = []
         self.calls: list[dict[str, Any]] = []
+        self.bindings: list[dict[str, Any]] = []
+        self.scopes: list[dict[str, Any]] = [
+            {
+                "scope_id": "<module>",
+                "kind": "module",
+                "qualified_name": "<module>",
+                "parent_scope": None,
+                "lookup_parent_scope": None,
+                "global_names": [],
+                "nonlocal_names": [],
+                "local_names": [],
+                "line": 1,
+                "column": 0,
+                "end_line": 1,
+                "end_column": 0,
+            }
+        ]
+        self._scope_stack: list[dict[str, Any]] = [self.scopes[0]]
+        self._scope_counters: dict[str, int] = {}
+        self._control_stack: list[str] = []
+        self._scope_local_names: dict[str, set[str]] = {"<module>": set()}
+
+    @property
+    def _scope(self) -> dict[str, Any]:
+        return self._scope_stack[-1]
 
     def _qualified(self, name: str) -> str:
-        return ".".join([*self.scope, name])
+        parent = str(self._scope["qualified_name"])
+        return name if parent == "<module>" else f"{parent}.{name}"
+
+    def _new_scope_id(self, kind: str, qualified_name: str) -> str:
+        stem = f"{kind}:{qualified_name}"
+        count = self._scope_counters.get(stem, 0) + 1
+        self._scope_counters[stem] = count
+        return f"{stem}#{count}"
+
+    def _lookup_parent(self, kind: str) -> str | None:
+        parent = self._scope
+        if kind in self._FUNCTION_LIKE and parent["kind"] == "class":
+            return parent["lookup_parent_scope"]
+        return str(parent["scope_id"])
+
+    def _enter_scope(
+        self,
+        *,
+        kind: str,
+        qualified_name: str,
+        node: ast.AST,
+        body: Sequence[ast.stmt] = (),
+    ) -> None:
+        globals_, nonlocals = _scope_declarations(body)
+        record = {
+            "scope_id": self._new_scope_id(kind, qualified_name),
+            "kind": kind,
+            "qualified_name": qualified_name,
+            "parent_scope": self._scope["scope_id"],
+            "lookup_parent_scope": self._lookup_parent(kind),
+            "global_names": globals_,
+            "nonlocal_names": nonlocals,
+            "local_names": [],
+            **_location(node),
+        }
+        self.scopes.append(record)
+        self._scope_stack.append(record)
+        self._scope_local_names[str(record["scope_id"])] = set()
+
+    def _leave_scope(self) -> None:
+        self._scope_stack.pop()
+
+    def finalize(self) -> None:
+        for scope in self.scopes:
+            scope["local_names"] = sorted(self._scope_local_names[str(scope["scope_id"])])
+
+    def _declaration(self, name: str) -> str:
+        if self._scope["kind"] == "module":
+            return "local"
+        if name in self._scope["global_names"]:
+            return "global"
+        if name in self._scope["nonlocal_names"]:
+            return "nonlocal"
+        return "local"
+
+    def _record_binding(
+        self,
+        name: str,
+        kind: str,
+        node: ast.AST,
+        *,
+        value: str | None = None,
+        dynamic: bool = False,
+        runtime_binding: bool = True,
+        target_qualified_name: str | None = None,
+    ) -> None:
+        declaration = self._declaration(name)
+        if declaration == "local":
+            self._scope_local_names[str(self._scope["scope_id"])].add(name)
+        self.bindings.append(
+            {
+                "scope_id": self._scope["scope_id"],
+                "name": name,
+                "kind": kind,
+                "declaration": declaration,
+                "value": value,
+                "dynamic": dynamic,
+                "runtime_binding": runtime_binding,
+                "target_qualified_name": target_qualified_name,
+                "control_context": list(self._control_stack),
+                **_location(node),
+            }
+        )
+
+    def _record_targets(
+        self,
+        target: ast.AST | None,
+        kind: str,
+        *,
+        value: str | None = None,
+        dynamic: bool = True,
+        runtime_binding: bool = True,
+    ) -> None:
+        names = _binding_targets(target)
+        single = len(names) == 1
+        for name, node in names:
+            self._record_binding(
+                name,
+                kind,
+                node,
+                value=value if single else None,
+                dynamic=dynamic or not single,
+                runtime_binding=runtime_binding,
+            )
 
     def _decorators(self, nodes: Iterable[ast.expr]) -> list[str]:
         values: list[str] = []
@@ -261,52 +460,313 @@ class _FactCollector(ast.NodeVisitor):
                 values.append(value)
         return values
 
+    def _visit_parameter_expressions(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> None:
+        arguments = node.args
+        for default in arguments.defaults:
+            self.visit(default)
+        for default in arguments.kw_defaults:
+            if default is not None:
+                self.visit(default)
+        for argument in [*(arguments.posonlyargs or []), *arguments.args, *arguments.kwonlyargs]:
+            if argument.annotation is not None:
+                self.visit(argument.annotation)
+        if arguments.vararg is not None and arguments.vararg.annotation is not None:
+            self.visit(arguments.vararg.annotation)
+        if arguments.kwarg is not None and arguments.kwarg.annotation is not None:
+            self.visit(arguments.kwarg.annotation)
+
+    def _record_parameters(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda) -> None:
+        arguments = node.args
+        all_arguments = [*(arguments.posonlyargs or []), *arguments.args, *arguments.kwonlyargs]
+        if arguments.vararg is not None:
+            all_arguments.append(arguments.vararg)
+        if arguments.kwarg is not None:
+            all_arguments.append(arguments.kwarg)
+        for argument in all_arguments:
+            self._record_binding(argument.arg, "parameter", argument, dynamic=True)
+
+    def visit_Module(self, node: ast.Module) -> Any:
+        for statement in node.body:
+            self.visit(statement)
+        self.finalize()
+
     def visit_ClassDef(self, node: ast.ClassDef) -> Any:
+        qualified = self._qualified(node.name)
         self.symbols.append(
             {
                 "kind": "class",
                 "name": node.name,
-                "qualified_name": self._qualified(node.name),
+                "qualified_name": qualified,
                 "decorators": self._decorators(node.decorator_list),
                 "bases": [value for base in node.bases if (value := _expression_text(base)) is not None],
                 **_location(node),
             }
         )
-        self.scope.append(node.name)
-        self.class_depth += 1
-        self.generic_visit(node)
-        self.class_depth -= 1
-        self.scope.pop()
+        self._record_binding(node.name, "class", node, dynamic=False, target_qualified_name=qualified)
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for base in node.bases:
+            self.visit(base)
+        for keyword_node in node.keywords:
+            self.visit(keyword_node.value)
+        self._enter_scope(kind="class", qualified_name=qualified, node=node, body=node.body)
+        for statement in node.body:
+            self.visit(statement)
+        self._leave_scope()
 
-    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef, kind: str) -> None:
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef, kind: str, scope_kind: str) -> None:
+        qualified = self._qualified(node.name)
         self.symbols.append(
             {
                 "kind": kind,
                 "name": node.name,
-                "qualified_name": self._qualified(node.name),
+                "qualified_name": qualified,
                 "decorators": self._decorators(node.decorator_list),
                 "parameters": _parameters(node),
                 "returns": _expression_text(node.returns),
                 **_location(node),
             }
         )
-        self.scope.append(node.name)
-        self.generic_visit(node)
-        self.scope.pop()
+        self._record_binding(node.name, scope_kind, node, dynamic=False, target_qualified_name=qualified)
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        self._visit_parameter_expressions(node)
+        if node.returns is not None:
+            self.visit(node.returns)
+        self._enter_scope(kind=scope_kind, qualified_name=qualified, node=node, body=node.body)
+        self._record_parameters(node)
+        for statement in node.body:
+            self.visit(statement)
+        self._leave_scope()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
-        self._visit_function(node, "method" if self.class_depth else "function")
+        self._visit_function(node, "method" if self._scope["kind"] == "class" else "function", "function")
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> Any:
-        self._visit_function(node, "async_method" if self.class_depth else "async_function")
+        self._visit_function(node, "async_method" if self._scope["kind"] == "class" else "async_function", "async_function")
+
+    def visit_Lambda(self, node: ast.Lambda) -> Any:
+        self._visit_parameter_expressions(node)
+        qualified = self._qualified("<lambda>")
+        self._enter_scope(kind="lambda", qualified_name=qualified, node=node)
+        self._record_parameters(node)
+        self.visit(node.body)
+        self._leave_scope()
 
     def visit_Import(self, node: ast.Import) -> Any:
         for alias in node.names:
-            self.imports.append({"kind": "import", "module": alias.name, "name": None, "alias": alias.asname, "level": 0, **_location(node)})
+            self.imports.append(
+                {
+                    "kind": "import",
+                    "module": alias.name,
+                    "name": None,
+                    "alias": alias.asname,
+                    "level": 0,
+                    "scope_id": self._scope["scope_id"],
+                    **_location(node),
+                }
+            )
+            local_name = alias.asname or alias.name.split(".", 1)[0]
+            self._record_binding(local_name, "import", node, value=alias.name, dynamic=False)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
         for alias in node.names:
-            self.imports.append({"kind": "from", "module": node.module, "name": alias.name, "alias": alias.asname, "level": node.level, **_location(node)})
+            self.imports.append(
+                {
+                    "kind": "from",
+                    "module": node.module,
+                    "name": alias.name,
+                    "alias": alias.asname,
+                    "level": node.level,
+                    "scope_id": self._scope["scope_id"],
+                    **_location(node),
+                }
+            )
+            if alias.name != "*":
+                local_name = alias.asname or alias.name
+                requested = f"{'.' * node.level}{node.module or ''}:{alias.name}"
+                self._record_binding(local_name, "import", node, value=requested, dynamic=False)
+
+    def visit_Global(self, node: ast.Global) -> Any:
+        return None
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> Any:
+        return None
+
+    def visit_Assign(self, node: ast.Assign) -> Any:
+        self.visit(node.value)
+        value = _expression_name(node.value)
+        for target in node.targets:
+            self.visit(target)
+            self._record_targets(target, "assignment", value=value, dynamic=value is None)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> Any:
+        self.visit(node.annotation)
+        if node.value is not None:
+            self.visit(node.value)
+        self.visit(node.target)
+        self._record_targets(
+            node.target,
+            "annotated_assignment" if node.value is not None else "annotation",
+            value=_expression_name(node.value),
+            dynamic=node.value is None or _expression_name(node.value) is None,
+            runtime_binding=node.value is not None,
+        )
+
+    def visit_AugAssign(self, node: ast.AugAssign) -> Any:
+        self.visit(node.target)
+        self.visit(node.value)
+        self._record_targets(node.target, "augmented_assignment", dynamic=True)
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> Any:
+        self.visit(node.value)
+        self._record_targets(node.target, "named_expression", value=_expression_name(node.value), dynamic=_expression_name(node.value) is None)
+
+    def visit_Delete(self, node: ast.Delete) -> Any:
+        for target in node.targets:
+            self.visit(target)
+            self._record_targets(target, "delete", dynamic=True, runtime_binding=False)
+
+    def _push_control(self, kind: str) -> None:
+        self._control_stack.append(kind)
+
+    def _pop_control(self) -> None:
+        self._control_stack.pop()
+
+    def visit_If(self, node: ast.If) -> Any:
+        self.visit(node.test)
+        self._push_control("if")
+        for statement in [*node.body, *node.orelse]:
+            self.visit(statement)
+        self._pop_control()
+
+    def visit_IfExp(self, node: ast.IfExp) -> Any:
+        self.visit(node.test)
+        self._push_control("expression_branch")
+        self.visit(node.body)
+        self.visit(node.orelse)
+        self._pop_control()
+
+    def visit_BoolOp(self, node: ast.BoolOp) -> Any:
+        if not node.values:
+            return None
+        self.visit(node.values[0])
+        self._push_control("short_circuit")
+        for value in node.values[1:]:
+            self.visit(value)
+        self._pop_control()
+
+    def _visit_loop(self, node: ast.For | ast.AsyncFor, kind: str) -> None:
+        self.visit(node.iter)
+        self._push_control(kind)
+        self.visit(node.target)
+        self._record_targets(node.target, "for_target", dynamic=True)
+        for statement in [*node.body, *node.orelse]:
+            self.visit(statement)
+        self._pop_control()
+
+    def visit_For(self, node: ast.For) -> Any:
+        self._visit_loop(node, "for")
+
+    def visit_AsyncFor(self, node: ast.AsyncFor) -> Any:
+        self._visit_loop(node, "async_for")
+
+    def visit_While(self, node: ast.While) -> Any:
+        self.visit(node.test)
+        self._push_control("while")
+        for statement in [*node.body, *node.orelse]:
+            self.visit(statement)
+        self._pop_control()
+
+    def _visit_with(self, node: ast.With | ast.AsyncWith, kind: str) -> None:
+        for item in node.items:
+            self.visit(item.context_expr)
+        self._push_control(kind)
+        for item in node.items:
+            if item.optional_vars is not None:
+                self.visit(item.optional_vars)
+                self._record_targets(item.optional_vars, "with_target", dynamic=True)
+        for statement in node.body:
+            self.visit(statement)
+        self._pop_control()
+
+    def visit_With(self, node: ast.With) -> Any:
+        self._visit_with(node, "with")
+
+    def visit_AsyncWith(self, node: ast.AsyncWith) -> Any:
+        self._visit_with(node, "async_with")
+
+    def visit_Try(self, node: ast.Try) -> Any:
+        self._push_control("try")
+        for statement in node.body:
+            self.visit(statement)
+        for handler in node.handlers:
+            self.visit(handler)
+        for statement in [*node.orelse, *node.finalbody]:
+            self.visit(statement)
+        self._pop_control()
+
+    def visit_TryStar(self, node: ast.TryStar) -> Any:
+        self.visit_Try(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> Any:
+        if node.type is not None:
+            self.visit(node.type)
+        if node.name is not None:
+            self._record_binding(node.name, "except_target", node, dynamic=True)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_Match(self, node: ast.Match) -> Any:
+        self.visit(node.subject)
+        self._push_control("match")
+        for case in node.cases:
+            captures = {name: binding_node for name, binding_node in _pattern_bindings(case.pattern)}
+            for name, binding_node in captures.items():
+                self._record_binding(name, "pattern_capture", binding_node, dynamic=True)
+            if case.guard is not None:
+                self.visit(case.guard)
+            for statement in case.body:
+                self.visit(statement)
+        self._pop_control()
+
+    def _visit_comprehension_expression(self, node: ast.AST, values: Sequence[ast.AST]) -> None:
+        generators = list(getattr(node, "generators"))
+        if not generators:
+            for value in values:
+                self.visit(value)
+            return
+        self.visit(generators[0].iter)
+        qualified = self._qualified(f"<{node.__class__.__name__.lower()}>")
+        self._enter_scope(kind="comprehension", qualified_name=qualified, node=node)
+        self._push_control("comprehension")
+        first = generators[0]
+        self.visit(first.target)
+        self._record_targets(first.target, "comprehension_target", dynamic=True)
+        for condition in first.ifs:
+            self.visit(condition)
+        for generator in generators[1:]:
+            self.visit(generator.iter)
+            self.visit(generator.target)
+            self._record_targets(generator.target, "comprehension_target", dynamic=True)
+            for condition in generator.ifs:
+                self.visit(condition)
+        for value in values:
+            self.visit(value)
+        self._pop_control()
+        self._leave_scope()
+
+    def visit_ListComp(self, node: ast.ListComp) -> Any:
+        self._visit_comprehension_expression(node, [node.elt])
+
+    def visit_SetComp(self, node: ast.SetComp) -> Any:
+        self._visit_comprehension_expression(node, [node.elt])
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> Any:
+        self._visit_comprehension_expression(node, [node.elt])
+
+    def visit_DictComp(self, node: ast.DictComp) -> Any:
+        self._visit_comprehension_expression(node, [node.key, node.value])
 
     def visit_Call(self, node: ast.Call) -> Any:
         callee = _expression_name(node.func)
@@ -314,7 +774,9 @@ class _FactCollector(ast.NodeVisitor):
             {
                 "callee": callee,
                 "dynamic": callee is None,
-                "caller": ".".join(self.scope) if self.scope else "<module>",
+                "caller": self._scope["qualified_name"],
+                "scope_id": self._scope["scope_id"],
+                "control_context": list(self._control_stack),
                 "positional_arguments": len(node.args),
                 "keyword_arguments": len(node.keywords),
                 "has_star_arguments": any(isinstance(value, ast.Starred) for value in node.args),
@@ -324,15 +786,15 @@ class _FactCollector(ast.NodeVisitor):
         )
         self.generic_visit(node)
 
-
 def _sort_facts(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         facts,
         key=lambda item: (
             item.get("line", 0),
             item.get("column", 0),
+            str(item.get("scope_id", "")),
             str(item.get("kind", "")),
-            str(item.get("qualified_name", item.get("module", item.get("callee", "")))),
+            str(item.get("qualified_name", item.get("name", item.get("module", item.get("callee", ""))))),
         ),
     )
 
@@ -373,8 +835,10 @@ def _analyze_file(root: Path, path: Path, *, captured_at: str, limits: ProbeLimi
     except RecursionError as exc:
         raise ProbeError(f"AST visitor exceeded recursion limit: {relative}") from exc
     facts = {
+        "scopes": _sort_facts(collector.scopes),
         "symbols": _sort_facts(collector.symbols),
         "imports": _sort_facts(collector.imports),
+        "bindings": _sort_facts(collector.bindings),
         "calls": _sort_facts(collector.calls),
     }
     source = build_source_record(
@@ -436,8 +900,10 @@ def probe_workspace(
     summary = {
         "discovered_files": len(discovered),
         "parsed_files": len(files),
+        "scopes": sum(len(item["scopes"]) for item in files),
         "symbols": sum(len(item["symbols"]) for item in files),
         "imports": sum(len(item["imports"]) for item in files),
+        "bindings": sum(len(item["bindings"]) for item in files),
         "calls": sum(len(item["calls"]) for item in files),
         "errors": len(errors),
     }
@@ -512,21 +978,23 @@ def verify_probe_bundle(document: Mapping[str, Any]) -> None:
         source = item.get("source")
         if not isinstance(source, Mapping) or source.get("id") != expected_source_id(source):
             raise ProbeError(f"source id mismatch for {item.get('path', '<unknown>')}")
-        facts = {category: item.get(category) for category in ("symbols", "imports", "calls")}
+        facts = {category: item.get(category) for category in ("scopes", "symbols", "imports", "bindings", "calls")}
         if item.get("ast_digest") != sha256_digest(_canonical_bytes(_structural_facts(facts))):
             raise ProbeError(f"AST digest mismatch for {item.get('path', '<unknown>')}")
     expected_summary = {
         "discovered_files": len(files) + sum(1 for item in errors if item.get("path") not in {"<request>"} and item.get("code") in {"syntax_error", "probe_error"}),
         "parsed_files": len(files),
+        "scopes": sum(len(item.get("scopes", [])) for item in files),
         "symbols": sum(len(item.get("symbols", [])) for item in files),
         "imports": sum(len(item.get("imports", [])) for item in files),
+        "bindings": sum(len(item.get("bindings", [])) for item in files),
         "calls": sum(len(item.get("calls", [])) for item in files),
         "errors": len(errors),
     }
     summary = document.get("summary")
     if not isinstance(summary, Mapping):
         raise ProbeError("probe summary must be an object")
-    for key in ("discovered_files", "parsed_files", "symbols", "imports", "calls", "errors"):
+    for key in ("discovered_files", "parsed_files", "scopes", "symbols", "imports", "bindings", "calls", "errors"):
         if summary.get(key) != expected_summary[key]:
             raise ProbeError(f"probe summary mismatch for {key}")
     expected_status = "blocked" if errors else "complete"
