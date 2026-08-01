@@ -1,0 +1,52 @@
+name: Apply P3-C Python linkage patch
+
+on:
+  push:
+    branches:
+      - feat/v17-p3c-python-linkage
+    paths:
+      - .github/p3c.patch.gz.b64.part-*
+      - .github/workflows/apply-p3c-linkage.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v17-p3c-python-linkage
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Reconstruct validated patch
+        run: |
+          cat .github/p3c.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/p3c.patch
+          echo "a555b8ac00269de3fdf7d39bdfc09d352cbc7f2db82bec0f78544f337bd6bcd4  /tmp/p3c.patch" | sha256sum --check -
+          git apply --check /tmp/p3c.patch
+          git apply /tmp/p3c.patch
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Validate Python linkage
+        run: |
+          python -m compileall -q src
+          pytest -q tests/test_structural_probe.py tests/test_python_linker.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+          schema = json.loads(Path("schemas/python-linkage.schema.json").read_text(encoding="utf-8"))
+          Draft202012Validator.check_schema(schema)
+          PY
+          vheatm-validate --root .
+      - name: Commit product files and remove staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/python-linkage.md pyproject.toml schemas/python-linkage.schema.json src/vheatm_control/python_linker.py src/vheatm_control/validator.py tests/test_python_linker.py
+          git rm .github/p3c.patch.gz.b64.part-*
+          git commit -m "feat: add conservative Python linkage graph"
+          git push origin HEAD:feat/v17-p3c-python-linkage
