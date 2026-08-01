@@ -11,6 +11,7 @@
     "requester": {"type": "string", "minLength": 1},
     "tool_class": {"enum": ["read", "execute", "write", "network", "secrets"]},
     "scope": {"type": "string", "pattern": "^workspace:"},
+    "workspace_path": {"type": "string", "minLength": 1},
     "secret_expansion": {"type": "boolean"},
     "contains_secrets": {"type": "boolean"},
     "sandboxed": {"type": "boolean"},
@@ -27,7 +28,7 @@
     "no_model_echo": {"type": "boolean"}
   },
   "allOf": [
-    {"if": {"properties": {"tool_class": {"const": "execute"}}, "required": ["tool_class"]}, "then": {"required": ["sandboxed", "command", "network_enabled", "inherit_secrets"]}},
+    {"if": {"properties": {"tool_class": {"const": "execute"}}, "required": ["tool_class"]}, "then": {"required": ["sandboxed", "command", "network_enabled", "inherit_secrets", "workspace_path"]}},
     {"if": {"properties": {"tool_class": {"const": "write"}}, "required": ["tool_class"]}, "then": {"required": ["diff_paths", "rollback_plan"]}},
     {"if": {"properties": {"tool_class": {"const": "network"}}, "required": ["tool_class"]}, "then": {"required": ["destination", "data_classes", "redacted"]}},
     {"if": {"properties": {"tool_class": {"const": "secrets"}}, "required": ["tool_class"]}, "then": {"required": ["secret_name", "least_privilege", "no_model_echo"]}}

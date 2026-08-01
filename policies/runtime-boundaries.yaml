@@ -59,6 +59,10 @@ sandbox:
   network: disabled_by_default
   environment_secret_inheritance: deny
   resource_limits_required: true
+  reference_monitor: bubblewrap
+  backend_digest_required: true
+  workspace_read_only: true
+  deny_if_unavailable: true
 
 egress:
   default: deny

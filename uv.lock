@@ -1327,6 +1327,7 @@ name = "vheatm-control"
 version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pyyaml" },
@@ -1343,6 +1344,7 @@ mcp = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=43,<51" },
     { name = "fastmcp", marker = "extra == 'mcp'", specifier = "==4.0.0b1" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
     { name = "pydantic", specifier = ">=2.10,<3" },

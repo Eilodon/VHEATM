@@ -78,4 +78,59 @@ def rollback_pilot(pilot: Mapping[str, Any], *, reason: str, occurred_at: str | 
         raise PilotError("only ready or complete pilots can be rolled back")
     if not reason.strip():
         raise PilotError("rollback requires a reason")
-    return {**dict(pilot), "status": "rollback", "rollback_reason": reason, "rollback_at": _timestamp(occurred_at)}
+    updated = {key: value for key, value in pilot.items() if key != "pilot_id"}
+    updated.update({"status": "rollback", "rollback_reason": reason, "rollback_at": _timestamp(occurred_at)})
+    updated["pilot_id"] = "PIL-" + _digest({key: value for key, value in updated.items() if key != "pilot_id"}).upper()
+    return updated
+
+
+def complete_pilot(
+    pilot: Mapping[str, Any],
+    *,
+    observations: Sequence[Mapping[str, Any]],
+    completed_at: str | None = None,
+) -> dict[str, Any]:
+    if pilot.get("status") != "ready":
+        raise PilotError("only a ready pilot can be completed")
+    if not observations:
+        raise PilotError("pilot completion requires observations")
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in observations:
+        if not isinstance(raw, Mapping):
+            raise PilotError("pilot observations must be objects")
+        observation_id = str(raw.get("observation_id", ""))
+        if not observation_id or observation_id in seen:
+            raise PilotError("pilot observation IDs must be unique")
+        status = str(raw.get("status", "unknown"))
+        if status not in {"pass", "fail", "unknown"}:
+            raise PilotError("pilot observation status is invalid")
+        provider_id = str(raw.get("provider_id", ""))
+        if not provider_id:
+            raise PilotError("pilot observation provider_id is required")
+        sample_count = raw.get("sample_count")
+        if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 1:
+            raise PilotError("pilot observation sample_count must be positive")
+        refs = sorted(set(str(ref) for ref in raw.get("evidence_refs", [])))
+        if not refs:
+            raise PilotError("pilot observation requires evidence_refs")
+        if pilot.get("read_only") is True and raw.get("read_only_confirmed") is not True:
+            raise PilotError("shadow pilot observation must confirm read-only execution")
+        seen.add(observation_id)
+        normalized.append(
+            {
+                "observation_id": observation_id,
+                "status": status,
+                "provider_id": provider_id,
+                "sample_count": sample_count,
+                "read_only_confirmed": raw.get("read_only_confirmed") is True,
+                "evidence_refs": refs,
+                "observed_at": _timestamp(str(raw.get("observed_at", completed_at))),
+            }
+        )
+    if any(item["status"] != "pass" for item in normalized):
+        raise PilotError("pilot completion is blocked by failed or unknown observations")
+    updated = {key: value for key, value in pilot.items() if key != "pilot_id"}
+    updated.update({"status": "complete", "observations": sorted(normalized, key=lambda item: item["observation_id"]), "completed_at": _timestamp(completed_at)})
+    updated["pilot_id"] = "PIL-" + _digest({key: value for key, value in updated.items() if key != "pilot_id"}).upper()
+    return updated

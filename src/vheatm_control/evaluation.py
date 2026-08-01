@@ -75,12 +75,47 @@ def _satisfies(value: Any, operator: str, expected: float | bool) -> bool:
     raise EvaluationError(f"unknown release gate operator: {operator}")
 
 
+def derive_verified_evidence_metrics(evidence: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive release metrics only from records already verified by their adapters.
+
+    Caller-supplied metric shortcuts remain supported for the frozen evaluator's
+    unit fixtures, but a typed evidence record takes precedence and cannot be
+    overridden by a contradictory boolean.
+    """
+
+    derived: dict[str, Any] = {}
+    attestation = evidence.get("supply_chain_attestation")
+    if isinstance(attestation, Mapping):
+        if attestation.get("verification_state") == "verified":
+            derived.update({
+                "signed_release": attestation.get("signed_release") is True,
+                "provenance_verified": attestation.get("provenance_verified") is True,
+                "canonical_sbom": bool(attestation.get("sbom")) and isinstance(attestation.get("sbom_digest"), str),
+                "dependencies_locked": attestation.get("dependency_lock_present") is True and isinstance(attestation.get("dependency_lock_digest"), str),
+            })
+        else:
+            derived.update({"signed_release": False, "provenance_verified": False})
+        scan = evidence.get("vulnerability_scan")
+        if isinstance(scan, Mapping) and scan.get("verification_state") == "verified" and scan.get("scan_id") == attestation.get("vulnerability_scan_id"):
+            derived["critical_exploitable_cve_count"] = scan.get("critical_exploitable_cve_count")
+        else:
+            derived["critical_exploitable_cve_count"] = None
+
+    qualification = evidence.get("qualification_evidence")
+    if isinstance(qualification, Mapping) and qualification.get("evidence_state") == "verified":
+        metrics = qualification.get("metrics")
+        if isinstance(metrics, Mapping):
+            derived.update(dict(metrics))
+    return derived
+
+
 def evaluate_release_gates(framework_version: str, evidence: Mapping[str, Any], *, evaluated_at: str | None = None) -> dict[str, Any]:
     if not isinstance(evidence, Mapping):
         raise EvaluationError("release evidence must be an object")
-    metrics = evidence.get("metrics", evidence)
+    metrics = dict(evidence.get("metrics", evidence)) if isinstance(evidence.get("metrics", evidence), Mapping) else evidence.get("metrics", evidence)
     if not isinstance(metrics, Mapping):
         raise EvaluationError("release evidence metrics must be an object")
+    metrics = {**dict(metrics), **derive_verified_evidence_metrics(evidence)}
     gate_results = []
     for gate_id, rules in _RELEASE_RULES.items():
         missing = sorted(name for name in rules if name not in metrics)

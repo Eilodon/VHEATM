@@ -23,6 +23,7 @@ dependencies = [
   "pydantic>=2.10,<3",
   "PyYAML>=6.0,<7",
   "referencing>=0.35,<1",
+  "cryptography>=43,<51",
 ]
 
 [project.urls]

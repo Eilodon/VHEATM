@@ -172,12 +172,13 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     policy_path = root / "policies" / "runtime-boundaries.yaml"
     capability_ledger_path = root / "policies" / "capability-ledger.yaml"
     standards_baseline_path = root / "policies" / "standards-baseline.yaml"
+    semantic_profiles_path = root / "policies" / "semantic-profiles.yaml"
     dependency_lock_path = root / "uv.lock"
     eval_corpus_path = root / "evals" / "cases.yaml"
     module_registry_path = root / "modules" / "registry.yaml"
     skill_path = root / "SKILL.md"
 
-    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
+    required = [schema_dir, manifest_path, policy_path, capability_ledger_path, standards_baseline_path, semantic_profiles_path, dependency_lock_path, eval_corpus_path, module_registry_path, skill_path]
     missing = [str(path.relative_to(root)) for path in required if not path.exists()]
     if missing:
         return [ValidationIssue("repository", f"missing required path: {path}") for path in missing]
@@ -192,6 +193,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         policy = _load_yaml(policy_path)
         capability_ledger = _load_yaml(capability_ledger_path)
         standards_baseline = _load_yaml(standards_baseline_path)
+        semantic_profiles = _load_yaml(semantic_profiles_path)
         eval_corpus = _load_yaml(eval_corpus_path)
         manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
         policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
@@ -199,6 +201,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         bundle_schema = _load_json(schema_dir / "control-bundle.schema.json")
         capability_ledger_schema = _load_json(schema_dir / "capability-ledger.schema.json")
         standards_baseline_schema = _load_json(schema_dir / "standards-baseline.schema.json")
+        semantic_profiles_schema = _load_json(schema_dir / "semantic-profiles.schema.json")
         eval_corpus_schema = _load_json(schema_dir / "eval-corpus.schema.json")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return [ValidationIssue("canonical", str(exc))]
@@ -208,6 +211,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(_validate_schema(policy, policy_schema, registry, str(policy_path.relative_to(root))))
     issues.extend(_validate_schema(capability_ledger, capability_ledger_schema, registry, str(capability_ledger_path.relative_to(root))))
     issues.extend(_validate_schema(standards_baseline, standards_baseline_schema, registry, str(standards_baseline_path.relative_to(root))))
+    issues.extend(_validate_schema(semantic_profiles, semantic_profiles_schema, registry, str(semantic_profiles_path.relative_to(root))))
     issues.extend(ValidationIssue("policies/standards-baseline.yaml", issue) for issue in _validate_standards_baseline(manifest, standards_baseline))
     from .capability_ledger import validate_capability_ledger
     issues.extend(ValidationIssue("policies/capability-ledger.yaml", issue) for issue in validate_capability_ledger(root, capability_ledger, capability_ledger_schema))

@@ -1,0 +1,51 @@
+schema_version: "1.0.0"
+policy_id: vheatm-semantic-profiles
+policy_version: "1.0.0"
+framework_version: "17.0.0-dev.1"
+qbr:
+  dimensions:
+    user_facing_impact: 4
+    data_integrity_risk: 4
+    security_risk: 3
+    blast_radius: 2
+  max_score: 48
+  mandatory_threshold: 17
+  adjustments:
+    design: 1.20
+    self_audit: 1.20
+    org_capture: 1.15
+  fmea_mapping:
+    severity_to_user_facing:
+      - {max: 2, value: 0}
+      - {max: 4, value: 1}
+      - {max: 7, value: 2}
+      - {max: 10, value: 3}
+    system_effect_to_integrity:
+      corruption: 3
+      partial: 2
+      operational: 1
+    cause_to_security:
+      auth_bypass_injection: 3
+      data_exposure: 2
+      resource_exhaustion: 1
+      other: 0
+    blast_radius_scope:
+      local: 1
+      multi_component: 2
+      widespread: 3
+    undetectable_floor: 8
+brs:
+  weights:
+    teams_directly_affected: 1
+    sla_chains_at_risk: 2
+    regulatory_obligations: 3
+  thresholds:
+    contained: 3
+    elevated: 7
+    high: 12
+  unknown_sla_floor: 1
+calibration:
+  pre_calibration_max_cycles: 5
+  pre_calibration_threshold: 0.60
+  empirical_multiplier: 0.85
+  absolute_floor: 0.50

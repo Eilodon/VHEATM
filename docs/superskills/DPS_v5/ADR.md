@@ -45,7 +45,7 @@ Cascade Review: ✅ Done
 - Plan tampering, missing invocation, forged output payloads, tainted evidence, and unbound selection are fail-closed.
 - Module contracts now expose reusable typed output schemas without creating one schema per module.
 - Context v2 can derive mandatory findings from its ledger and create a child plan for late facts.
-- SQLite WAL/CAS persistence, subject/session roots, brokered Python analyzer adapters, and isolated independent-judge/HITL records now exist as local-first slices. Sandbox action enforcement, signing/key service, private qualification corpus, and production provider integrations remain release-gated.
+- SQLite WAL/CAS persistence, subject/session roots, brokered Python analyzer adapters, isolated independent-judge/HITL records, and a fail-closed local reference-monitor seam now exist as local-first slices. External key custody, private qualification corpus, and production provider integrations remain release-gated.
 
 ### Evidence
 
@@ -132,7 +132,7 @@ Known limitations:
 - [verified 2026-08-01] `pytest -o addopts=''` passes the complete suite.
 - [verified 2026-08-01] low-risk evaluation and routing agree, with no unresolved activations or budget overflow.
 - [verified 2026-08-01] wheel/sdist build and offline installed CLI smoke checks pass.
-- [verified 2026-08-01] source scan finds no runtime `eval`, `exec`, shell execution, subprocess, or dynamic import path beyond package metadata lookup.
+- [verified 2026-08-01] source scan finds no runtime `eval`, `exec`, shell interpolation, or target-code import/execution; the explicit subprocess boundary is now isolated in the digest-bound sandbox adapter.
 
 ### Owner and Known Debts
 
@@ -198,7 +198,7 @@ Cascade Review: ✅ Done
 - Supply-chain evidence can truthfully report a verified lock digest while remaining `partial` until signing and vulnerability evidence exist.
 - The lock includes the MCP pre-release resolution and therefore must be reviewed when that dependency moves to a stable release.
 
-Known limitations: no signing/key service, no verified provenance attestation, no vulnerability/CVE feed, and no private/time-sliced qualification corpus are introduced by this ADR.
+Known limitations: key custody/signing service, verified provenance and vulnerability feeds, private/time-sliced gold data, and successful external-provider/pilot operations remain external evidence obligations. The repository now contains verifiers and typed records for these boundaries; their presence is not release evidence by itself.
 
 ### Evidence
 
@@ -225,3 +225,68 @@ Start the next supply-chain ADR when a signing/key service or vulnerability evid
 - A canonical SBOM without a canonical lock is inventory, not reproducibility evidence.
 - Standards references need namespace and review semantics because current guidance can be voluntary, community, draft, or experimental.
 - Lock verification improves RG-13 evidence but does not reduce the independent signing/key or CVE blockers.
+
+## ADR-4 — Enforced reference monitor and signed qualification evidence boundaries
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `sandbox` `supply-chain` `qualification` `provider-boundary` `semantic-migration`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when a production key service, allowlisted provider, private gold vault, or kernel sandbox profile is connected.
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local contract behavior; `NOT_PRODUCTION_QUALIFIED` for host/provider operations not available in this checkout.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`
+**VOLATILITY:** `WATCHFUL` — bubblewrap/kernel capabilities, provider contracts, vulnerability feeds, and private corpus custody are external trust boundaries.
+
+### Context
+
+The previous local-first kernel only evaluated a `sandboxed` request flag and emitted unsigned/partial supply-chain evidence. FMEA/BRS/QBR semantics existed in legacy instructions but had no canonical executable profile. A typed record without an enforcing adapter or independent evidence could be mistaken for a completed release blocker.
+
+### Decision
+
+1. Execute requests cross a digest-bound bubblewrap reference monitor. The monitor uses a read-only workspace bind, isolated namespaces including mandatory network isolation, cleared environment, dropped capabilities, bounded resources, and a preflight probe. Missing broker approval, malformed scope, backend drift, or unavailable namespace support returns `blocked`; there is no host fallback.
+2. Supply-chain attestations, vulnerability scans, provenance statements, private/time-sliced qualification manifests, and qualification measurements use Ed25519 signatures, content-addressed immutable identities, target binding, and explicit `unverified`/`partial`/`unknown` states. Release metrics derive from verified typed records when present and cannot be overridden by contradictory shortcut booleans.
+3. External analyzer providers receive only snapshot metadata through an injected brokered transport. Policy denial, outage, identity mismatch, or invalid snapshot binding remains `blocked`/`unknown`; the adapter never opens a socket itself or promotes remote output beyond candidate epistemic status.
+4. QBR, RPN, and BRS calculations load the canonical semantic profile. Detectability adjusts integrity/security risk but never blast radius; unknown SLA/regulatory inputs remain unknown rather than zero. Pilot readiness is distinct from completion, and completion requires evidence-backed observations with read-only confirmation.
+
+### Options Considered
+
+- Treat `sandboxed: true` as sufficient: rejected because a caller-controlled claim is not reference-monitor enforcement.
+- Use an unsigned local key or mark scanner output verified on construction: rejected because custody and independent verification are separate evidence requirements.
+- Send source contents to an external provider by default: rejected because unreviewed source is prohibited egress and provider output remains candidate evidence.
+- Encode scoring formulas only in prose: rejected because semantic drift between FMEA/BRS/QBR consumers would be silent.
+
+### Impact
+
+Schemas changed: runtime policy, tool request, sandbox run, supply-chain attestation, vulnerability scan, provenance statement, qualification manifest/evidence, provider run, pilot observations, and semantic profiles.
+Components changed: sandbox adapter, supply-chain verifier, qualification workflow, external provider adapter, release metric derivation, pilot lifecycle, canonical bundle, validator, and packaging.
+Breaking change: **YES** for execute requests that omit a workspace path, and for repositories that omit the canonical semantic profile.
+IMPACT RADIUS: **WIDE**
+Cascades: `policy → broker → reference monitor → run evidence → release gates`; `private manifest → measurement evidence → RG-00…RG-15`; `FMEA/BRS → QBR → priority`.
+Cascade Review: ✅ Local contract and fail-closed tests completed; production operations remain separately gated.
+
+### Consequences
+
+- The execute boundary now has a real enforcement seam and can honestly report host capability failure as blocked.
+- Signed evidence can be independently verified and bound to the exact bundle/lock/corpus/provider target.
+- Local fixtures still cannot satisfy production signing custody, private corpus access, provider qualification, CVE feed freshness, or a successful operational pilot.
+- The runtime now uses `subprocess` only in the explicit sandbox adapter; the command remains exact-allowlisted and `shell=False`.
+
+### Evidence
+
+- [verified 2026-08-01] Sandbox, provider, qualification, semantic-profile, supply-chain, release, and pilot tests pass for the changed contracts.
+- [verified 2026-08-01] In this host, bubblewrap preflight cannot create the required network namespace and therefore returns `blocked`; no fallback action is attempted.
+- [verified 2026-08-01] Ed25519 tamper, target-binding, key-binding, and derived-count tests reject altered attestations/scans/manifests.
+- [verified 2026-08-01] Typed release evidence overrides contradictory raw metrics and keeps RG-13 ineligible when signing/provenance/CVE evidence is incomplete.
+
+### Owner and Known Debts
+
+**Owner:** VHEATM maintainers
+
+Known pattern debt: none newly opened. Release qualification debt remains: external key custody, vulnerability scanner feed, private time-sliced corpus, allowlisted provider deployment, a host with namespace enforcement, and shadow observations from an actual pilot.
+
+### Next Cycle Trigger
+
+Start the next cycle when any external prerequisite is available. Bind its identity/digest, add crash/isolation/replay evidence, execute RG measurements, and retain `unknown` or `blocked` on any missing observation.

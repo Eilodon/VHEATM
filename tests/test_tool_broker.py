@@ -49,6 +49,7 @@ def _request(tool_class: str, **extra: object) -> dict[str, object]:
         "requester": "module:MOD-TEST",
         "tool_class": tool_class,
         "scope": "workspace:src",
+        "workspace_path": str(PROJECT_ROOT),
     }
     request.update(extra)
     return request

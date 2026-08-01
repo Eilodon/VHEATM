@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from vheatm_control.pilot import PilotError, prepare_pilot, rollback_pilot
+from vheatm_control.pilot import PilotError, complete_pilot, prepare_pilot, rollback_pilot
 from vheatm_control.serialization import load_json
 
 
@@ -34,3 +34,15 @@ def test_canary_and_failed_drill_block() -> None:
     assert pilot["status"] == "blocked"
     with pytest.raises(PilotError, match="only"):
         rollback_pilot(pilot, reason="provider outage")
+
+
+def test_shadow_completion_requires_real_read_only_observation() -> None:
+    pilot = prepare_pilot(session_root="b" * 64, plan_id="PLN-" + "c" * 64, release_report=_report(), drills=_drills(), rollback_plan="rollback")
+    observation = {"observation_id": "OBS-1", "status": "pass", "provider_id": "local.python", "sample_count": 10, "read_only_confirmed": True, "evidence_refs": ["EV-shadow-1"], "observed_at": "2026-08-01T00:00:00Z"}
+    complete = complete_pilot(pilot, observations=[observation], completed_at="2026-08-01T00:01:00Z")
+    assert complete["status"] == "complete"
+    assert complete["pilot_id"] != pilot["pilot_id"]
+    schema = load_json((Path("schemas") / "pilot-run.schema.json").read_text())
+    Draft202012Validator(schema).validate(complete)
+    with pytest.raises(PilotError, match="unknown"):
+        complete_pilot(pilot, observations=[{**observation, "status": "unknown"}])

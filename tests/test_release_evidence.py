@@ -44,3 +44,19 @@ def test_supply_chain_evidence_is_canonical_and_locked_but_not_signed_yet(tmp_pa
     assert attestation["dependency_lock_present"] is True
     assert attestation["dependency_lock_path"] == "uv.lock"
     assert attestation["sbom"]
+
+
+def test_verified_typed_evidence_overrides_contradictory_metric_shortcuts() -> None:
+    report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {
+            "metrics": {"signed_release": True, "provenance_verified": True, "critical_exploitable_cve_count": 0},
+            "supply_chain_attestation": {
+                "verification_state": "partial",
+                "signed_release": False,
+                "provenance_verified": False,
+            },
+        },
+    )
+    rg13 = next(item for item in report["gates"] if item["gate_id"] == "RG-13")
+    assert rg13["status"] == "fail"

@@ -18,6 +18,7 @@ CANONICAL_EXACT = (
     "policies/runtime-boundaries.yaml",
     "policies/capability-ledger.yaml",
     "policies/standards-baseline.yaml",
+    "policies/semantic-profiles.yaml",
     "uv.lock",
     "modules/registry.yaml",
 )

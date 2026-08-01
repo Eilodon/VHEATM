@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
+import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
 from vheatm_control.serialization import load_yaml
-from vheatm_control.supply_chain import build_supply_chain_attestation
+from vheatm_control.supply_chain import (
+    SupplyChainError,
+    build_supply_chain_attestation,
+    build_vulnerability_scan,
+    expected_provenance_statement_id,
+    sign_supply_chain_attestation,
+    sign_provenance_statement,
+    sign_vulnerability_scan,
+    verify_provenance_statement,
+    verify_supply_chain_attestation,
+    verify_vulnerability_scan,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,3 +47,61 @@ def test_supply_chain_attestation_binds_verified_uv_lock() -> None:
     assert attestation["dependency_lock_present"] is True
     assert attestation["dependency_lock_digest"] == hashlib.sha256(lock_path.read_bytes()).hexdigest()
     assert attestation["dependency_lock_path"] == "uv.lock"
+
+
+def test_signed_attestation_and_vulnerability_scan_are_cryptographically_bound() -> None:
+    key = Ed25519PrivateKey.generate()
+    public_key = key.public_key()
+    attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
+    scan = build_vulnerability_scan(
+        scanner_id="test-scanner",
+        scanner_version="1.0.0",
+        target_bundle_root=attestation["bundle_root"],
+        target_lock_digest=attestation["dependency_lock_digest"],
+        findings=[
+            {"vulnerability_id": "CVE-2026-1234", "package": "example", "severity": "critical", "exploitable": True},
+            {"vulnerability_id": "CVE-2026-5678", "package": "example", "severity": "high", "exploitable": False},
+        ],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    signed_scan = sign_vulnerability_scan(scan, private_key=key, key_id="scanner-key")
+    verified_scan = verify_vulnerability_scan(
+        signed_scan,
+        public_key=public_key,
+        bundle_root=attestation["bundle_root"],
+        lock_digest=attestation["dependency_lock_digest"],
+        key_id="scanner-key",
+    )
+    assert verified_scan["verification_state"] == "verified"
+    assert verified_scan["critical_exploitable_cve_count"] == 1
+
+    bound = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z", vulnerability_scan=verified_scan)
+    signed = sign_supply_chain_attestation(bound, private_key=key, key_id="release-key")
+    verified = verify_supply_chain_attestation(signed, public_key=public_key, key_id="release-key")
+    assert verified["signed_release"] is True
+    assert verified["verification_state"] == "verified"
+    assert verified["vulnerability_scan_id"] == verified_scan["scan_id"]
+    schema = json.loads((ROOT / "schemas" / "supply-chain-attestation.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(verified)
+
+    provenance = {
+        "schema_version": "1.0.0",
+        "bundle_root": verified["bundle_root"],
+        "sbom_digest": verified["sbom_digest"],
+        "builder_id": "builder:test",
+        "build_type": "test-build",
+        "verified": True,
+        "signature_algorithm": "ed25519",
+        "signature_key_id": "provenance-key",
+        "signature_value": None,
+        "generated_at": "2026-08-01T00:00:00Z",
+    }
+    provenance["statement_id"] = expected_provenance_statement_id(provenance)
+    provenance = sign_provenance_statement(provenance, private_key=key, key_id="provenance-key")
+    with_provenance = verify_provenance_statement(verified, provenance, public_key=public_key, key_id="provenance-key")
+    assert with_provenance["provenance_verified"] is True
+
+    tampered = dict(signed)
+    tampered["bundle_root"] = "0" * 64
+    with pytest.raises(SupplyChainError, match="attestation_id"):
+        verify_supply_chain_attestation(tampered, public_key=public_key)

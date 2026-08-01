@@ -4,7 +4,7 @@
   "title": "VHEATM supply-chain evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "attestation_id", "bundle_root", "sbom", "sbom_digest", "dependencies", "dependency_lock_present", "dependency_lock_path", "dependency_lock_digest", "signed_release", "verification_state", "generated_at"],
+  "required": ["schema_version", "attestation_id", "bundle_root", "sbom", "sbom_digest", "dependencies", "dependency_lock_present", "dependency_lock_path", "dependency_lock_digest", "signed_release", "signature_algorithm", "signature_key_id", "signature_value", "provenance_verified", "vulnerability_scan_id", "vulnerability_scan_digest", "critical_exploitable_cve_count", "verification_state", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "attestation_id": {"type": "string", "pattern": "^SCA-[A-F0-9]{64}$"},
@@ -16,7 +16,13 @@
     "dependency_lock_path": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._/-]+$"},
     "dependency_lock_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
     "signed_release": {"type": "boolean"},
+    "signature_algorithm": {"type": ["string", "null"], "enum": ["ed25519", null]},
     "signature_key_id": {"type": ["string", "null"], "minLength": 1},
+    "signature_value": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+={0,2}$"},
+    "provenance_verified": {"type": "boolean"},
+    "vulnerability_scan_id": {"type": ["string", "null"], "pattern": "^VUL-[A-F0-9]{64}$"},
+    "vulnerability_scan_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "critical_exploitable_cve_count": {"type": ["integer", "null"], "minimum": 0},
     "verification_state": {"enum": ["verified", "partial", "unknown"]},
     "generated_at": {"type": "string", "format": "date-time"}
   }
