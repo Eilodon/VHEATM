@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .lifecycle import ALLOWED_TRANSITIONS
+from .serialization import load_json
 
 
 class SessionStoreError(ValueError):
@@ -198,8 +199,8 @@ class SessionStore:
         if content != bytes(row[0]) or f"CAS-{hashlib.sha256(content).hexdigest().upper()}" != object_id:
             raise SessionStoreError(f"CAS object integrity check failed: {object_id}")
         try:
-            document = json.loads(content.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            document = load_json(content.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as exc:
             raise SessionStoreError(f"CAS object is not valid JSON: {object_id}") from exc
         if document.get("object_type") != row[1] or not isinstance(document.get("payload"), dict):
             raise SessionStoreError(f"CAS object envelope is malformed: {object_id}")
@@ -449,8 +450,8 @@ class SessionStore:
     @staticmethod
     def _row_event(row: sqlite3.Row) -> dict[str, Any]:
         try:
-            data = json.loads(str(row["data"]))
-        except json.JSONDecodeError as exc:
+            data = load_json(str(row["data"]))
+        except ValueError as exc:
             raise SessionStoreError("journal event data is not valid JSON") from exc
         if not isinstance(data, dict):
             raise SessionStoreError("journal event data must be an object")

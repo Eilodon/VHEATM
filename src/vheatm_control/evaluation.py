@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
 from .judge import JudgeError, validate_verdict_binding, verify_signed_verdict
+from .host_attestation import HostAttestationError, verify_host_attestation
 from .qualification import QualificationError, measurement_sample_basis, verify_manifest, verify_qualification_evidence
 from .qualification_methods import QualificationMethodError, minimum_sample_count
 from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
@@ -130,6 +131,8 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
         ("qualification_manifest", "manifest_id"),
         ("private_corpus_receipt", "receipt_id"),
         ("qualification_evidence", "evidence_id"),
+        ("host_qualification_run", "run_id"),
+        ("host_qualification_attestation", "attestation_id"),
         ("supply_chain_attestation", "attestation_id"),
         ("vulnerability_scan", "scan_id"),
         ("provenance_statement", "statement_id"),
@@ -218,6 +221,8 @@ _TYPED_EVIDENCE_SCHEMAS = {
     "qualification_manifest": "qualification-manifest.schema.json",
     "private_corpus_receipt": "private-corpus-receipt.schema.json",
     "qualification_evidence": "qualification-evidence.schema.json",
+    "host_qualification_run": "host-qualification-run.schema.json",
+    "host_qualification_attestation": "host-attestation.schema.json",
     "supply_chain_attestation": "supply-chain-attestation.schema.json",
     "vulnerability_scan": "vulnerability-scan.schema.json",
     "provenance_statement": "provenance-statement.schema.json",
@@ -229,6 +234,7 @@ _QUALIFICATION_EVIDENCE_FIELDS = frozenset(
 _SUPPLY_CHAIN_EVIDENCE_FIELDS = frozenset(
     {"supply_chain_attestation", "vulnerability_scan", "provenance_statement"}
 )
+_HOST_EVIDENCE_FIELDS = frozenset({"host_qualification_run", "host_qualification_attestation"})
 
 
 def _typed_evidence_schema_errors(root: Path, evidence: Mapping[str, Any]) -> dict[str, list[str]]:
@@ -480,7 +486,52 @@ def _verified_qualification_metrics(
     insufficient.sort()
     if insufficient:
         return {}, [f"qualification evidence sample coverage is insufficient: {', '.join(insufficient)}"]
-    return {key: value for key, value in metrics.items() if key in _QUALIFICATION_METRICS}, []
+    # Host hard-stop latency is a deployment-bound metric. A private
+    # qualification document may mention the method, but it cannot self-attest
+    # the host enforcement boundary; that value is derived only below from a
+    # verified host attestation.
+    return {
+        key: value
+        for key, value in metrics.items()
+        if key in _QUALIFICATION_METRICS and key != "hard_stop_p99_seconds"
+    }, []
+
+
+def _verified_host_metrics(
+    evidence: Mapping[str, Any],
+    *,
+    expected_bundle_root: str | None,
+    verification_keys: Mapping[str, Ed25519PublicKey] | None,
+    verification_key_ids: Mapping[str, str] | None,
+    schema_root: Path,
+) -> tuple[dict[str, Any], list[str]]:
+    attestation = evidence.get("host_qualification_attestation")
+    host_run = evidence.get("host_qualification_run")
+    if attestation is None and host_run is None:
+        return {}, []
+    if not isinstance(attestation, Mapping) or not isinstance(host_run, Mapping):
+        return {}, ["host qualification evidence requires both a host run and host attestation"]
+    public_key = _key(verification_keys, "host")
+    key_id = _key_id(verification_key_ids, "host")
+    if public_key is None or key_id is None:
+        return {}, ["host qualification evidence is present but no host authority public key/key ID was supplied"]
+    if expected_bundle_root is None:
+        return {}, ["host qualification evidence requires the current control bundle root"]
+    try:
+        verified = verify_host_attestation(
+            attestation,
+            host_run=host_run,
+            public_key=public_key,
+            key_id=key_id,
+            expected_bundle_root=expected_bundle_root,
+            root=schema_root,
+        )
+        if verified.get("verification_state") != "verified":
+            raise HostAttestationError("host attestation did not reach verified state")
+        measurement = host_run["measurements"][0]
+        return {"hard_stop_p99_seconds": measurement["value"]}, []
+    except (HostAttestationError, KeyError, IndexError, TypeError) as exc:
+        return {}, [f"host qualification evidence verification failed: {exc}"]
 
 
 def _verified_supply_chain_metrics(
@@ -588,6 +639,7 @@ def derive_verified_evidence_metrics(
     validation_root = resolve_control_root(schema_root)
     schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
     qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
+    host_schema_errors = _schema_error_messages(schema_errors, _HOST_EVIDENCE_FIELDS, "host")
     supply_schema_errors = _schema_error_messages(schema_errors, _SUPPLY_CHAIN_EVIDENCE_FIELDS, "supply-chain")
     if qualification_schema_errors:
         qualification_metrics = {}
@@ -595,6 +647,16 @@ def derive_verified_evidence_metrics(
         qualification_metrics, _ = _verified_qualification_metrics(
             evidence,
             framework_version=framework_version or "",
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+            schema_root=validation_root,
+        )
+    if host_schema_errors:
+        host_metrics = {}
+    else:
+        host_metrics, _ = _verified_host_metrics(
+            evidence,
+            expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
             schema_root=validation_root,
@@ -610,7 +672,7 @@ def derive_verified_evidence_metrics(
             evaluated_at=evaluated_at,
             schema_root=validation_root,
         )
-    return {**qualification_metrics, **supply_metrics}
+    return {**qualification_metrics, **host_metrics, **supply_metrics}
 
 
 def evaluate_release_gates(
@@ -631,6 +693,7 @@ def evaluate_release_gates(
     timestamp = _release_timestamp(evaluated_at)
     schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
     qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
+    host_schema_errors = _schema_error_messages(schema_errors, _HOST_EVIDENCE_FIELDS, "host")
     supply_schema_errors = _schema_error_messages(schema_errors, _SUPPLY_CHAIN_EVIDENCE_FIELDS, "supply-chain")
     if qualification_schema_errors:
         qualification_metrics, qualification_errors = {}, qualification_schema_errors
@@ -638,6 +701,16 @@ def evaluate_release_gates(
         qualification_metrics, qualification_errors = _verified_qualification_metrics(
             evidence,
             framework_version=framework_version,
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+            schema_root=validation_root,
+        )
+    if host_schema_errors:
+        host_metrics, host_errors = {}, host_schema_errors
+    else:
+        host_metrics, host_errors = _verified_host_metrics(
+            evidence,
+            expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
             schema_root=validation_root,
@@ -653,8 +726,8 @@ def evaluate_release_gates(
             evaluated_at=timestamp,
             schema_root=validation_root,
         )
-    metrics = {**qualification_metrics, **supply_metrics}
-    verification_errors = qualification_errors + supply_errors
+    metrics = {**qualification_metrics, **host_metrics, **supply_metrics}
+    verification_errors = qualification_errors + host_errors + supply_errors
     gate_results = []
     for gate_id, rules in _RELEASE_RULES.items():
         missing = sorted(name for name in rules if name not in metrics)
@@ -691,11 +764,13 @@ def main() -> int:
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--qualification-manifest", type=Path)
     parser.add_argument("--qualification-public-key", type=Path)
+    parser.add_argument("--host-public-key", type=Path)
     parser.add_argument("--judge-public-key", type=Path)
     parser.add_argument("--supply-chain-public-key", type=Path)
     parser.add_argument("--vulnerability-public-key", type=Path)
     parser.add_argument("--provenance-public-key", type=Path)
     parser.add_argument("--qualification-key-id")
+    parser.add_argument("--host-key-id")
     parser.add_argument("--judge-key-id")
     parser.add_argument("--supply-chain-key-id")
     parser.add_argument("--vulnerability-key-id")
@@ -719,6 +794,7 @@ def main() -> int:
         _validate_typed_evidence_documents(root, evidence)
         verification_keys = {
             "qualification": load_public_key(args.qualification_public_key),
+            "host": load_public_key(args.host_public_key),
             "judge": load_public_key(args.judge_public_key),
             "supply_chain": load_public_key(args.supply_chain_public_key),
             "vulnerability": load_public_key(args.vulnerability_public_key),
@@ -726,6 +802,7 @@ def main() -> int:
         }
         verification_key_ids = {
             "qualification": args.qualification_key_id,
+            "host": args.host_key_id,
             "judge": args.judge_key_id,
             "supply_chain": args.supply_chain_key_id,
             "vulnerability": args.vulnerability_key_id,

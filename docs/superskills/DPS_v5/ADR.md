@@ -2028,3 +2028,87 @@ Start the next cycle when a controlled qualification host supplies an independen
 - A preflight failure must be evidence of unavailable enforcement, not evidence of a slow or fast hard stop.
 - Timing evidence must come from the action boundary that actually kills the process; policy denial timing is a different metric.
 - Local probes are useful only when their unverified status and release non-minting behavior are machine-enforced.
+
+## ADR-29 — Require independent signed host attestation before RG-09 hard-stop derivation
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `sandbox` `host-attestation` `RG-09` `cryptographic-binding` `fail-closed`
+**Change Classification:** `TRUST-BOUNDARY HARDENING`
+**Review date:** 2026-09-02 — or earlier when a controlled qualification authority, key registry, or deployment attestation format changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local binding and fail-closed derivation; `NOT_PRODUCTION_QUALIFIED` because external host key custody, authority policy, private population evidence, and a successful pilot remain unavailable.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — host kernels, sandbox packaging, deployment identity, attestation authority, and key rotation can change independently of the source bundle.
+
+### Context
+
+ADR-28 added a real local probe at the digest-bound sandbox boundary, but correctly left its `hard_stop_p99_seconds` candidate unverified. The release evaluator still needed a typed handoff contract that could accept evidence from an independently controlled host authority without allowing the private qualification report, a local probe, or a caller-supplied metric to self-attest the deployment enforcement point. A host timing value is meaningful only when it is bound to the exact host run, current control bundle, deployment identity, capability profile, and a verifiable signing authority.
+
+### Decision
+
+Add `host-attestation.schema.json` and the `host_attestation` verifier. A host attestation is Ed25519-signed and content-bound to:
+
+- the exact `host-qualification-run` digest and run ID;
+- the current canonical bundle root, framework version, and host identity digest;
+- an explicit authority ID, deployment ID, and `vheatm-bwrap-host-v1` capability profile; and
+- the sole attested metric, `hard_stop_p99_seconds`.
+
+The signed subject includes the signature algorithm and key ID, preventing key-label relabeling without invalidating the signature. Host-run validation rejects non-finite numeric values before attestation construction or verification. The release evaluator requires both typed host records, an explicit host public key/key ID, and the current bundle root. It derives `hard_stop_p99_seconds` only after successful signature and binding verification; the private qualification evidence path deliberately excludes that metric. Missing, malformed, stale, or unavailable host authority evidence leaves RG-09 `unknown` and cannot make a release GA-eligible.
+
+This is a verification seam, not an external trust claim. Local test keys and synthetic host fixtures exist only in tests. No host key registry, external signer, private population, or production attestation is created by this change.
+
+### Options Considered
+
+- Continue deriving hard-stop latency from private qualification evidence: rejected because a private report cannot establish the deployment's reference-monitor enforcement point.
+- Trust a local `host-qualification-run` with `evidence_state=unverified`: rejected because local observation lacks independent authority and deployment binding.
+- Accept a signature over only the HQR ID or bundle-root string: rejected because those values do not bind the complete run bytes, host identity, capability profile, or deployment.
+- Treat the supplied key ID as unsigned metadata: rejected because an evidence intermediary could relabel the signer; algorithm and key ID are now part of the signed subject.
+- Add a local seeded host measurement to public replay: rejected because it would fabricate timing evidence and make deterministic policy denial look like host enforcement.
+
+### Impact
+
+Schemas changed: `schemas/host-attestation.schema.json`, `schemas/release-gate-report.schema.json`.
+Components changed: host-attestation signer/verifier, finite host-run and public-run validators, strict JSON loader, provider transport, SessionStore CAS/journal readers, release evaluator, release-gate evidence bindings, release CLI key inputs, qualification approval helper extraction, validator required-schema inventory, host/release regressions.
+Breaking change: **YES** for release callers that previously supplied only a private `hard_stop_p99_seconds` measurement; they must provide independently signed host evidence or accept RG-09 `unknown`.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `sandbox host run → signed attestation → typed evidence binding → verified metric derivation → RG-09 → release report → pilot authorization`.
+Cascade Review: ✅ Done — signature, run mutation, bundle binding, key-label relabeling, finite-number, missing-key, schema, release-positive, and release-non-minting regressions cover the changed trust boundary.
+
+### Consequences
+
+- A private qualification record can no longer mint the host hard-stop metric by repeating the metric name and threshold.
+- A current signed attestation can be consumed by the same direct evaluator and CLI boundary, while unavailable external prerequisites remain visible and fail-closed.
+- Bundle changes invalidate the host attestation's release use even if the attestation signature remains valid.
+- Key custody, key rotation/revocation, authority authorization, host population adequacy, private qualification, provider qualification, fresh vulnerability evidence, UX-04, and successful shadow/canary observation remain external release prerequisites.
+- The release-positive test uses ephemeral keys and synthetic data only to prove the contract; it is not qualification evidence.
+
+### Evidence
+
+- [verified 2026-08-02] RED host-attestation tests failed before the module existed; GREEN tests cover exact-run verification, mutation rejection, incomplete runs, missing host key, malformed signature encoding, key-identity binding, finite-number rejection, and release metric derivation.
+- [verified 2026-08-02] Release evidence tests cover both host records in evidence bindings, a signed host fixture for the all-pass contract, stale-release behavior, and the existing fail-closed paths.
+- [verified 2026-08-02] The local host probe remains `blocked/unavailable` when the required namespace preflight is unavailable; no local record is promoted to production evidence.
+- [verified 2026-08-02] `.venv/bin/pytest -o addopts='' -q` passes with `284 passed`; `.venv/bin/vheatm-validate --root .` passes; `uv lock --check --prerelease allow` passes; and `uv build --wheel --sdist --prerelease allow` produces both artifacts containing the HAT schema, verifier, and `vheatm-qualify-host` entry point.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External host authority/key custody, key rotation and revocation, private/time-sliced qualification, provider qualification, scanner freshness/coverage, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a controlled qualification host supplies a signed attestation under a trusted key registry or when the host capability profile changes. Add authority authorization, key lifecycle, deployment population binding, and adequacy/freshness checks before allowing that external evidence to support RG-09 or GA.
+
+### Cycle Retrospective
+
+- A signed HQR handoff is stronger than a self-declared metric but still does not establish trust without external key custody.
+- Bind the complete run digest and current bundle at the consuming gate; a signature over a label is not subject binding.
+- Treat verification state as a derived transition and keep local test evidence separate from production qualification.

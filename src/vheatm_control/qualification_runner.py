@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
-import hmac
 import json
+import math
 import shutil
 import sys
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -24,6 +24,7 @@ from .migration_capabilities import build_stakeholder_record, evaluate_signal_no
 from .overlay_capabilities import build_ai_rmf_overlay, build_assurance_maturity_delta, build_cross_cutting_scan, build_temporal_scan
 from .provenance import ProvenanceError, ProvenanceRegistry, build_claim_record, build_source_record, build_validation_receipt
 from .qualification_methods import QualificationMethodError, expected_method_digest, validate_method_digest
+from .qualification_support import POLICY_KEY, build_qualification_approval_token
 from .serialization import load_json, load_yaml
 from .session_store import SessionStore
 from .supply_chain import build_supply_chain_attestation
@@ -31,8 +32,6 @@ from .tool_broker import (
     BrokerCapabilities,
     InMemoryTokenLedger,
     ToolBroker,
-    approval_signing_payload,
-    expected_approval_token_id,
     request_digest,
 )
 
@@ -60,7 +59,8 @@ _LOW_RISK_CONTEXT = {
         "financial_path": "no",
     },
 }
-_POLICY_KEY = b"vheatm-public-seeded-runner-key"
+_POLICY_KEY = POLICY_KEY
+_build_approval_token = build_qualification_approval_token
 
 
 def _canonical(value: Any) -> bytes:
@@ -131,28 +131,6 @@ def _new_broker(root: Path, observed_at: str, *, commands: set[str] | None = Non
         token_ledger=InMemoryTokenLedger(),
         clock=lambda: observed,
     )
-
-
-def _build_approval_token(request: Mapping[str, Any], observed_at: str) -> dict[str, Any]:
-    issued = datetime.fromisoformat(observed_at.replace("Z", "+00:00")) - timedelta(minutes=1)
-    expires = issued + timedelta(minutes=10)
-    token: dict[str, Any] = {
-        "token_id": "APR-" + "0" * 64,
-        "schema_version": "1.0.0",
-        "requester": request["requester"],
-        "tool_class": request["tool_class"],
-        "exact_scope": request["scope"],
-        "request_digest": request_digest(request),
-        "issued_at": issued.astimezone(UTC).isoformat().replace("+00:00", "Z"),
-        "expires_at": expires.astimezone(UTC).isoformat().replace("+00:00", "Z"),
-        "approved_by": "operator:public-seeded-runner",
-        "nonce": "public-seeded-runner-once",
-        "single_use": True,
-        "signature": {"algorithm": "hmac-sha256", "key_id": "runner-key", "value": "0" * 64},
-    }
-    token["token_id"] = expected_approval_token_id(token)
-    token["signature"]["value"] = hmac.new(_POLICY_KEY, approval_signing_payload(token), hashlib.sha256).hexdigest()
-    return token
 
 
 def _authority_case(root: Path, manifest: Mapping[str, Any], case: Mapping[str, Any], observed_at: str, bundle_root: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -571,6 +549,14 @@ def validate_qualification_run(run: Mapping[str, Any], schema: Mapping[str, Any]
             issues.append("measurements contain duplicate metric names")
         else:
             for item in run.get("measurements", []):
+                value = item.get("value")
+                lower = item.get("confidence_lower")
+                if isinstance(value, float) and not math.isfinite(value):
+                    issues.append("qualification measurement values must be finite")
+                    break
+                if isinstance(lower, float) and not math.isfinite(lower):
+                    issues.append("qualification measurement confidence_lower must be finite")
+                    break
                 try:
                     validate_method_digest(str(item.get("metric", "")), str(item.get("method_digest", "")), root=root)
                 except QualificationMethodError as exc:

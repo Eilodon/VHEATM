@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/host-attestation.schema.json",
+  "title": "VHEATM independently attested host qualification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "attestation_id", "framework_version", "bundle_root", "host_run_id", "host_run_digest", "host_identity_digest", "authority_id", "deployment_id", "capability_profile", "attested_metrics", "verification_state", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "attestation_id": {"type": "string", "pattern": "^HAT-[A-F0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "host_run_id": {"type": "string", "pattern": "^HQR-[A-F0-9]{64}$"},
+    "host_run_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "host_identity_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "authority_id": {"type": "string", "minLength": 1},
+    "deployment_id": {"type": "string", "minLength": 1},
+    "capability_profile": {"const": "vheatm-bwrap-host-v1"},
+    "attested_metrics": {"const": ["hard_stop_p99_seconds"]},
+    "verification_state": {"enum": ["verified", "unverified", "unknown"]},
+    "signature_algorithm": {"type": ["string", "null"], "enum": ["ed25519", null]},
+    "signature_key_id": {"type": ["string", "null"], "minLength": 1},
+    "signature_value": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+={0,2}$"},
+    "generated_at": {"type": "string", "format": "date-time"}
+  }
+}

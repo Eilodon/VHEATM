@@ -54,3 +54,8 @@ def test_machine_loaders_reject_duplicate_yaml_and_json_keys() -> None:
         load_yaml("mode: standard\nmode: full\n")
     with pytest.raises(DuplicateKeyError, match="duplicate JSON"):
         load_json('{"mode":"standard","mode":"full"}')
+
+
+def test_non_finite_json_numbers_are_rejected() -> None:
+    with pytest.raises(ValueError, match="non-finite"):
+        load_json('{"measurement": NaN}')

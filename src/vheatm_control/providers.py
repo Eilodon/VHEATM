@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping
 
 from .analyzers import snapshot_digest
 from .provider_policy import ProviderPolicyError, provider_descriptor
+from .serialization import load_json
 from .tool_broker import action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest, validate_policy_decision
 
 
@@ -71,8 +72,8 @@ def https_json_transport(
     if len(raw) > max_response_bytes:
         raise ProviderAdapterError("provider response exceeds the configured byte limit")
     try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        value = load_json(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
         raise ProviderAdapterError("provider response is not UTF-8 JSON") from exc
     if not isinstance(value, Mapping):
         raise ProviderAdapterError("provider response must be a JSON object")

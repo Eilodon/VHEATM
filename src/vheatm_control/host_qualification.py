@@ -17,7 +17,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
 from .qualification_methods import QualificationMethodError, expected_method_digest, validate_method_digest
-from .qualification_runner import _POLICY_KEY, _build_approval_token
+from .qualification_support import POLICY_KEY, build_qualification_approval_token
 from .sandbox import SandboxConfigurationError, SandboxExecutor
 from .serialization import load_json, load_yaml
 from .tool_broker import BrokerCapabilities, InMemoryTokenLedger, ToolBroker
@@ -96,7 +96,7 @@ def _new_broker(root: Path, observed_at: str) -> ToolBroker:
         raise HostQualificationError("host qualification timestamps must include a timezone")
     return ToolBroker.from_root(
         root,
-        keyring={"runner-key": _POLICY_KEY},
+        keyring={"runner-key": POLICY_KEY},
         capabilities=BrokerCapabilities(exact_command_allowlist=frozenset({"sleep 60"})),
         token_ledger=InMemoryTokenLedger(),
         clock=lambda: observed,
@@ -214,7 +214,7 @@ def run_host_qualification(
         else:
             for index in range(1, sample_count + 1):
                 request = _request(schema_root, backend_digest, index)
-                approval = _build_approval_token(request, generated_at)
+                approval = build_qualification_approval_token(request, generated_at)
                 started = time.perf_counter()
                 sandbox_run = executor.run(request, approval)
                 elapsed = round(max(0.0, time.perf_counter() - started), 9)
@@ -318,6 +318,13 @@ def validate_host_qualification_run(
         issues.append(f"{location}: {error.message}")
     if issues:
         return issues
+    def finite_number(value: Any) -> bool:
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return True
+        return isinstance(value, float) and math.isfinite(value)
+
     if run.get("run_id") != expected_host_qualification_run_id(run):
         issues.append("run_id does not match canonical host qualification content")
     observations = [item for item in run.get("observations", []) if isinstance(item, Mapping)]
@@ -327,6 +334,12 @@ def validate_host_qualification_run(
     sample_indices = [int(item.get("sample_index", 0)) for item in observations]
     if sorted(sample_indices) != list(range(1, len(observations) + 1)):
         issues.append("observation sample_index values must be contiguous and unique")
+    for index, observation in enumerate(observations):
+        if not finite_number(observation.get("elapsed_seconds")):
+            issues.append(f"observation[{index}].elapsed_seconds must be finite")
+        details = observation.get("details")
+        if isinstance(details, Mapping) and "timeout_budget_seconds" in details and not finite_number(details.get("timeout_budget_seconds")):
+            issues.append(f"observation[{index}].details.timeout_budget_seconds must be finite")
     observed = [item for item in observations if item.get("status") == "observed"]
     if len(observed) == len(observations):
         expected_status = "complete"
@@ -355,6 +368,10 @@ def validate_host_qualification_run(
         measurement = measurements[0]
         if len(measurements) != 1 or measurement.get("metric") != "hard_stop_p99_seconds":
             issues.append("host qualification measurements must contain only hard_stop_p99_seconds")
+        if not finite_number(measurement.get("value")):
+            issues.append("hard-stop measurement value must be finite")
+        if not finite_number(measurement.get("confidence_lower")):
+            issues.append("hard-stop measurement confidence_lower must be finite")
         refs = measurement.get("evidence_refs")
         if refs != [str(item.get("observation_id")) for item in observed]:
             issues.append("hard-stop measurement must cover exactly the observed samples")

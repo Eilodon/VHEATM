@@ -44,14 +44,20 @@ def _construct_unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any
     return result
 
 
+def _reject_non_finite_json_number(value: str) -> None:
+    raise ValueError(f"non-finite JSON number is not permitted: {value}")
+
+
 def load_yaml(stream: TextIO | str) -> Any:
     return yaml.load(stream, Loader=StrictSafeLoader)
 
 
 def load_json(stream: TextIO | str) -> Any:
-    return json.load(stream, object_pairs_hook=_construct_unique_json_object) if hasattr(stream, "read") else json.loads(
-        stream, object_pairs_hook=_construct_unique_json_object
-    )
+    kwargs = {
+        "object_pairs_hook": _construct_unique_json_object,
+        "parse_constant": _reject_non_finite_json_number,
+    }
+    return json.load(stream, **kwargs) if hasattr(stream, "read") else json.loads(stream, **kwargs)
 
 
 def load_document(path: Path) -> Any:

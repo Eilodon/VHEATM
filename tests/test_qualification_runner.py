@@ -65,6 +65,15 @@ def test_seeded_runner_rejects_unknown_measurement_method() -> None:
     assert any("does not match canonical method" in issue for issue in validate_qualification_run(tampered, SCHEMA, root=ROOT))
 
 
+def test_seeded_runner_rejects_non_finite_measurement() -> None:
+    run = run_seeded_corpus(ROOT, observed_at="2026-08-01T00:00:00Z")
+    tampered = copy.deepcopy(run)
+    tampered["measurements"][0]["value"] = float("nan")
+    tampered["run_id"] = expected_qualification_run_id(tampered)
+
+    assert any("finite" in issue for issue in validate_qualification_run(tampered, SCHEMA, root=ROOT))
+
+
 def test_seeded_runner_rejects_invalid_corpus_before_dispatch(tmp_path: Path) -> None:
     root = tmp_path / "fixture"
     root.mkdir()

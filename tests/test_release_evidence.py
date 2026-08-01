@@ -8,7 +8,10 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
+from vheatm_control.bundle import build_bundle
 from vheatm_control.evaluation import EvaluationError, evaluate_release_gates
+from vheatm_control.host_attestation import build_host_attestation, sign_host_attestation
+from vheatm_control.host_qualification import expected_host_qualification_run_id
 from vheatm_control.judge import build_blind_packet, expected_verdict_id, sign_verdict
 from vheatm_control.qualification import (
     build_private_time_slice_manifest,
@@ -124,6 +127,62 @@ def _release_judge_fixture(receipt: dict, *, case_refs: list[str] | None = None,
     if signing_key is not None:
         verdict = sign_verdict(verdict, private_key=judge_key, key_id="judge-key")
     return packet, verdict, judge_key
+
+
+def _release_host_fixture() -> tuple[dict, dict, Ed25519PrivateKey]:
+    observation = {
+        "observation_id": "HOB-" + "A" * 64,
+        "sample_index": 1,
+        "kind": "hard_stop_timeout",
+        "status": "observed",
+        "elapsed_seconds": 0.2,
+        "sandbox_run_id": "SBR-" + "B" * 64,
+        "controls": ["timeout:enforced"],
+        "details": {
+            "reason": "timeout enforcement observed",
+            "sandbox_status": "blocked",
+            "exit_code": None,
+            "stderr_digest": "c" * 64,
+            "timeout_budget_seconds": 0.1,
+        },
+    }
+    run: dict[str, object] = {
+        "schema_version": "1.0.0",
+        "framework_version": "17.0.0-dev.1",
+        "bundle_root": build_bundle(ROOT)["bundle_root"],
+        "runner_id": "vheatm.host-qualification",
+        "runner_version": "1.0.0",
+        "backend": "bubblewrap",
+        "backend_digest": "d" * 64,
+        "host_identity_digest": "e" * 64,
+        "reference_monitor_status": "observed",
+        "status": "complete",
+        "evidence_state": "unverified",
+        "observations": [observation],
+        "measurements": [{
+            "metric": "hard_stop_p99_seconds",
+            "value": 0.2,
+            "sample_count": 1,
+            "confidence_lower": 0,
+            "method_digest": _method_digest("hard_stop_p99_seconds"),
+            "evidence_refs": [observation["observation_id"]],
+        }],
+        "generated_at": "2026-08-01T00:00:00Z",
+    }
+    run["run_id"] = expected_host_qualification_run_id(run)
+    key = Ed25519PrivateKey.generate()
+    signed = sign_host_attestation(
+        build_host_attestation(
+            run,
+            authority_id="host-authority:v17",
+            deployment_id="sandbox-host-release-fixture",
+            generated_at="2026-08-01T00:00:00Z",
+            root=ROOT,
+        ),
+        private_key=key,
+        key_id="host-key",
+    )
+    return run, signed, key
 
 
 def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> None:
@@ -373,6 +432,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         measurements=measurements,
         generated_at="2026-08-01T00:00:00Z",
     )
+    host_run, host_attestation, host_key = _release_host_fixture()
 
     base_attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
     scan = build_vulnerability_scan(
@@ -412,6 +472,8 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         "qualification_manifest": signed_manifest,
         "private_corpus_receipt": private_receipt,
         "qualification_evidence": sign_qualification_evidence(qualification, private_key=key, key_id="qualification-key"),
+        "host_qualification_run": host_run,
+        "host_qualification_attestation": host_attestation,
         "independent_judge_packets": [judge_packet],
         "independent_judge_verdicts": [judge_verdict],
         "supply_chain_attestation": attestation,
@@ -423,8 +485,8 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
         schema_root=ROOT,
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
@@ -435,8 +497,8 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         evidence,
         evaluated_at="2026-08-10T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
         schema_root=ROOT,
     )
     stale_rg13 = next(item for item in stale_report["gates"] if item["gate_id"] == "RG-13")

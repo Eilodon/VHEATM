@@ -55,6 +55,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "qualification-manifest.schema.json",
         "qualification-run.schema.json",
         "host-qualification-run.schema.json",
+        "host-attestation.schema.json",
         "private-qualification-corpus.schema.json",
         "private-corpus-receipt.schema.json",
         "signal-noise-decision.schema.json",

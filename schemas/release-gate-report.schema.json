@@ -18,7 +18,7 @@
         "additionalProperties": false,
         "required": ["kind", "id"],
         "properties": {
-          "kind": {"enum": ["qualification_manifest", "private_corpus_receipt", "qualification_evidence", "supply_chain_attestation", "vulnerability_scan", "provenance_statement", "independent_judge_packet", "independent_judge_verdict"]},
+          "kind": {"enum": ["qualification_manifest", "private_corpus_receipt", "qualification_evidence", "host_qualification_run", "host_qualification_attestation", "supply_chain_attestation", "vulnerability_scan", "provenance_statement", "independent_judge_packet", "independent_judge_verdict"]},
           "id": {"type": "string", "minLength": 1}
         }
       }
