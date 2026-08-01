@@ -538,6 +538,7 @@ def _verified_supply_chain_metrics(
             attestation,
             public_key=release_key,
             key_id=_key_id(verification_key_ids, "supply_chain"),
+            root=schema_root,
         )
         scan_digest = _digest({key: value for key, value in verified_scan.items() if key != "signature_value"})
         if verified_attestation.get("vulnerability_scan_id") != verified_scan.get("scan_id") or verified_attestation.get("vulnerability_scan_digest") != scan_digest:

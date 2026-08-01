@@ -48,6 +48,7 @@
 - Seeded security qualification now exercises read, write, execute, network, and secrets denial paths with real schema/approval-bound broker requests; all five are blocked and the public run remains `unverified`.
 - Semantic migration now has schema-bound, non-authoritative records for signal/noise decisions, FAST/Standard/Full legacy-output mapping, enterprise stakeholder ownership, cross-cutting L7 obligations, ordered temporal/L4 scans, AI-RMF governance, and assurance maturity deltas; unknown and tainted states remain explicit.
 - Legacy archive provenance is now machine-readable: the unavailable original V16 archive is explicitly re-baselined to the content-addressed extracted corpus, and validator checks prevent an absent archive from being labelled `verified`.
+- RG-13 supply-chain attestations now re-compute and bind SBOM, dependencies, and dependency-lock metadata to the current canonical bundle before signed evidence can contribute release metrics.
 
 ## Verification gates
 
@@ -71,6 +72,7 @@ Fresh evidence for this cycle:
 - Security-matrix regression — the seeded RG-09 authorization case covers all five tool classes with `unauthorized_block_rate=1.0` over five observations; no host hard-stop latency is synthesized.
 - Legacy provenance regression — the canonical registry validates the extracted-corpus digest and rejects a `verified` archive declaration when the original archive is absent.
 - Capability-ledger regression — extracted-corpus symlink content is rejected before the ledger digest can authorize migration coverage.
+- Supply-chain source-binding regression — a signed attestation with a self-consistent forged SBOM is rejected at RG-13 because it does not match the current canonical bundle.
 
 ## Explicitly not complete
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -551,6 +552,78 @@ def test_supply_chain_evidence_is_canonical_and_locked_but_not_signed_yet(tmp_pa
     assert attestation["dependency_lock_present"] is True
     assert attestation["dependency_lock_path"] == "uv.lock"
     assert attestation["sbom"]
+
+
+def test_release_gates_reject_signed_attestation_with_noncanonical_sbom() -> None:
+    release_key = Ed25519PrivateKey.generate()
+    vulnerability_key = Ed25519PrivateKey.generate()
+    provenance_key = Ed25519PrivateKey.generate()
+    base_attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
+    scan = build_vulnerability_scan(
+        scanner_id="scanner:v17",
+        scanner_version="1.0.0",
+        target_bundle_root=base_attestation["bundle_root"],
+        target_lock_digest=base_attestation["dependency_lock_digest"],
+        findings=[],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    signed_scan = sign_vulnerability_scan(scan, private_key=vulnerability_key, key_id="vulnerability-key")
+    verified_scan = verify_vulnerability_scan(
+        signed_scan,
+        public_key=vulnerability_key.public_key(),
+        bundle_root=base_attestation["bundle_root"],
+        lock_digest=base_attestation["dependency_lock_digest"],
+        key_id="vulnerability-key",
+    )
+    forged = build_supply_chain_attestation(
+        ROOT,
+        generated_at="2026-08-01T00:00:00Z",
+        vulnerability_scan=verified_scan,
+    )
+    forged["sbom"] = [{"path": "forged/not-in-bundle", "sha256": "a" * 64}]
+    forged["sbom_digest"] = hashlib.sha256(
+        json.dumps(forged["sbom"], sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    forged["attestation_id"] = expected_attestation_id(forged)
+    signed_attestation = sign_supply_chain_attestation(forged, private_key=release_key, key_id="supply-chain-key")
+    provenance = {
+        "schema_version": "1.0.0",
+        "bundle_root": signed_attestation["bundle_root"],
+        "sbom_digest": signed_attestation["sbom_digest"],
+        "builder_id": "builder:test",
+        "build_type": "test-build",
+        "verified": True,
+        "signature_algorithm": "ed25519",
+        "signature_key_id": "provenance-key",
+        "signature_value": None,
+        "generated_at": "2026-08-01T00:00:00Z",
+    }
+    provenance["statement_id"] = expected_provenance_statement_id(provenance)
+    evidence = {
+        "supply_chain_attestation": signed_attestation,
+        "vulnerability_scan": signed_scan,
+        "provenance_statement": sign_provenance_statement(provenance, private_key=provenance_key, key_id="provenance-key"),
+    }
+    report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        evidence,
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={
+            "supply_chain": release_key.public_key(),
+            "vulnerability": vulnerability_key.public_key(),
+            "provenance": provenance_key.public_key(),
+        },
+        verification_key_ids={
+            "supply_chain": "supply-chain-key",
+            "vulnerability": "vulnerability-key",
+            "provenance": "provenance-key",
+        },
+        schema_root=ROOT,
+    )
+    rg13 = next(item for item in report["gates"] if item["gate_id"] == "RG-13")
+    assert rg13["status"] == "fail"
+    assert "canonical" in rg13["rationale"] or "bundle" in rg13["rationale"]
 
 
 def test_verified_typed_evidence_overrides_contradictory_metric_shortcuts() -> None:

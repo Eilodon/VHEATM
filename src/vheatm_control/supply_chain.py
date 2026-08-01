@@ -188,7 +188,7 @@ def sign_supply_chain_attestation(
 
 
 def verify_supply_chain_attestation(
-    attestation: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None
+    attestation: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None, root: Path | None = None
 ) -> dict[str, Any]:
     if attestation.get("schema_version") != "1.0.0":
         raise SupplyChainError("attestation schema version is invalid")
@@ -212,6 +212,22 @@ def verify_supply_chain_attestation(
             raise SupplyChainError("locked release attestation is missing its dependency-lock binding")
         if len(attestation["dependency_lock_digest"]) != 64 or any(char not in "0123456789abcdef" for char in attestation["dependency_lock_digest"]):
             raise SupplyChainError("dependency-lock digest is malformed")
+    if root is not None:
+        try:
+            canonical = build_supply_chain_attestation(root, generated_at=str(attestation.get("generated_at")))
+        except (OSError, ValueError) as exc:
+            raise SupplyChainError(f"canonical bundle binding cannot be verified: {exc}") from exc
+        for field in (
+            "bundle_root",
+            "sbom",
+            "sbom_digest",
+            "dependencies",
+            "dependency_lock_present",
+            "dependency_lock_path",
+            "dependency_lock_digest",
+        ):
+            if attestation.get(field) != canonical.get(field):
+                raise SupplyChainError(f"attestation {field} is not bound to the current canonical bundle")
     _verify(attestation, public_key, key_id=key_id)
     verified = dict(attestation)
     verified.update({"signed_release": True, "verification_state": "verified"})

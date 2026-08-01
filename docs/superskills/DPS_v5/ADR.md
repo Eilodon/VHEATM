@@ -1877,3 +1877,77 @@ Start the next cycle when `VHEATM-v16.1.1.skill` is supplied or officially super
 - A content hash is not evidence when the addressed bytes are absent.
 - Re-baselining must preserve useful extracted material while making the loss of archive-level assurance machine-visible.
 - Provenance status belongs in the canonical registry, not only in a lifecycle note.
+
+## ADR-27 — Bind signed supply-chain evidence to the current bundle
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `supply-chain` `RG-13` `provenance` `fail-closed`
+**Change Classification:** `INTEGRITY HARDENING`
+**Review date:** 2026-09-02 — or earlier when the bundle inventory or attestation schema changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local source-binding enforcement; `NOT_PRODUCTION_QUALIFIED` until external key custody and fresh scanner evidence exist.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — bundle inventory and external attestation authority may evolve.
+
+### Context
+
+RG-13 verified the attestation signature, bundle-root string, and SBOM's internal digest, but the release boundary did not recompute the canonical bundle inventory from the current control root. A signer could therefore authorize a self-consistent forged SBOM or dependency-lock declaration while retaining the expected bundle-root value. Signature authenticity and internal consistency are not the same property as binding to the bytes being released.
+
+### Decision
+
+When a release evaluator verifies a supply-chain attestation, it must optionally bind the attestation to the current control root. The verifier recomputes the canonical attestation facts from that root and requires equality for the bundle root, complete SBOM, SBOM digest, dependency declarations, lock presence, lock path, and lock digest before the signed record can contribute RG-13. The evaluator supplies the resolved canonical root; inability to rebuild it becomes a typed supply-chain verification failure and leaves release evidence fail-closed. No external scan, key-custody, or GA evidence is created by this change.
+
+### Options Considered
+
+- Trust the signed bundle-root string and self-consistent SBOM: rejected because a signature does not prove that the signer observed the current workspace bytes.
+- Compare only the SBOM digest: rejected because the digest would still be over attacker-chosen entries and lock metadata could remain detached.
+- Rebuild the canonical bundle only in the CLI: rejected because direct evaluator APIs and pilot revalidation must share the same trust boundary.
+- Require an external transparency log in this slice: deferred because the external authority is unavailable; local source binding is the strongest evidence-preserving control that can be implemented now.
+
+### Impact
+
+Schemas changed: none.
+Canonical artifacts changed: none; the existing bundle builder remains authoritative.
+Components changed: `supply_chain.verify_supply_chain_attestation`, release evaluation RG-13 boundary, release evidence regression tests.
+Breaking change: **YES** for signed attestations whose SBOM or dependency-lock fields do not describe the current canonical bundle.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `current bundle bytes → SBOM/lock recomputation → signed attestation verification → RG-13 → release report → pilot authorization`.
+Cascade Review: ✅ Done — the forged-SBOM RED regression, focused release/supply-chain/pilot suite, global self-consistency scan, and full validation cover the changed boundary.
+
+### Consequences
+
+- A valid release signature can no longer make an unrelated but internally coherent SBOM pass RG-13.
+- Dependency-lock presence and digest are now tied to the same current source root as the bundle inventory.
+- Verification performs a second canonical bundle construction at the evidence boundary, adding bounded local I/O before release authorization.
+- External key custody, scanner freshness/coverage, private qualification, provider qualification, host namespace qualification, UX-04, and successful shadow/canary observation remain open and fail-closed.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression showed a signed attestation with a forged SBOM made RG-13 `pass` before source binding.
+- [verified 2026-08-02] GREEN regression rejects the same signed forged-SBOM record with an RG-13 canonical-bundle verification failure.
+- [verified 2026-08-02] Pattern-globalize scan found no remaining supply-chain verifier sibling that accepts a source-independent self-consistency claim on the release path.
+- [verified 2026-08-02] Full repository suite (`269 passed`), canonical validator, `uv lock --check`, package build, low-risk evaluate/route, public seeded replay, and `git diff --check` pass after the ADR changes bundle content.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External key custody, scanner feed freshness/coverage, private/time-sliced qualification, provider qualification, host namespace/hard-stop qualification, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when the external attestation service changes its SBOM/lock format or when the canonical bundle inventory gains a new source class; add an explicit binding test and rerun RG-13 plus the full evidence matrix.
+
+### Cycle Retrospective
+
+- A correctly signed record can still describe the wrong bytes; authority and subject binding must be verified separately.
+- Comparing a declared root string is weaker than rebuilding the source-derived inventory at the consuming gate.
+- Keep external trust prerequisites unknown rather than replacing them with local test keys or synthetic scanner feeds.
