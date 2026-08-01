@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
-from .judge import JudgeError, validate_verdict_identity
+from .judge import JudgeError, validate_verdict_binding
 from .qualification import QualificationError, measurement_sample_basis, verify_manifest, verify_qualification_evidence
 from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
 from .serialization import load_json, load_yaml
@@ -135,6 +135,12 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
             identifier = verdict.get("verdict_id") if isinstance(verdict, Mapping) else None
             if isinstance(identifier, str) and identifier:
                 bindings.append({"kind": "independent_judge_verdict", "id": identifier})
+    packets = evidence.get("independent_judge_packets")
+    if isinstance(packets, list):
+        for packet in packets:
+            identifier = packet.get("packet_id") if isinstance(packet, Mapping) else None
+            if isinstance(identifier, str) and identifier:
+                bindings.append({"kind": "independent_judge_packet", "id": identifier})
     return bindings
 
 
@@ -157,7 +163,7 @@ _TYPED_EVIDENCE_SCHEMAS = {
 }
 
 _QUALIFICATION_EVIDENCE_FIELDS = frozenset(
-    {"qualification_manifest", "private_corpus_receipt", "qualification_evidence", "independent_judge_verdicts"}
+    {"qualification_manifest", "private_corpus_receipt", "qualification_evidence", "independent_judge_verdicts", "independent_judge_packets"}
 )
 _SUPPLY_CHAIN_EVIDENCE_FIELDS = frozenset(
     {"supply_chain_attestation", "vulnerability_scan", "provenance_statement"}
@@ -216,6 +222,27 @@ def _typed_evidence_schema_errors(root: Path, evidence: Mapping[str, Any]) -> di
                         verdict_errors.append(f"[{index}].{location}: {error.message}")
                 if verdict_errors:
                     errors_by_field["independent_judge_verdicts"] = verdict_errors
+    if "independent_judge_packets" in evidence:
+        packets = evidence["independent_judge_packets"]
+        if not isinstance(packets, list):
+            errors_by_field["independent_judge_packets"] = ["independent_judge_packets must be an array"]
+        else:
+            try:
+                schema = load_json((root / "schemas" / "judge-packet.schema.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                errors_by_field["independent_judge_packets"] = [f"judge-packet schema is unavailable: {exc}"]
+            else:
+                packet_errors: list[str] = []
+                validator = Draft202012Validator(schema, format_checker=FormatChecker())
+                for index, packet in enumerate(packets):
+                    if not isinstance(packet, Mapping):
+                        packet_errors.append(f"[{index}]: packet must be an object")
+                        continue
+                    for error in sorted(validator.iter_errors(packet), key=lambda item: list(item.absolute_path)):
+                        location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+                        packet_errors.append(f"[{index}].{location}: {error.message}")
+                if packet_errors:
+                    errors_by_field["independent_judge_packets"] = packet_errors
     return errors_by_field
 
 
@@ -308,10 +335,29 @@ def _verified_qualification_metrics(
     missing_verdicts = sorted(ref for ref in verified.get("judge_verdict_refs", []) if ref not in verdict_by_id)
     if missing_verdicts:
         return {}, [f"qualification evidence is missing referenced independent judge verdicts: {', '.join(missing_verdicts)}"]
+    packets = evidence.get("independent_judge_packets")
+    packet_by_id = (
+        {
+            str(packet.get("packet_id")): packet
+            for packet in packets
+            if isinstance(packet, Mapping) and isinstance(packet.get("packet_id"), str)
+        }
+        if isinstance(packets, list)
+        else {}
+    )
+    missing_packets = sorted(
+        str(verdict_by_id[ref].get("packet_id"))
+        for ref in verified.get("judge_verdict_refs", [])
+        if str(verdict_by_id[ref].get("packet_id")) not in packet_by_id
+    )
+    if missing_packets:
+        return {}, [f"qualification evidence is missing referenced independent judge packets: {', '.join(missing_packets)}"]
     try:
         for ref in verified.get("judge_verdict_refs", []):
-            validate_verdict_identity(verdict_by_id[ref])
-            if verdict_by_id[ref].get("status") != "complete" or verdict_by_id[ref].get("epistemic_status") != "independent_candidate":
+            verdict = verdict_by_id[ref]
+            packet = packet_by_id[str(verdict.get("packet_id"))]
+            validate_verdict_binding(packet, verdict)
+            if verdict.get("status") != "complete" or verdict.get("epistemic_status") != "independent_candidate":
                 raise JudgeError("referenced independent judge verdict is not complete and independent")
     except JudgeError as exc:
         return {}, [f"independent judge verification failed: {exc}"]
@@ -331,6 +377,20 @@ def _verified_qualification_metrics(
             invalid_bindings.append(
                 f"{metric} claims {item.get('sample_count')} private case trials but receipt contains only {verified_receipt.get('case_count')} cases"
             )
+    judged_case_ids = {
+        str(decision.get("item_id"))
+        for ref in verified.get("judge_verdict_refs", [])
+        for decision in verdict_by_id[ref].get("decisions", [])
+        if isinstance(decision, Mapping)
+    }
+    private_case_refs = {str(case_ref) for case_ref in verified_receipt.get("case_refs", [])}
+    for metric, item in by_metric.items():
+        if measurement_sample_basis(metric) == "private_case_trials":
+            covered = len(judged_case_ids & private_case_refs)
+            if covered < int(item.get("sample_count", 0)):
+                invalid_bindings.append(
+                    f"{metric} has only {covered} independently judged private cases for {item.get('sample_count')} claimed trials"
+                )
     if invalid_bindings:
         return {}, [f"qualification measurement population binding failed: {'; '.join(sorted(invalid_bindings))}"]
     insufficient = sorted(

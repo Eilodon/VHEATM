@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from vheatm_control.judge import JudgeError, build_blind_packet, compare_verdicts, resolve_hitl, run_independent_judge
+from vheatm_control.judge import JudgeError, build_blind_packet, compare_verdicts, expected_verdict_id, resolve_hitl, run_independent_judge, validate_verdict_binding
 
 
 def judge_yes(packet):
@@ -59,3 +59,12 @@ def test_timeout_blocks_and_divergence_escalates() -> None:
     assert comparison["status"] == "blocked"
     resolved = resolve_hitl(timed_out["escalation"], actor="owner", decision="defer", rationale="Provider unavailable")
     assert resolved["epistemic_status"] == "unknown"
+
+
+def test_verdict_binding_requires_exact_packet_item_coverage() -> None:
+    packet = _packet()
+    verdict = run_independent_judge(packet, judge_yes)["verdict"]
+    malformed = {**verdict, "decisions": [dict(verdict["decisions"][0]), {"item_id": "unbound-case", "label": "yes", "confidence": 0.9}]}
+    malformed["verdict_id"] = expected_verdict_id(malformed)
+    with pytest.raises(JudgeError, match="exactly cover packet items"):
+        validate_verdict_binding(packet, malformed)

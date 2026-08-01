@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
 from vheatm_control.evaluation import evaluate_release_gates
-from vheatm_control.judge import expected_verdict_id
+from vheatm_control.judge import build_blind_packet, expected_verdict_id
 from vheatm_control.qualification import (
     build_private_time_slice_manifest,
     build_qualification_evidence,
@@ -74,17 +74,42 @@ def _release_private_fixture(tmp_path: Path, key: Ed25519PrivateKey, *, count: i
     return signed_manifest, receipt
 
 
+def _release_judge_fixture(receipt: dict, *, case_refs: list[str] | None = None) -> tuple[dict, dict]:
+    selected_case_refs = case_refs if case_refs is not None else list(receipt["case_refs"])
+    packet = build_blind_packet(
+        source_session_root="a" * 64,
+        judge_context_root="b" * 64,
+        origin_provider_id="origin.provider",
+        origin_model_id="origin-model",
+        judge_provider_id="judge.provider",
+        judge_model_id="judge-model",
+        config_digest="c" * 64,
+        rubric_digest="d" * 64,
+        order_seed="e" * 64,
+        items=[{"item_id": case_ref, "text": "Evaluate the private qualification case."} for case_ref in selected_case_refs],
+    )
+    verdict = {
+        "schema_version": "1.0.0",
+        "packet_id": packet["packet_id"],
+        "request_id": packet["request_id"],
+        "judge_provider_id": packet["judge_provider_id"],
+        "judge_model_id": packet["judge_model_id"],
+        "config_digest": packet["config_digest"],
+        "order_digest": packet["order_digest"],
+        "status": "complete",
+        "epistemic_status": "independent_candidate",
+        "decisions": [{"item_id": item["item_id"], "label": "yes", "confidence": 0.9} for item in packet["items"]],
+        "generated_at": "2026-08-01T00:00:00Z",
+    }
+    verdict["verdict_id"] = expected_verdict_id(verdict)
+    return packet, verdict
+
+
 def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_path: Path) -> None:
     key = Ed25519PrivateKey.generate()
     signed_manifest, receipt = _release_private_fixture(tmp_path, key, count=1)
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
-    verdict = {
-        "schema_version": "1.0.0", "packet_id": "JPK-" + "A" * 64, "request_id": "JDR-" + "B" * 64,
-        "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
-        "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
-        "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
-    }
-    verdict["verdict_id"] = expected_verdict_id(verdict)
+    judge_packet, verdict = _release_judge_fixture(receipt)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
         private_corpus_receipt_id=receipt["receipt_id"],
@@ -104,6 +129,7 @@ def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_pat
             "qualification_manifest": signed_manifest,
             "private_corpus_receipt": receipt,
             "qualification_evidence": sign_qualification_evidence(evidence, private_key=key, key_id="qualification-key"),
+            "independent_judge_packets": [judge_packet],
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
@@ -120,13 +146,7 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
     key = Ed25519PrivateKey.generate()
     signed_manifest, receipt = _release_private_fixture(tmp_path, key)
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
-    verdict = {
-        "schema_version": "1.0.0", "packet_id": "JPK-" + "A" * 64, "request_id": "JDR-" + "B" * 64,
-        "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
-        "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
-        "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
-    }
-    verdict["verdict_id"] = expected_verdict_id(verdict)
+    judge_packet, verdict = _release_judge_fixture(receipt)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
         private_corpus_receipt_id=receipt["receipt_id"],
@@ -149,6 +169,7 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
             "qualification_manifest": signed_manifest,
             "private_corpus_receipt": receipt,
             "qualification_evidence": sign_qualification_evidence(evidence, private_key=key, key_id="qualification-key"),
+            "independent_judge_packets": [judge_packet],
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
@@ -161,17 +182,48 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
     assert "metric domain" in rg05["rationale"]
 
 
+def test_release_gates_reject_critical_trials_without_independent_case_coverage(tmp_path: Path) -> None:
+    key = Ed25519PrivateKey.generate()
+    signed_manifest, receipt = _release_private_fixture(tmp_path, key)
+    verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
+    judge_packet, verdict = _release_judge_fixture(receipt, case_refs=[receipt["case_refs"][0]])
+    evidence = build_qualification_evidence(
+        manifest=verified_manifest,
+        private_corpus_receipt_id=receipt["receipt_id"],
+        evaluator_id="eval:v17",
+        evaluator_version="1.0.0",
+        independent_judge_id="judge:v17",
+        judge_verdict_refs=[verdict["verdict_id"]],
+        measurements=[
+            {"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 300, "confidence_lower": 0.96, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+            {"metric": "critical_miss_count", "value": 0, "sample_count": 300, "confidence_lower": 0, "method_digest": "c" * 64, "evidence_refs": [receipt["receipt_id"]]},
+        ],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    report = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {
+            "qualification_manifest": signed_manifest,
+            "private_corpus_receipt": receipt,
+            "qualification_evidence": sign_qualification_evidence(evidence, private_key=key, key_id="qualification-key"),
+            "independent_judge_packets": [judge_packet],
+            "independent_judge_verdicts": [verdict],
+        },
+        evaluated_at="2026-08-01T00:00:00Z",
+        verification_keys={"qualification": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key"},
+        schema_root=ROOT,
+    )
+    rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
+    assert rg05["status"] == "unknown"
+    assert "independently judged private cases" in rg05["rationale"]
+
+
 def test_release_gates_require_cryptographically_verified_qualification_and_supply_chain(tmp_path: Path) -> None:
     key = Ed25519PrivateKey.generate()
     signed_manifest, private_receipt = _release_private_fixture(tmp_path, key)
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
-    judge_verdict = {
-        "schema_version": "1.0.0", "packet_id": "JPK-" + "A" * 64, "request_id": "JDR-" + "B" * 64,
-        "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
-        "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
-        "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
-    }
-    judge_verdict["verdict_id"] = expected_verdict_id(judge_verdict)
+    judge_packet, judge_verdict = _release_judge_fixture(private_receipt)
     values = {
         "mutation_rejection_rate": 1, "route_equivalence_rate": 1, "determinism_runs": 1000,
         "plan_digest_stability_rate": 1, "selection_digest_stability_rate": 1, "false_inactive_count": 0,
@@ -238,6 +290,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         "qualification_manifest": signed_manifest,
         "private_corpus_receipt": private_receipt,
         "qualification_evidence": sign_qualification_evidence(qualification, private_key=key, key_id="qualification-key"),
+        "independent_judge_packets": [judge_packet],
         "independent_judge_verdicts": [judge_verdict],
         "supply_chain_attestation": attestation,
         "vulnerability_scan": sign_vulnerability_scan(scan, private_key=key, key_id="vulnerability-key"),
@@ -254,6 +307,30 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
     Draft202012Validator(load_json((ROOT / "schemas" / "release-gate-report.schema.json").read_text())).validate(report)
+
+    packet_missing = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {**evidence, "independent_judge_packets": []},
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert next(item for item in packet_missing["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
+
+    verdict_mismatch = {**judge_verdict, "config_digest": "f" * 64}
+    verdict_mismatch["verdict_id"] = expected_verdict_id(verdict_mismatch)
+    binding_mismatch = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {**evidence, "independent_judge_verdicts": [verdict_mismatch]},
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert next(item for item in binding_mismatch["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
 
     schema_invalid = dict(evidence["qualification_evidence"])
     schema_invalid["unexpected_runtime_field"] = "must be rejected by the evaluator boundary"

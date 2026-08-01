@@ -115,6 +115,12 @@ def _validate_packet(packet: Mapping[str, Any]) -> None:
         raise JudgeError("judge request id mismatch")
 
 
+def validate_packet_identity(packet: Mapping[str, Any]) -> None:
+    """Validate a blind packet's content identity at downstream evidence boundaries."""
+
+    _validate_packet(packet)
+
+
 def _judge_worker(provider: JudgeProvider, packet: Mapping[str, Any], output: Any) -> None:
     try:
         value = provider(deepcopy(dict(packet)))
@@ -217,6 +223,20 @@ def validate_verdict_identity(verdict: Mapping[str, Any]) -> None:
     expected_status = "unknown" if any(item["label"] == "unknown" for item in decisions) else "complete"
     if verdict.get("status") != expected_status or verdict.get("epistemic_status") != ("independent_candidate" if expected_status == "complete" else "unknown"):
         raise JudgeError("independent judge verdict status is inconsistent with its decisions")
+
+
+def validate_verdict_binding(packet: Mapping[str, Any], verdict: Mapping[str, Any]) -> None:
+    """Validate that a verdict is an exact, content-bound result for one packet."""
+
+    _validate_packet(packet)
+    validate_verdict_identity(verdict)
+    for field in ("request_id", "judge_provider_id", "judge_model_id", "config_digest", "order_digest"):
+        if verdict.get(field) != packet.get(field):
+            raise JudgeError(f"independent judge verdict {field} is not bound to its packet")
+    packet_item_ids = [str(item["item_id"]) for item in packet["items"]]
+    verdict_item_ids = [str(item["item_id"]) for item in verdict["decisions"]]
+    if verdict_item_ids != packet_item_ids:
+        raise JudgeError("independent judge verdict decisions do not exactly cover packet items in order")
 
 
 def compare_verdicts(first: Mapping[str, Any], second: Mapping[str, Any]) -> dict[str, Any]:
