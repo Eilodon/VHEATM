@@ -30,3 +30,28 @@ modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-CONTEXT-CONTRACT, MO
 - Candidate overlays stay outside authority and standards bindings are digest-pinned: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-8 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: sandbox-authorization-action-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Authorization-to-action binding: added ✅
+- Reference-monitor receipt: added ✅
+
+### Bug Patterns
+- Sandbox outcome lacked authorization-to-action proof: observed and fixed at the reference-monitor boundary; no PATTERN-DEBT entry (first occurrence).
+- Schema-shaped broker decision could be semantically unrelated to the request: observed and fixed with request/decision/receipt/action binding; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Schema validity is not semantic identity: added to CONTEXT.md Domain Gotchas ✅
+- Pre-broker failure must remain blocked without a fabricated receipt: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Completed/failed sandbox outcomes require an allow decision plus content-addressed receipt/action binding: added to CONTEXT.md Architectural Decisions ✅
+- Malformed authorization fails closed before backend launch: added to CONTEXT.md Architectural Decisions ✅
+
+---
