@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
 from .judge import JudgeError, validate_verdict_identity
@@ -147,24 +147,102 @@ def expected_release_report_id(report: Mapping[str, Any]) -> str:
     return "RGR-" + _digest(identity).upper()
 
 
-def _validate_typed_evidence_documents(root: Path, evidence: Mapping[str, Any]) -> None:
-    schema_by_field = {
-        "qualification_manifest": "qualification-manifest.schema.json",
-        "private_corpus_receipt": "private-corpus-receipt.schema.json",
-        "qualification_evidence": "qualification-evidence.schema.json",
-        "supply_chain_attestation": "supply-chain-attestation.schema.json",
-        "vulnerability_scan": "vulnerability-scan.schema.json",
-        "provenance_statement": "provenance-statement.schema.json",
-    }
-    for field, filename in schema_by_field.items():
-        document = evidence.get(field)
-        if not isinstance(document, Mapping):
+_TYPED_EVIDENCE_SCHEMAS = {
+    "qualification_manifest": "qualification-manifest.schema.json",
+    "private_corpus_receipt": "private-corpus-receipt.schema.json",
+    "qualification_evidence": "qualification-evidence.schema.json",
+    "supply_chain_attestation": "supply-chain-attestation.schema.json",
+    "vulnerability_scan": "vulnerability-scan.schema.json",
+    "provenance_statement": "provenance-statement.schema.json",
+}
+
+_QUALIFICATION_EVIDENCE_FIELDS = frozenset(
+    {"qualification_manifest", "private_corpus_receipt", "qualification_evidence", "independent_judge_verdicts"}
+)
+_SUPPLY_CHAIN_EVIDENCE_FIELDS = frozenset(
+    {"supply_chain_attestation", "vulnerability_scan", "provenance_statement"}
+)
+
+
+def _typed_evidence_schema_errors(root: Path, evidence: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Validate typed evidence before any cryptographic verifier consumes it.
+
+    The cryptographic verifiers intentionally validate identity and signatures,
+    but they are not JSON Schema validators. Keeping this boundary here makes
+    the direct Python API and the CLI share the same fail-closed contract.
+    """
+
+    errors_by_field: dict[str, list[str]] = {}
+    for field, filename in _TYPED_EVIDENCE_SCHEMAS.items():
+        if field not in evidence:
             continue
-        schema = load_json((root / "schemas" / filename).read_text(encoding="utf-8"))
-        errors = sorted(Draft202012Validator(schema).iter_errors(document), key=lambda error: list(error.absolute_path))
+        document = evidence[field]
+        if not isinstance(document, Mapping):
+            errors_by_field[field] = [f"{field} must be an object"]
+            continue
+        try:
+            schema = load_json((root / "schemas" / filename).read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors_by_field[field] = [f"{field} schema is unavailable: {exc}"]
+            continue
+        errors = sorted(
+            Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document),
+            key=lambda error: list(error.absolute_path),
+        )
         if errors:
-            location = ".".join(str(part) for part in errors[0].absolute_path) or "<root>"
-            raise EvaluationError(f"{field} is not schema-valid at {location}: {errors[0].message}")
+            errors_by_field[field] = []
+            for error in errors:
+                location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+                errors_by_field[field].append(f"{location}: {error.message}")
+
+    if "independent_judge_verdicts" in evidence:
+        verdicts = evidence["independent_judge_verdicts"]
+        if not isinstance(verdicts, list):
+            errors_by_field["independent_judge_verdicts"] = ["independent_judge_verdicts must be an array"]
+        else:
+            try:
+                schema = load_json((root / "schemas" / "judge-verdict.schema.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                errors_by_field["independent_judge_verdicts"] = [f"judge-verdict schema is unavailable: {exc}"]
+            else:
+                verdict_errors: list[str] = []
+                validator = Draft202012Validator(schema, format_checker=FormatChecker())
+                for index, verdict in enumerate(verdicts):
+                    if not isinstance(verdict, Mapping):
+                        verdict_errors.append(f"[{index}]: verdict must be an object")
+                        continue
+                    for error in sorted(validator.iter_errors(verdict), key=lambda item: list(item.absolute_path)):
+                        location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+                        verdict_errors.append(f"[{index}].{location}: {error.message}")
+                if verdict_errors:
+                    errors_by_field["independent_judge_verdicts"] = verdict_errors
+    return errors_by_field
+
+
+def _validate_typed_evidence_documents(root: Path, evidence: Mapping[str, Any]) -> None:
+    errors_by_field = _typed_evidence_schema_errors(root, evidence)
+    for field, errors in errors_by_field.items():
+        raise EvaluationError(f"{field} is not schema-valid: {errors[0]}")
+
+
+def _schema_error_messages(errors_by_field: Mapping[str, list[str]], fields: frozenset[str], label: str) -> list[str]:
+    messages = [
+        f"{field}: {message}"
+        for field, errors in errors_by_field.items()
+        if field in fields
+        for message in errors
+    ]
+    return [f"typed {label} evidence schema validation failed: {'; '.join(messages)}"] if messages else []
+
+
+def _blocked_supply_chain_metrics() -> dict[str, Any]:
+    return {
+        "signed_release": False,
+        "provenance_verified": False,
+        "canonical_sbom": False,
+        "dependencies_locked": False,
+        "critical_exploitable_cve_count": None,
+    }
 
 
 def _verified_qualification_metrics(
@@ -326,19 +404,29 @@ def derive_verified_evidence_metrics(
     the private qualification manifest/evidence and all supply-chain records.
     """
 
-    qualification_metrics, _ = _verified_qualification_metrics(
-        evidence,
-        framework_version=framework_version or "",
-        verification_keys=verification_keys,
-        verification_key_ids=verification_key_ids,
-        schema_root=schema_root,
-    )
-    supply_metrics, _ = _verified_supply_chain_metrics(
-        evidence,
-        expected_bundle_root=expected_bundle_root,
-        verification_keys=verification_keys,
-        verification_key_ids=verification_key_ids,
-    )
+    validation_root = resolve_control_root(schema_root)
+    schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
+    qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
+    supply_schema_errors = _schema_error_messages(schema_errors, _SUPPLY_CHAIN_EVIDENCE_FIELDS, "supply-chain")
+    if qualification_schema_errors:
+        qualification_metrics = {}
+    else:
+        qualification_metrics, _ = _verified_qualification_metrics(
+            evidence,
+            framework_version=framework_version or "",
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+            schema_root=validation_root,
+        )
+    if supply_schema_errors:
+        supply_metrics = _blocked_supply_chain_metrics()
+    else:
+        supply_metrics, _ = _verified_supply_chain_metrics(
+            evidence,
+            expected_bundle_root=expected_bundle_root,
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+        )
     return {**qualification_metrics, **supply_metrics}
 
 
@@ -356,19 +444,29 @@ def evaluate_release_gates(
         raise EvaluationError("release evidence must be an object")
     # Caller-provided metrics are deliberately not trusted. Keep them out of
     # the evaluator entirely so a complete-looking JSON object cannot mint GA.
-    qualification_metrics, qualification_errors = _verified_qualification_metrics(
-        evidence,
-        framework_version=framework_version,
-        verification_keys=verification_keys,
-        verification_key_ids=verification_key_ids,
-        schema_root=schema_root,
-    )
-    supply_metrics, supply_errors = _verified_supply_chain_metrics(
-        evidence,
-        expected_bundle_root=expected_bundle_root,
-        verification_keys=verification_keys,
-        verification_key_ids=verification_key_ids,
-    )
+    validation_root = resolve_control_root(schema_root)
+    schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
+    qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
+    supply_schema_errors = _schema_error_messages(schema_errors, _SUPPLY_CHAIN_EVIDENCE_FIELDS, "supply-chain")
+    if qualification_schema_errors:
+        qualification_metrics, qualification_errors = {}, qualification_schema_errors
+    else:
+        qualification_metrics, qualification_errors = _verified_qualification_metrics(
+            evidence,
+            framework_version=framework_version,
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+            schema_root=validation_root,
+        )
+    if supply_schema_errors:
+        supply_metrics, supply_errors = _blocked_supply_chain_metrics(), supply_schema_errors
+    else:
+        supply_metrics, supply_errors = _verified_supply_chain_metrics(
+            evidence,
+            expected_bundle_root=expected_bundle_root,
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+        )
     metrics = {**qualification_metrics, **supply_metrics}
     verification_errors = qualification_errors + supply_errors
     gate_results = []

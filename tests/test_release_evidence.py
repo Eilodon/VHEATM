@@ -11,6 +11,7 @@ from vheatm_control.judge import expected_verdict_id
 from vheatm_control.qualification import (
     build_private_time_slice_manifest,
     build_qualification_evidence,
+    expected_qualification_evidence_id,
     sign_manifest,
     sign_qualification_evidence,
     verify_manifest,
@@ -20,6 +21,7 @@ from vheatm_control.qualification_private import expected_private_case_digest, e
 from vheatm_control.supply_chain import (
     build_supply_chain_attestation,
     build_vulnerability_scan,
+    expected_attestation_id,
     expected_provenance_statement_id,
     sign_provenance_statement,
     sign_supply_chain_attestation,
@@ -74,7 +76,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     signed_manifest, private_receipt = _release_private_fixture(tmp_path, key)
     verified_manifest = verify_manifest(signed_manifest, public_key=key.public_key(), key_id="qualification-key")
     judge_verdict = {
-        "schema_version": "1.0.0", "packet_id": "JPK-" + "a" * 64, "request_id": "JDR-" + "b" * 64,
+        "schema_version": "1.0.0", "packet_id": "JPK-" + "A" * 64, "request_id": "JDR-" + "B" * 64,
         "judge_provider_id": "judge.provider", "judge_model_id": "judge-model", "config_digest": "c" * 64,
         "order_digest": "d" * 64, "status": "complete", "epistemic_status": "independent_candidate",
         "decisions": [{"item_id": "case-1", "label": "yes", "confidence": 0.9}], "generated_at": "2026-08-01T00:00:00Z",
@@ -162,6 +164,38 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
     Draft202012Validator(load_json((ROOT / "schemas" / "release-gate-report.schema.json").read_text())).validate(report)
+
+    schema_invalid = dict(evidence["qualification_evidence"])
+    schema_invalid["unexpected_runtime_field"] = "must be rejected by the evaluator boundary"
+    schema_invalid["evidence_id"] = expected_qualification_evidence_id(schema_invalid)
+    schema_invalid = sign_qualification_evidence(schema_invalid, private_key=key, key_id="qualification-key")
+    schema_tampered_evidence = {**evidence, "qualification_evidence": schema_invalid}
+    schema_blocked = evaluate_release_gates(
+        "17.0.0-dev.1",
+        schema_tampered_evidence,
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert schema_blocked["summary"]["ga_eligible"] is False
+    assert schema_blocked["summary"]["unknown"] >= 1
+
+    supply_schema_invalid = dict(evidence["supply_chain_attestation"])
+    supply_schema_invalid["unexpected_runtime_field"] = "must be rejected by the evaluator boundary"
+    supply_schema_invalid["attestation_id"] = expected_attestation_id(supply_schema_invalid)
+    supply_schema_invalid = sign_supply_chain_attestation(supply_schema_invalid, private_key=key, key_id="supply-chain-key")
+    supply_schema_blocked = evaluate_release_gates(
+        "17.0.0-dev.1",
+        {**evidence, "supply_chain_attestation": supply_schema_invalid},
+        evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=base_attestation["bundle_root"],
+        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
+        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        schema_root=ROOT,
+    )
+    assert next(item for item in supply_schema_blocked["gates"] if item["gate_id"] == "RG-13")["status"] == "fail"
 
     missing_receipt = dict(evidence)
     missing_receipt.pop("private_corpus_receipt")
