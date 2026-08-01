@@ -856,3 +856,77 @@ Start the next cycle when a new critical RG metric/sample basis is added or an e
 - Threshold predicates do not define physical metric domains; bounded rates/CI and non-negative count/timing rules must be frozen separately.
 - The smallest useful regression is a one-case receipt with an oversized critical claim because it directly exercises the false-assurance path.
 - Population binding narrows the blocker but deliberately does not pretend to prove independent sampling or confidence-interval correctness.
+
+## ADR-13 — Bind qualification evidence to blind judge packets and exact case coverage
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `independent-judge` `private-corpus` `release-gates`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when the external judge service, packet schema, or private-case sampling contract changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local packet/evidence binding; `NOT_PRODUCTION_QUALIFIED` for unavailable external judge independence, custody, and statistical adjudication.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `REPLAY`
+**VOLATILITY:** `WATCHFUL` — provider/model isolation, packet ordering, and private sampling must remain explicit as qualification contracts evolve.
+
+### Context
+
+The release evaluator required a signed, content-addressed judge verdict, but the verdict could be supplied without its corresponding blind packet. Even when a packet sidecar was present, a signed verdict could be reconstructed with a different `config_digest` or with decision item IDs that were not the packet's private cases. A receipt population count alone therefore did not prove that the critical cases used by RG-05/RG-08 had actually been independently judged.
+
+### Decision
+
+Treat the blind packet as a first-class typed release-evidence record. Validate every supplied packet against `judge-packet.schema.json` and its content identity; include packet IDs in release-report evidence bindings. For every verdict referenced by qualification evidence, require the referenced packet, validate the verdict identity, bind request/provider/model/config/order fields exactly, and require decision item IDs to cover the packet items in the packet's randomized order. For critical metrics whose canonical basis is `private_case_trials`, count only decision IDs that intersect the verified private receipt's case references; if that independently judged coverage is below `sample_count`, discard all qualification metrics and leave affected gates `unknown`.
+
+### Options Considered
+
+- Trust verdict IDs without packets: rejected because a content-addressed verdict does not prove what was shown to the judge.
+- Infer judge coverage from the private receipt `case_count`: rejected because population availability is not adjudication evidence.
+- Accept arbitrary verdict decision IDs: rejected because a signed verdict could claim private cases that were not in the blind packet.
+- Use public seeded replay as the independent judge: rejected because replay is deterministic local evidence, not independent provider/model/context separation or private gold qualification.
+
+### Impact
+
+Schemas changed: `release-gate-report.schema.json` recognizes `independent_judge_packet` evidence bindings; the existing canonical `judge-packet.schema.json` is now enforced at release-evidence ingestion.
+Components changed: judge binding API, release evaluator, release-report binding derivation, judge/release regression fixtures and tests, lifecycle record.
+Breaking change: **YES** for release evidence that omits packet sidecars, mismatches packet/verdict identity, or claims more critical private trials than the packet actually covers.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `blind packet → verdict identity/binding → private case coverage → verified qualification metrics → RG-05/RG-08 → release report evidence bindings`.
+Cascade Review: ✅ Done — targeted packet binding and partial-coverage regressions, full suite, validator, seeded replay, bundle, lock, and package-build checks are required before integration.
+
+### Consequences
+
+- A judge verdict cannot become qualification evidence merely because its signature/content ID is valid; the packet and exact item coverage are part of the trust boundary.
+- Local fixtures must construct packets over the same private receipt case IDs used by critical measurements.
+- The implementation proves local fail-closed binding only; it does not create private gold data, external provider qualification, independent judge custody, valid confidence intervals, or production release evidence.
+- Missing external judge service and private corpus evidence remain `unknown`/blocked, never synthetic `complete`.
+
+### Evidence
+
+- [verified 2026-08-01] RED regression with an empty packet sidecar leaves RG-05 `unknown` even when the signed verdict is present.
+- [verified 2026-08-01] RED regression with one independently judged case and a 300-case critical claim leaves RG-05 `unknown` with a private-case coverage diagnostic.
+- [verified 2026-08-01] RED regression with a re-signed verdict whose `config_digest` differs from its packet leaves RG-05 `unknown`.
+- [verified 2026-08-01] Verdict binding regression rejects decision IDs that do not exactly cover packet items in randomized order.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External independent judge, private gold corpus, key custody, statistical method validation, provider qualification, fresh vulnerability evidence, host namespace capability, and shadow/canary evidence remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when the external judge adapter or private qualification feed is connected, or when packet/verdict schemas gain a new identity-bearing field; add its binding regression and rerun the complete RG-00…RG-15 contract suite.
+
+### Cycle Retrospective
+
+- A verdict's content identity answers “which verdict,” not “what context and cases were judged.”
+- Packet sidecars must be included in the report's immutable evidence binding set or they can disappear from downstream provenance.
+- Exact packet-item coverage is the smallest reliable local proof that critical private-case counts correspond to independently adjudicated cases.
+- This closes a local evidence-integrity gap without pretending that a synthetic fixture is an external qualification result.
