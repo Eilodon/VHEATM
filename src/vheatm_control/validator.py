@@ -51,6 +51,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "python-linkage.schema.json",
         "qualification-evidence.schema.json",
         "qualification-manifest.schema.json",
+        "qualification-run.schema.json",
         "release-gate-report.schema.json",
         "judge-packet.schema.json",
         "judge-verdict.schema.json",

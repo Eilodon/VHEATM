@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/qualification-run.schema.json",
+  "title": "VHEATM public seeded qualification run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "framework_version", "bundle_root", "corpus_id", "corpus_version", "visibility", "runner_id", "runner_version", "status", "evidence_state", "case_results", "measurements", "generated_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "run_id": {"type": "string", "pattern": "^QRL-[A-F0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "corpus_id": {"type": "string", "pattern": "^EVC-[A-F0-9]{64}$"},
+    "corpus_version": {"type": "string", "minLength": 1},
+    "visibility": {"const": "public_seeded"},
+    "runner_id": {"type": "string", "minLength": 1},
+    "runner_version": {"type": "string", "minLength": 1},
+    "status": {"enum": ["complete", "partial", "blocked"]},
+    "evidence_state": {"const": "unverified"},
+    "case_results": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["case_id", "family", "expected", "observed", "outcome", "details", "method_digest", "evidence_refs"],
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^EVC-[A-Z0-9-]+$"},
+          "family": {"enum": ["authority", "determinism", "context", "typed_execution", "evidence", "security", "policy", "recovery", "privacy", "supply_chain"]},
+          "expected": {"enum": ["reject", "unknown", "block", "pass"]},
+          "observed": {"enum": ["reject", "unknown", "block", "pass"]},
+          "outcome": {"enum": ["pass", "fail", "unknown"]},
+          "details": {"type": "object"},
+          "method_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["metric", "value", "sample_count", "confidence_lower", "method_digest", "evidence_refs"],
+        "properties": {
+          "metric": {"type": "string", "minLength": 1},
+          "value": {"type": ["number", "boolean"]},
+          "sample_count": {"type": "integer", "minimum": 1},
+          "confidence_lower": {"type": "number", "minimum": 0},
+          "method_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "generated_at": {"type": "string", "format": "date-time"}
+  }
+}

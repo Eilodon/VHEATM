@@ -26,18 +26,20 @@
 - External providers now have a bounded HTTPS transport with TLS, redirect refusal, timeout/response caps, metadata-only payloads, and broker-before-network ordering; pilot completion requires content-addressed completed provider runs.
 - Qualification evidence now binds to content-addressed independent-judge verdicts, rejects undeclared metrics, enforces critical sample floors, and validates typed evidence schemas at CLI ingest.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
+- Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 187 passed.
-- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `9ad5fb4f3f765b337820e3ba270e9428cea1812915319ab41b9adc532ae7c797` with 155 canonical entries.
+- `.venv/bin/pytest -o addopts=''` — 211 passed.
+- `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 10/10 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs.
+- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `1711060823c7eb361cb1d01c1de2cc6c1ec767e736d885dc1655e41f6f86f2bb` with 169 canonical entries.
 - Session, analyzer, judge, capability, release-gate, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell interpolation, or target-code import/execution in the control runtime; the only subprocess boundary is the explicit digest-bound sandbox adapter with `shell=False`, while activation remains parser-backed (`ast.literal_eval` only).
 
 ## Explicitly not complete
 
-Open release work is intentionally evidence-dependent: external key custody/signing service, fresh vulnerability scan feed, private/time-sliced gold data, allowlisted external provider qualification, host-level namespace capability, and a successful shadow/canary observation run are not fabricated here. The implementation now has enforcing/verifying seams and typed records for each; no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.
+Open release work is intentionally evidence-dependent: external key custody/signing service, fresh vulnerability scan feed, private/time-sliced gold data, allowlisted external provider qualification, host-level namespace capability, and a successful shadow/canary observation run are not fabricated here. The seeded runner is a replayable local test artifact, not a private or independently judged qualification source. The implementation now has enforcing/verifying seams and typed records for each; no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.

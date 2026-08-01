@@ -123,8 +123,9 @@ Positive:
 
 Known limitations:
 
-- The action reference monitor, real sandbox enforcement, external analyzer providers, private/time-sliced gold corpus, dependency lock, vulnerability evidence, and signing/key service are not implemented.
+- Production qualification of the action reference monitor and external analyzer providers, plus private/time-sliced gold corpus, vulnerability evidence, signing/key custody, and canary operations, remains unavailable; local enforcement seams and adapters are implemented but do not prove production readiness.
 - The release evaluator can honestly report `unknown`/`fail`, but it does not manufacture qualification metrics.
+- The public seeded corpus has an executable static runner that emits replayable `QRL-*` records with observed measurements while retaining `public_seeded` visibility and `unverified` evidence state; it is explicitly not a substitute for private gold data or independent adjudication.
 
 ### Evidence
 
@@ -293,3 +294,73 @@ Known pattern debt: none newly opened. Release qualification debt remains: exter
 ### Next Cycle Trigger
 
 Start the next cycle when any external prerequisite is available. Bind its identity/digest, add crash/isolation/replay evidence, execute RG measurements, and retain `unknown` or `blocked` on any missing observation.
+
+## ADR-5 — Executable public seeded qualification replay
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `determinism` `evaluation-corpus` `release-gates`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when a private gold corpus or independent qualification service is connected.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local replay and schema/content binding; `NOT_PRODUCTION_QUALIFIED` for private and independently judged release claims.
+**LAST CONFIRMED:** 2026-08-01 — `METRICS`
+**VOLATILITY:** `WATCHFUL` — the seeded corpus, runner methods, and release metric definitions must remain bound to the canonical bundle.
+
+### Context
+
+The canonical ten-case evaluation corpus was schema-validated but had no executable path that produced replayable observations. Treating its expected labels or hand-written metric objects as qualification would leave a measurement gap and could create false RG evidence.
+
+### Decision
+
+Add a static-dispatch public qualification runner and `qualification-run` schema. The runner executes every canonical seeded case through real local control APIs, records content-addressed `QRL-*` output, derives only observed measurements, runs determinism at the corpus-declared 1,000 evaluations, and self-validates the typed record. Its visibility is `public_seeded` and its evidence state is permanently `unverified`; it cannot satisfy the signed private manifest, independent judge, supply-chain, or pilot gates.
+
+### Options Considered
+
+- Continue schema-only corpus validation: rejected because it cannot expose replay behavior or measured control outcomes.
+- Convert the seeded run directly into `qualification-evidence`: rejected because public seeded cases are not private gold data and have no independent judge verdicts or signing custody.
+- Dispatch case behavior through generated code or dynamic imports: rejected because canonical policy forbids model-generated execution and dynamic interpretation at the control boundary.
+
+### Impact
+
+Schemas changed: `qualification-run.schema.json`
+Components changed: public qualification runner, validator, packaging entry points, lifecycle/ADR evidence.
+Breaking change: NO
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `eval corpus → static handlers → observed case results → typed measurements → replay record`; no path to GA status.
+Cascade Review: ✅ Done — schema, repository validator, full tests, bundle/build checks, and tamper tests cover the changed boundary.
+
+### Consequences
+
+- The remaining local measurement gap is executable and repeatable: all ten seeded cases run, and the run can be independently re-hashed from its content.
+- Measurements expose sample counts and conservative `confidence_lower: 0`; they are observations, not statistical qualification claims.
+- The runner intentionally leaves private corpus, independent judge, signing/key custody, external provider, vulnerability, sandbox-host, and canary prerequisites unresolved.
+
+### Evidence
+
+- [verified 2026-08-01] `vheatm-validate --root .` passes with the new schema registered as required.
+- [verified 2026-08-01] `pytest -o addopts=''` passes with 211 tests, including deterministic replay, all-case coverage, schema validation, and run tamper rejection.
+- [verified 2026-08-01] `vheatm_control.qualification_runner` executes 10/10 cases and emits a `QRL-*` record with `public_seeded`/`unverified` state and 14 observed measurements; the determinism handler executes 1,000 evaluations.
+- [verified 2026-08-01] Invalid corpus identity and mutated run content fail closed before the run can be treated as typed evidence.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release qualification debt remains intentionally open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a private time-sliced corpus and independent judge service are available, or when the seeded runner's canonical case/method set changes; in either event rebind the bundle root and rerun all RG measurements.
+
+### Cycle Retrospective
+
+- Schema validation alone hid an important distinction between “corpus is well-formed” and “control behavior was observed.”
+- A replay record must carry its own method and evidence references; otherwise a deterministic hash only proves serialization, not what was measured.
+- Public seeded results are useful for regression and local RG diagnostics but cannot be promoted into private qualification by changing a status field.
+- Running the full 1,000 determinism samples is cheap enough locally and removes an avoidable shortcut at the measurement boundary.
