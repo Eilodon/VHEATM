@@ -80,3 +80,24 @@ modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFIC
 - Completed provider outcomes require an allowed content-valid network receipt: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-10 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-ARCHITECTURE-DECISIONS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: retire-duplicate-policy-authority
+
+### New Domain Terms Added to CONTEXT.md
+- Non-authoritative migration archive: added ✅
+
+### Bug Patterns
+- Duplicate executable policy authority remained importable: observed and fixed by canonical broker shim plus non-runtime archive; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Deprecation comments do not remove an executable bypass: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Compatibility surfaces may not implement a second authorization engine: added to CONTEXT.md Architectural Decisions ✅
+
+---
