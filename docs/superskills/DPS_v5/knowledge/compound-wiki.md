@@ -636,3 +636,25 @@ modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-INDEPENDENT-JUDGE]
 - Candidate evidence remains non-qualifying until a bundle-bound external trust handoff verifies its provenance and role authority: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-35 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS]
+---
+
+## Cycle: candidate-host-qualification
+
+### New Domain Terms Added to CONTEXT.md
+- Candidate host qualification: added ✅
+
+### Bug Patterns
+- A default host capability failure could be confused with a runtime implementation failure, or a privileged qualification environment could be silently promoted to production authority: observed and prevented by binding HQR/HAT to the actual host and retaining candidate status; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A capable qualification container does not authorize a privileged production fallback: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Keep privileged host qualification as an external candidate handoff; never expand the runtime trust boundary just to manufacture RG-09 evidence: added to CONTEXT.md Architectural Decisions ✅
+
+---
