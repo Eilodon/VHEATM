@@ -101,3 +101,25 @@ modules: [MOD-AGENT-SECURITY, MOD-ARCHITECTURE-DECISIONS, MOD-EXECUTION-FIDELITY
 - Compatibility surfaces may not implement a second authorization engine: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-11 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: evaluator-evidence-schema-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Evaluator evidence boundary: added ✅
+
+### Bug Patterns
+- Signed-but-schema-invalid release evidence bypassed direct evaluator validation: observed and fixed at the shared boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A valid signature is not schema validity: added to CONTEXT.md Domain Gotchas ✅
+- Direct library APIs can bypass CLI-only validation: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Every evaluator entry point must schema/format validate before cryptographic metric derivation: added to CONTEXT.md Architectural Decisions ✅
+
+---
