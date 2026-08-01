@@ -473,3 +473,25 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Supply-chain evidence must be recomputed from the current bundle at the consuming release gate, including dependencies and lock metadata: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-28 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: host-hard-stop-qualification-handoff
+
+### New Domain Terms Added to CONTEXT.md
+- Host qualification handoff: added ✅
+
+### Bug Patterns
+- A host qualification runner could expose a hard-stop-looking record without deriving status from observations or proving the backend was canonical: observed and fixed with canonical backend-name rejection, content-bound observations, and derived status/reference-monitor state; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Bubblewrap presence is not namespace capability; preflight unavailability must remain a typed blocked/unverified result with no p99 metric: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Host timing must be measured through the real sandbox boundary and handed off as unverified evidence until independent host authority and private population binding exist: added to CONTEXT.md ✅
+
+---

@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 19 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 20 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -29,6 +29,7 @@
 - **Unauthorized tool-class matrix:** the deterministic seeded qualification exercise that submits schema-valid, policy-invalid requests for read, write, execute, network, and secrets and records broker denials without invoking an action backend. <!-- from ADR: ADR-25 -->
 - **Extracted-corpus re-baseline:** the explicit provenance state used when the original legacy archive is unavailable; the extracted corpus digest is verified, while archive verification remains false. <!-- from ADR: ADR-26 -->
 - **Canonical supply-chain binding:** the release-bound verification that recomputes SBOM, dependency, and lock metadata from the current control bundle before signed RG-13 evidence can contribute metrics. <!-- from ADR: ADR-27 -->
+- **Host qualification handoff:** a real local sandbox probe emitted as content-addressed `HQR-*` evidence with `evidence_state=unverified`; it is a diagnostic handoff and cannot authorize RG-09 or GA. <!-- from ADR: ADR-28 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -56,6 +57,7 @@
 - Passing gates cannot use `SRC-*` records as direct evidence; a source must remain lineage for a gate-bound claim or typed artifact. <!-- from ADR: ADR-24 -->
 - Legacy archive provenance must declare either a verifiable original archive or an unavailable archive with a content-addressed extracted-corpus root; an absent archive cannot retain a verified archive digest. <!-- from ADR: ADR-26 -->
 - A signed supply-chain record must bind to the source-derived current bundle inventory, not only to a self-consistent SBOM digest or declared bundle-root string. <!-- from ADR: ADR-27 -->
+- Host hard-stop evidence must come from the real digest-bound sandbox kill path; local probes remain unverified until an independent host authority binds deployment identity, capability, and population. <!-- from ADR: ADR-28 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -84,3 +86,4 @@
 - [2026-08] Five broker denials do not prove host hard-stop latency | Keep `unauthorized_block_rate` evidence separate from `hard_stop_p99_seconds`, which remains unknown without a real host-level timing probe. <!-- from ADR: ADR-25 -->
 - [2026-08] A registry can carry a plausible legacy archive hash even when the archive is absent | Encode `archive_status` and `source_basis`, bind the extracted corpus digest, and reject an unavailable archive marked verified. <!-- from ADR: ADR-26 -->
 - [2026-08] A signed attestation can describe the wrong bytes while remaining internally consistent | Rebuild the canonical bundle at the consuming RG-13 boundary and compare every SBOM/dependency-lock field before deriving supply-chain metrics. <!-- from ADR: ADR-27 -->
+- [2026-08] A bwrap binary can exist while the host denies the required namespace | Record preflight as `unavailable` with no hard-stop metric; never reinterpret broker denial or preflight timing as RG-09 p99 evidence. <!-- from ADR: ADR-28 -->
