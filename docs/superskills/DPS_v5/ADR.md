@@ -930,3 +930,74 @@ Start the next cycle when the external judge adapter or private qualification fe
 - Packet sidecars must be included in the report's immutable evidence binding set or they can disappear from downstream provenance.
 - Exact packet-item coverage is the smallest reliable local proof that critical private-case counts correspond to independently adjudicated cases.
 - This closes a local evidence-integrity gap without pretending that a synthetic fixture is an external qualification result.
+
+## ADR-14 — Re-verify provider authorization chains before pilot completion
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `external-provider` `reference-monitor` `release-gates`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when provider-run or network-receipt schemas change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local receipt-chain re-verification; `NOT_PRODUCTION_QUALIFIED` for external provider allowlisting and operational pilot evidence.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `PACKAGE BUILD`
+**VOLATILITY:** `WATCHFUL` — provider request fields, broker controls, and pilot observation contracts are trust-boundary inputs.
+
+### Context
+
+`complete_pilot()` checked a provider run's content ID, completed status, response object, and `network_receipt.decision == allow`. Because the provider run ID is content-addressed, a caller could alter the embedded receipt action digest and recompute the run ID; pilot completion then accepted a record whose receipt no longer matched the brokered network request. The provider builder performed the stronger request/receipt checks, but persisted pilot inputs were not re-verified at the later boundary.
+
+### Decision
+
+Persist the canonical redacted network request inside every provider run. Centralize network-request and receipt-chain checks in `verify_provider_run()`: validate the HTTPS/redacted network request, receipt identity, request/action digests, reconstructed broker decision semantics, status/epistemic state, response digest, and completed-response requirement. `complete_pilot()` must call this verifier before accepting any provider run; a malformed or rebound receipt remains a typed pilot error and cannot become completed shadow/canary evidence.
+
+### Options Considered
+
+- Trust the provider-run content ID: rejected because an attacker can re-content-address a tampered record.
+- Recheck only `decision == allow`: rejected because allow is not bound to destination, request digest, or action digest.
+- Reuse only builder-time validation: rejected because pilot consumes persisted/untrusted records at a later boundary.
+- Accept a completed run without the redacted network request: rejected because the receipt's digests cannot be independently recomputed against the authorized action.
+
+### Impact
+
+Schemas changed: `provider-run.schema.json` now requires the redacted canonical network request.
+Components changed: provider-run builder/verifier, pilot completion boundary, provider-run schema, pilot regression fixture, lifecycle record.
+Breaking change: **YES** for persisted provider runs that omit the network request or cannot reproduce their receipt authorization chain.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `network request → broker decision → tool receipt → provider run → pilot observation → shadow/canary completion`.
+Cascade Review: ✅ Done — RED tampered-receipt regression, targeted provider/pilot tests, full suite, validator, bundle, lock, and package build cover the changed chain.
+
+### Consequences
+
+- Pilot completion no longer promotes a self-rehashed provider record into evidence without rechecking the authorization chain.
+- Provider runs remain metadata-only; the persisted request contains no source payload, only the approved network metadata and redaction declaration.
+- Local verification still does not qualify an external provider, prove host enforcement, or create a successful operational pilot; those external facts remain unavailable and fail-closed.
+
+### Evidence
+
+- [verified 2026-08-01] RED regression showed a tampered `action_digest` with a recomputed `PRV-*` ID was accepted by the old pilot boundary.
+- [verified 2026-08-01] GREEN targeted provider/pilot tests passed after `verify_provider_run()` was required by completion.
+- [verified 2026-08-01] Full repository verification remains required before integration; no pilot `complete` claim is minted for unavailable external evidence.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External provider allowlisting, key custody, fresh vulnerability evidence, host namespace capability, private qualification, independent judging, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when an external provider-run feed or operational pilot store is connected, or when the provider/network schemas gain a new identity-bearing field; add its persisted-record regression and rerun RG-00…RG-15 checks.
+
+### Cycle Retrospective
+
+- Content-addressing detects accidental mutation but does not establish that the content was authorized.
+- Every persisted execution record needs a later semantic re-verification boundary, not only a builder-time check.
+- Storing only redacted network metadata gives the pilot verifier enough material to recompute authorization without leaking source payloads.
