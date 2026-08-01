@@ -592,3 +592,25 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Release and canary boundaries resolve role keys only from a bundle/framework/time-bound, revocation-aware external registry; direct role-key maps remain unavailable and the registry ID binds report identity: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-33 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-INDEPENDENT-JUDGE, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
+---
+
+## Cycle: canonical-independent-judge-provider-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical judge descriptor: added ✅
+
+### Bug Patterns
+- An independent judge packet could name an unallowlisted provider and omit version/endpoint/profile identity: observed and fixed at packet construction and every packet-validation path; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A judge provider/model label and configuration digest are not sufficient implementation identity: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Independent judge packets must resolve their implementation identity through the canonical provider descriptor; pending local fixtures remain non-qualifying: added to CONTEXT.md Architectural Decisions ✅
+
+---
