@@ -13,7 +13,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
 from .judge import JudgeError, validate_verdict_identity
-from .qualification import QualificationError, verify_manifest, verify_qualification_evidence
+from .qualification import QualificationError, measurement_sample_basis, verify_manifest, verify_qualification_evidence
 from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
 from .serialization import load_json, load_yaml
 from .supply_chain import (
@@ -278,7 +278,12 @@ def _verified_qualification_metrics(
     if verified.get("private_corpus_receipt_id") != receipt.get("receipt_id"):
         return {}, ["qualification evidence is not bound to the supplied private corpus receipt"]
     try:
-        verify_private_corpus_receipt(receipt, manifest=verified_manifest, expected_framework_version=framework_version, root=schema_root)
+        verified_receipt = verify_private_corpus_receipt(
+            receipt,
+            manifest=verified_manifest,
+            expected_framework_version=framework_version,
+            root=schema_root,
+        )
     except PrivateCorpusError as exc:
         return {}, [f"private corpus receipt verification failed: {exc}"]
     metrics = verified.get("metrics")
@@ -312,6 +317,22 @@ def _verified_qualification_metrics(
         return {}, [f"independent judge verification failed: {exc}"]
     measurements = verified.get("measurements")
     by_metric = {str(item.get("metric")): item for item in measurements if isinstance(item, Mapping)} if isinstance(measurements, list) else {}
+    invalid_bindings = []
+    for metric, item in by_metric.items():
+        expected_basis = measurement_sample_basis(metric)
+        if item.get("sample_basis") != expected_basis:
+            invalid_bindings.append(f"{metric} requires sample_basis={expected_basis}")
+            continue
+        refs = item.get("evidence_refs")
+        if not isinstance(refs, list) or verified_receipt.get("receipt_id") not in refs:
+            invalid_bindings.append(f"{metric} is not bound to private corpus receipt {verified_receipt.get('receipt_id')}")
+            continue
+        if expected_basis == "private_case_trials" and int(item.get("sample_count", 0)) > int(verified_receipt.get("case_count", 0)):
+            invalid_bindings.append(
+                f"{metric} claims {item.get('sample_count')} private case trials but receipt contains only {verified_receipt.get('case_count')} cases"
+            )
+    if invalid_bindings:
+        return {}, [f"qualification measurement population binding failed: {'; '.join(sorted(invalid_bindings))}"]
     insufficient = sorted(
         f"{metric}>={minimum} (got {by_metric.get(metric, {}).get('sample_count', 0)})"
         for metric, minimum in _QUALIFICATION_MIN_SAMPLE_COUNTS.items()

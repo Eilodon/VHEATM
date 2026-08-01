@@ -16,6 +16,54 @@ class QualificationError(ValueError):
     """Raised when qualification evidence is malformed, unbound, or unverifiable."""
 
 
+_SAMPLE_BASIS_BY_METRIC = {
+    "determinism_runs": "repeated_evaluation",
+    "critical_recall_lower_ci": "private_case_trials",
+    "critical_miss_count": "private_case_trials",
+    "critical_family_asr_upper_ci": "private_case_trials",
+    "critical_unsafe_action_count": "private_case_trials",
+}
+_SAMPLE_BASES = frozenset({"private_case_trials", "repeated_evaluation", "private_corpus_observation"})
+_BOUNDED_METRICS = frozenset(
+    {
+        "mutation_rejection_rate", "route_equivalence_rate", "plan_digest_stability_rate", "selection_digest_stability_rate",
+        "unknown_diagnostic_rate", "forgery_rejection_rate", "high_critical_lineage_rate", "high_critical_proof_or_judge_rate",
+        "critical_recall_lower_ci", "judge_kappa_lower_ci", "order_consistency_rate", "critical_family_asr_upper_ci",
+        "unauthorized_block_rate", "resume_digest_match_rate", "peak_disclosure_ratio", "trace_completeness_rate",
+    }
+)
+_NON_NEGATIVE_METRICS = frozenset(
+    {
+        "determinism_runs", "false_inactive_count", "unrelated_pass_claims", "critical_miss_count", "high_critical_autoclose_count",
+        "self_judge_final_authority_count", "critical_unsafe_action_count", "hard_stop_p99_seconds", "duplicate_effect_count",
+        "planner_router_p95_ms", "secret_pii_leakage_count", "experimental_selected_count", "p0_p1_open_count",
+    }
+)
+_INTEGER_METRICS = frozenset(
+    {
+        "determinism_runs", "false_inactive_count", "unrelated_pass_claims", "critical_miss_count", "high_critical_autoclose_count",
+        "self_judge_final_authority_count", "critical_unsafe_action_count", "duplicate_effect_count", "secret_pii_leakage_count",
+        "experimental_selected_count", "p0_p1_open_count",
+    }
+)
+
+
+def measurement_sample_basis(metric: str) -> str:
+    """Return the canonical population semantics for a release metric."""
+
+    return _SAMPLE_BASIS_BY_METRIC.get(metric, "private_corpus_observation")
+
+
+def metric_domain_error(metric: str, value: Any) -> str | None:
+    if metric in _BOUNDED_METRICS and (isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1):
+        return f"{metric} must be a numeric value in [0, 1]"
+    if metric in _NON_NEGATIVE_METRICS and (isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0):
+        return f"{metric} must be non-negative"
+    if metric in _INTEGER_METRICS and (isinstance(value, bool) or not isinstance(value, int)):
+        return f"{metric} must be an integer count"
+    return None
+
+
 def _canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
@@ -65,17 +113,22 @@ def _validate_measurements(measurements: Sequence[Mapping[str, Any]]) -> dict[st
         metric = str(raw.get("metric", ""))
         if not metric or metric in metrics:
             raise QualificationError("qualification metrics must be unique and named")
+        if raw.get("sample_basis") not in _SAMPLE_BASES:
+            raise QualificationError("qualification measurements require a supported sample basis")
         value = raw.get("value")
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if not isinstance(value, bool):
                 raise QualificationError("qualification metric values must be numeric or boolean")
         if isinstance(value, (int, float)) and not isinstance(value, bool) and not math.isfinite(float(value)):
             raise QualificationError("qualification metric values must be finite")
+        domain_error = metric_domain_error(metric, value)
+        if domain_error:
+            raise QualificationError(f"qualification metric domain invalid: {domain_error}")
         if not isinstance(raw.get("sample_count"), int) or raw["sample_count"] < 1:
             raise QualificationError("qualification measurements require positive sample counts")
         lower = raw.get("confidence_lower")
-        if not isinstance(lower, (int, float)) or isinstance(lower, bool) or lower < 0:
-            raise QualificationError("qualification measurements require a non-negative confidence lower bound")
+        if not isinstance(lower, (int, float)) or isinstance(lower, bool) or not 0 <= lower <= 1:
+            raise QualificationError("qualification measurements require a confidence lower bound in [0, 1]")
         method_digest = raw.get("method_digest")
         if not isinstance(method_digest, str) or len(method_digest) != 64 or any(char not in "0123456789abcdef" for char in method_digest):
             raise QualificationError("qualification measurements require a lowercase SHA-256 method digest")
@@ -185,7 +238,11 @@ def build_qualification_evidence(
     normalized_judge_refs = sorted(set(str(ref) for ref in judge_verdict_refs))
     if not normalized_judge_refs or any(not re.fullmatch(r"JVR-[A-F0-9]{64}", ref) for ref in normalized_judge_refs):
         raise QualificationError("qualification evidence requires content-addressed independent judge verdict references")
-    normalized = [dict(item) for item in measurements]
+    normalized = []
+    for item in measurements:
+        normalized_item = dict(item)
+        normalized_item.setdefault("sample_basis", measurement_sample_basis(str(normalized_item.get("metric", ""))))
+        normalized.append(normalized_item)
     if not normalized:
         raise QualificationError("qualification evidence requires at least one measurement")
     metrics = _validate_measurements(normalized)
