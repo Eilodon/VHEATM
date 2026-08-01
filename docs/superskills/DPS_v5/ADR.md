@@ -2414,3 +2414,76 @@ Start the next cycle when an external judge descriptor is proposed or `judge.tes
 - Provider/model labels and configuration digests are not sufficient implementation identity when endpoint and adapter profile remain caller-controlled.
 - A pending canonical descriptor closes a routing/identity gap without laundering a test service into qualification evidence.
 - Packet identity must be revalidated at every downstream evidence boundary, not only when the packet is first constructed.
+
+## ADR-34 — Record external prerequisite probe without laundering candidate evidence
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `release-evidence` `vulnerability-scan` `external-prerequisites` `fail-closed`
+**Change Classification:** `EXTERNAL CONSTRAINT CHANGE`
+**Review date:** 2026-09-02 — or earlier when a trusted scanner attestation, host authority, or qualification handoff is supplied.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for the observed local scanner and host probe; `NOT_PRODUCTION_QUALIFIED` because scanner provenance, authority custody, private qualification, qualified providers, and pilot observations remain unavailable.
+**LAST CONFIRMED:** 2026-08-02 — `METRICS`, `VALIDATION`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — vulnerability databases, scanner versions, host capabilities, and external authority records change independently of the control bundle.
+
+### Context
+
+The remaining roadmap blockers are primarily external evidence obligations. The host includes Trivy and bubblewrap, so the workspace can produce useful candidate observations, but local output, a local key, or an installed binary must not be promoted to trusted RG-13/RG-09 evidence. The lifecycle plan also needed to distinguish closed local policy migration from the still-open external handoff.
+
+### Decision
+
+Record the real prerequisite observations in the lifecycle plan while preserving the existing fail-closed release boundary. A Trivy 0.70.0 filesystem scan with a refreshed vulnerability database was run both with and without unfixed findings excluded; both returned zero vulnerability records. The result is candidate evidence only until an authorized scanner/provenance signer and externally signed bundle-bound trust registry are supplied. The exact bubblewrap namespace preflight remains unavailable and therefore produces no hard-stop metric. No local callback, ephemeral key, seeded corpus, or test endpoint is treated as production qualification.
+
+### Options Considered
+
+- Mark RG-13 pass because the local scanner found zero vulnerabilities: rejected because the scanner result has no trusted role authority or provenance chain.
+- Treat installed bubblewrap and `unprivileged_userns_clone=1` as host qualification: rejected because the mandatory preflight actually fails with `Operation not permitted`.
+- Convert the local judge callback into an external qualification source: rejected because process isolation and packet binding do not create external service custody, private gold data, or independent signing authority.
+
+### Impact
+
+Schemas changed: none
+Components changed: lifecycle blocker ledger and ADR evidence only
+Breaking change: NO
+
+IMPACT RADIUS: **MODERATE**
+BLAST RADIUS: CONTAINED
+Cascades: `scanner/host observation → candidate evidence ledger → external trust handoff → RG-09/RG-13`; no runtime authorization path changed.
+Cascade Review: ✅ Done — canonical validator and full test suite pass; release evaluator remains fail-closed for missing external authority.
+
+### Consequences
+
+- The latest local observations are reproducible and discoverable without being mistaken for GA evidence.
+- RG-13 remains unknown despite the zero-finding scan because trusted scanner signature, provenance, and registry custody are absent.
+- RG-09 remains unknown because namespace enforcement did not become available; no latency statistic is synthesized.
+- The goal remains active for external qualification handoff; unavailable prerequisites remain `unknown`/`blocked`.
+
+### Evidence
+
+- [verified 2026-08-02] Trivy `0.70.0` complete filesystem scan: 0 vulnerability records, 0 critical/high/medium/low/unknown; candidate report digest `0aa84c9bc4ca5e3ee1af3f0088873c48e663990e578dd987a93849ff692e11ec`.
+- [verified 2026-08-02] Trivy scan with `--ignore-unfixed`: 0 vulnerability records; candidate report digest `1fa3dc151bb5eec2ae7fa33724bf4d7a327dfb4f730aa80aa667a49d576`.
+- [verified 2026-08-02] Exact bubblewrap namespace preflight fails with `Operation not permitted`; host qualification emits no hard-stop measurement.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .` passes and `.venv/bin/pytest -o addopts='' -q` passes with `296 passed in 72.50s`.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External debt remains trusted scanner/provenance custody, authority root and registry, private/time-sliced corpus, independent judge/provider qualification, host namespace authority, UX-04 research, and shadow/canary observations.
+
+### Next Cycle Trigger
+
+Start the next qualification cycle when a signed scanner/provenance handoff, trusted registry authority, or qualified host/provider/private-corpus record is supplied; re-run the evaluator against the current bundle root and require all affected metrics to be independently bound before changing any gate from `unknown`.
+
+### Cycle Retrospective
+
+- A zero-finding scan is still only candidate evidence when scanner provenance and signer authority are absent.
+- Installed capability and permissive-looking kernel settings are weaker evidence than the exact enforcement preflight.
+- External blockers should be recorded with concrete observations and digests while preserving the release boundary.
