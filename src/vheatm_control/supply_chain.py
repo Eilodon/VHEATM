@@ -189,8 +189,28 @@ def sign_supply_chain_attestation(
 def verify_supply_chain_attestation(
     attestation: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None
 ) -> dict[str, Any]:
+    if attestation.get("schema_version") != "1.0.0":
+        raise SupplyChainError("attestation schema version is invalid")
     if attestation.get("attestation_id") != expected_attestation_id(attestation):
         raise SupplyChainError("attestation_id does not match immutable attestation content")
+    sbom = attestation.get("sbom")
+    if not isinstance(sbom, list) or not sbom or attestation.get("sbom_digest") != hashlib.sha256(_canonical(sbom)).hexdigest():
+        raise SupplyChainError("attestation SBOM digest is not derived from its canonical entries")
+    if any(
+        not isinstance(item, Mapping)
+        or not isinstance(item.get("path"), str)
+        or not item["path"]
+        or not isinstance(item.get("sha256"), str)
+        or len(item["sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in item["sha256"])
+        for item in sbom
+    ):
+        raise SupplyChainError("attestation SBOM entries are malformed")
+    if attestation.get("dependency_lock_present") is True:
+        if not isinstance(attestation.get("dependency_lock_path"), str) or not isinstance(attestation.get("dependency_lock_digest"), str):
+            raise SupplyChainError("locked release attestation is missing its dependency-lock binding")
+        if len(attestation["dependency_lock_digest"]) != 64 or any(char not in "0123456789abcdef" for char in attestation["dependency_lock_digest"]):
+            raise SupplyChainError("dependency-lock digest is malformed")
     _verify(attestation, public_key, key_id=key_id)
     verified = dict(attestation)
     verified.update({"signed_release": True, "verification_state": "verified"})
@@ -250,6 +270,8 @@ def verify_vulnerability_scan(
     lock_digest: str,
     key_id: str | None = None,
 ) -> dict[str, Any]:
+    if scan.get("schema_version") != "1.0.0" or not isinstance(scan.get("scanner_id"), str) or not scan["scanner_id"].strip() or not isinstance(scan.get("scanner_version"), str) or not scan["scanner_version"].strip():
+        raise SupplyChainError("vulnerability scan identity is malformed")
     if scan.get("scan_id") != expected_vulnerability_scan_id(scan):
         raise SupplyChainError("scan_id does not match immutable scan content")
     if scan.get("target_bundle_root") != bundle_root or scan.get("target_lock_digest") != lock_digest:
@@ -257,6 +279,16 @@ def verify_vulnerability_scan(
     findings = scan.get("findings")
     if not isinstance(findings, list):
         raise SupplyChainError("vulnerability scan findings must be an array")
+    vulnerability_ids: set[str] = set()
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            raise SupplyChainError("vulnerability findings must be objects")
+        vulnerability_id = finding.get("vulnerability_id")
+        if not isinstance(vulnerability_id, str) or not re.fullmatch(r"(?:CVE-[0-9]{4}-[0-9]+|GHSA-[A-Za-z0-9-]+)", vulnerability_id):
+            raise SupplyChainError("vulnerability finding ID is malformed")
+        if vulnerability_id in vulnerability_ids or not isinstance(finding.get("package"), str) or not finding["package"].strip() or finding.get("severity") not in {"low", "medium", "high", "critical", "unknown"} or not isinstance(finding.get("exploitable"), bool):
+            raise SupplyChainError("vulnerability finding is malformed or duplicated")
+        vulnerability_ids.add(vulnerability_id)
     expected_count = sum(1 for item in findings if item.get("severity") == "critical" and item.get("exploitable") is True)
     if scan.get("critical_exploitable_cve_count") != expected_count:
         raise SupplyChainError("vulnerability critical count is not derived from findings")
@@ -274,6 +306,8 @@ def expected_provenance_statement_id(statement: Mapping[str, Any]) -> str:
 def sign_provenance_statement(
     statement: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str
 ) -> dict[str, Any]:
+    if statement.get("schema_version") != "1.0.0" or not isinstance(statement.get("builder_id"), str) or not statement["builder_id"].strip() or not isinstance(statement.get("build_type"), str) or not statement["build_type"].strip():
+        raise SupplyChainError("provenance statement identity is malformed")
     if statement.get("statement_id") != expected_provenance_statement_id(statement):
         raise SupplyChainError("provenance statement identity is invalid")
     signed = dict(statement)
@@ -289,6 +323,8 @@ def verify_provenance_statement(
     public_key: Ed25519PublicKey,
     key_id: str | None = None,
 ) -> dict[str, Any]:
+    if statement.get("schema_version") != "1.0.0" or not isinstance(statement.get("builder_id"), str) or not statement["builder_id"].strip() or not isinstance(statement.get("build_type"), str) or not statement["build_type"].strip():
+        raise SupplyChainError("provenance statement identity is malformed")
     if statement.get("statement_id") != expected_provenance_statement_id(statement):
         raise SupplyChainError("provenance statement identity is invalid")
     if statement.get("bundle_root") != attestation.get("bundle_root") or statement.get("sbom_digest") != attestation.get("sbom_digest"):

@@ -5,6 +5,9 @@ import json
 from datetime import UTC, datetime
 from typing import Any, Mapping, Sequence
 
+from .evaluation import expected_release_report_id
+from .providers import expected_provider_run_id
+
 
 class PilotError(ValueError):
     """Raised when a shadow/canary pilot record violates release controls."""
@@ -45,8 +48,17 @@ def prepare_pilot(
         raise PilotError("session_root must be a lowercase SHA-256 digest")
     if not isinstance(plan_id, str) or not plan_id.startswith("PLN-"):
         raise PilotError("plan_id must be content-addressed")
+    report_id = release_report.get("report_id")
+    if not isinstance(report_id, str) or len(report_id) != 68 or not report_id.startswith("RGR-"):
+        raise PilotError("release report must have a content-addressed report_id")
+    if expected_release_report_id(release_report) != report_id:
+        raise PilotError("release report identity does not match its content")
     if release_report.get("summary", {}).get("ga_eligible") is not True and profile == "canary":
         raise PilotError("canary requires every release gate to pass")
+    if profile == "canary":
+        summary = release_report.get("summary", {})
+        if summary.get("pass") != 16 or summary.get("fail") != 0 or summary.get("unknown") != 0 or not release_report.get("evidence_bindings"):
+            raise PilotError("canary requires a fully evidenced release report")
     if not str(rollback_plan).strip():
         raise PilotError("pilot requires a non-empty rollback plan")
     normalized_drills = []
@@ -88,12 +100,28 @@ def complete_pilot(
     pilot: Mapping[str, Any],
     *,
     observations: Sequence[Mapping[str, Any]],
+    provider_runs: Sequence[Mapping[str, Any]],
     completed_at: str | None = None,
 ) -> dict[str, Any]:
     if pilot.get("status") != "ready":
         raise PilotError("only a ready pilot can be completed")
     if not observations:
         raise PilotError("pilot completion requires observations")
+    runs_by_id: dict[str, Mapping[str, Any]] = {}
+    for run in provider_runs:
+        if not isinstance(run, Mapping) or not isinstance(run.get("run_id"), str):
+            raise PilotError("pilot completion requires typed provider runs")
+        run_id = str(run["run_id"])
+        if run_id in runs_by_id or expected_provider_run_id(run) != run_id:
+            raise PilotError("pilot provider run identity is invalid or duplicated")
+        if run.get("status") != "completed":
+            raise PilotError("pilot completion cannot use blocked or unknown provider runs")
+        receipt = run.get("network_receipt")
+        if not isinstance(receipt, Mapping) or receipt.get("decision") != "allow" or not isinstance(run.get("response"), Mapping):
+            raise PilotError("pilot completion requires an allowed network receipt and provider response")
+        runs_by_id[run_id] = run
+    if not runs_by_id:
+        raise PilotError("pilot completion requires at least one completed provider run")
     normalized: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in observations:
@@ -108,6 +136,11 @@ def complete_pilot(
         provider_id = str(raw.get("provider_id", ""))
         if not provider_id:
             raise PilotError("pilot observation provider_id is required")
+        provider_run_refs = sorted(set(str(ref) for ref in raw.get("provider_run_refs", [])))
+        if not provider_run_refs or any(ref not in runs_by_id for ref in provider_run_refs):
+            raise PilotError("pilot observation requires resolvable provider run references")
+        if any(runs_by_id[ref].get("provider_id") != provider_id for ref in provider_run_refs):
+            raise PilotError("pilot observation provider does not match its provider runs")
         sample_count = raw.get("sample_count")
         if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 1:
             raise PilotError("pilot observation sample_count must be positive")
@@ -122,6 +155,7 @@ def complete_pilot(
                 "observation_id": observation_id,
                 "status": status,
                 "provider_id": provider_id,
+                "provider_run_refs": provider_run_refs,
                 "sample_count": sample_count,
                 "read_only_confirmed": raw.get("read_only_confirmed") is True,
                 "evidence_refs": refs,

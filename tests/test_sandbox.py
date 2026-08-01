@@ -91,3 +91,19 @@ def test_executor_blocks_when_host_cannot_provide_required_namespace() -> None:
     assert result["status"] in {"completed", "blocked"}
     if result["status"] == "blocked":
         assert "backend:preflight-failed" in result["sandbox_controls"]
+
+
+def test_executor_blocks_when_policy_broker_errors() -> None:
+    backend = Path("/usr/bin/bwrap")
+    if not backend.is_file():
+        pytest.skip("bubblewrap is unavailable")
+
+    class BrokenBroker:
+        def evaluate(self, request, approval_token=None):  # noqa: ANN001
+            del request, approval_token
+            raise RuntimeError("broker store unavailable")
+
+    digest = hashlib.sha256(backend.read_bytes()).hexdigest()
+    result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=BrokenBroker()).run(_request())
+    assert result["status"] == "blocked"
+    assert "broker:error" in result["sandbox_controls"]

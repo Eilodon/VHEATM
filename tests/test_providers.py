@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from vheatm_control.analyzers import snapshot_digest
-from vheatm_control.providers import ExternalAnalyzerProvider
+from vheatm_control.providers import ExternalAnalyzerProvider, ProviderAdapterError, https_json_transport
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,3 +98,31 @@ def test_external_provider_identity_mismatch_is_unknown() -> None:
     result = _provider(broker, transport).run(_request())
     assert result["status"] == "unknown"
     assert "mismatch" in result["error"]
+
+
+def test_provider_defaults_to_bounded_https_transport(monkeypatch) -> None:
+    class Response:
+        headers = {"Content-Length": "18"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self, limit):
+            assert limit == 1_048_577
+            return b'{"status":"ok"}'
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url == "https://provider.example.test/analyze"
+            assert request.get_method() == "POST"
+            assert timeout == 2.0
+            return Response()
+
+    monkeypatch.setattr("vheatm_control.providers.build_opener", lambda _: Opener())
+    assert https_json_transport("https://provider.example.test/analyze", {"metadata": True}, timeout_seconds=2.0) == {"status": "ok"}
+
+    with pytest.raises(ProviderAdapterError, match="userinfo"):
+        https_json_transport("https://user:pass@provider.example.test/analyze", {})

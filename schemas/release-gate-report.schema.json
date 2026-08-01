@@ -4,12 +4,25 @@
   "title": "VHEATM release gate evidence report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "report_id", "framework_version", "evidence_digest", "evaluated_at", "gates", "summary"],
+  "required": ["schema_version", "report_id", "framework_version", "evidence_digest", "evidence_bindings", "evaluated_at", "gates", "summary"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "report_id": {"type": "string", "pattern": "^RGR-[A-F0-9]{64}$"},
     "framework_version": {"type": "string", "minLength": 1},
     "evidence_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence_bindings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+          "kind": {"enum": ["qualification_manifest", "qualification_evidence", "supply_chain_attestation", "vulnerability_scan", "provenance_statement"]},
+          "id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "evaluated_at": {"type": "string", "format": "date-time"},
     "gates": {
       "type": "array", "minItems": 16,

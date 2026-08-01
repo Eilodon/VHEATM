@@ -290,7 +290,10 @@ class SandboxExecutor:
 
         if self.broker is None:
             return self._blocked(request, argv, "reference monitor has no policy broker", started, controls=("broker:unavailable",))
-        decision = self.broker.evaluate(request, approval_token)
+        try:
+            decision = self.broker.evaluate(request, approval_token)
+        except Exception as exc:  # a failed policy boundary must not become host execution
+            return self._blocked(request, argv, f"policy broker unavailable: {exc}", started, controls=("broker:error",))
         if decision.get("decision") != "allow":
             return self._blocked(
                 request,

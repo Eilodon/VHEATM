@@ -22,6 +22,8 @@
 - Machine-readable standards baseline with namespace/review semantics, plus a canonical `uv.lock` bound into the bundle and supply-chain attestation.
 - Digest-bound bubblewrap reference-monitor adapter with read-only workspace, mandatory network namespace preflight, cleared environment, dropped capabilities, resource limits, and typed blocked run evidence.
 - Ed25519-bound supply-chain, vulnerability, provenance, private/time-sliced qualification, external-provider, and pilot-completion records; verified typed evidence now takes precedence over raw release metric shortcuts.
+- Release-gate evaluation now ignores caller-supplied metric shortcuts, verifies qualification and supply-chain signatures at the trust boundary, and binds the report digest to the content-addressed evidence IDs.
+- External providers now have a bounded HTTPS transport with TLS, redirect refusal, timeout/response caps, metadata-only payloads, and broker-before-network ordering; pilot completion requires content-addressed completed provider runs.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 
 ## Verification gates

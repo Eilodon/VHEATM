@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,6 +19,62 @@ class ProviderAdapterError(ValueError):
 
 
 ProviderTransport = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+def https_json_transport(
+    endpoint: str,
+    payload: Mapping[str, Any],
+    *,
+    timeout_seconds: float = 10.0,
+    max_response_bytes: int = 1_048_576,
+) -> Mapping[str, Any]:
+    """Send the provider's metadata-only JSON request over bounded HTTPS.
+
+    This function is deliberately transport-only. Authorization, destination
+    allowlisting, redaction, and human approval remain the broker's job and are
+    checked before the provider calls it.
+    """
+
+    parsed = urlparse(endpoint)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ProviderAdapterError("provider endpoint must be an HTTPS URL without userinfo")
+    if timeout_seconds <= 0 or max_response_bytes < 1:
+        raise ProviderAdapterError("provider transport limits must be positive")
+    body = _canonical(dict(payload))
+    request = Request(
+        endpoint,
+        data=body,
+        headers={"Accept": "application/json", "Content-Type": "application/json", "Content-Length": str(len(body))},
+        method="POST",
+    )
+    opener = build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=timeout_seconds) as response:
+            content_length = response.headers.get("Content-Length")
+            if content_length is not None:
+                try:
+                    declared_length = int(content_length)
+                except ValueError as exc:
+                    raise ProviderAdapterError("provider response has an invalid Content-Length") from exc
+                if declared_length < 0 or declared_length > max_response_bytes:
+                    raise ProviderAdapterError("provider response exceeds the configured byte limit")
+            raw = response.read(max_response_bytes + 1)
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        raise ProviderAdapterError(f"HTTPS provider request failed: {exc}") from exc
+    if len(raw) > max_response_bytes:
+        raise ProviderAdapterError("provider response exceeds the configured byte limit")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProviderAdapterError("provider response is not UTF-8 JSON") from exc
+    if not isinstance(value, Mapping):
+        raise ProviderAdapterError("provider response must be a JSON object")
+    return value
 
 
 def _canonical(value: Any) -> bytes:
@@ -92,12 +151,30 @@ class ExternalAnalyzerProvider:
     provider_version: str
     endpoint: str
     config: Mapping[str, Any]
-    transport: ProviderTransport
+    transport: ProviderTransport | None = None
+    timeout_seconds: float = 10.0
+    max_response_bytes: int = 1_048_576
 
     def __post_init__(self) -> None:
         if not self.provider_id or not self.provider_version or not self.endpoint.startswith("https://"):
             raise ProviderAdapterError("provider identity and HTTPS endpoint are required")
-        if not callable(self.transport):
+        parsed = urlparse(self.endpoint)
+        if parsed.username or parsed.password or not parsed.hostname:
+            raise ProviderAdapterError("provider endpoint must be an HTTPS URL without userinfo")
+        if self.timeout_seconds <= 0 or self.max_response_bytes < 1:
+            raise ProviderAdapterError("provider transport limits must be positive")
+        if self.transport is None:
+            object.__setattr__(
+                self,
+                "transport",
+                lambda payload: https_json_transport(
+                    self.endpoint,
+                    payload,
+                    timeout_seconds=self.timeout_seconds,
+                    max_response_bytes=self.max_response_bytes,
+                ),
+            )
+        elif not callable(self.transport):
             raise ProviderAdapterError("provider transport must be callable")
 
     @property

@@ -7,10 +7,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from jsonschema import Draft202012Validator
 
-from .bundle import resolve_control_root
+from .bundle import build_bundle, resolve_control_root
+from .qualification import QualificationError, verify_manifest, verify_qualification_evidence
 from .serialization import load_json, load_yaml
+from .supply_chain import (
+    SupplyChainError,
+    verify_provenance_statement,
+    verify_supply_chain_attestation,
+    verify_vulnerability_scan,
+)
 
 
 class EvaluationError(ValueError):
@@ -58,6 +67,19 @@ _RELEASE_RULES: dict[str, dict[str, tuple[str, float | bool]]] = {
     "RG-15": {"scope_limitations_present": ("bool", True), "unknown_risks_present": ("bool", True), "certification_claims_absent": ("bool", True)},
 }
 
+_SUPPLY_CHAIN_METRICS = frozenset(
+    {
+        "signed_release",
+        "provenance_verified",
+        "canonical_sbom",
+        "dependencies_locked",
+        "critical_exploitable_cve_count",
+    }
+)
+_QUALIFICATION_METRICS = frozenset(
+    metric for rules in _RELEASE_RULES.values() for metric in rules if metric not in _SUPPLY_CHAIN_METRICS
+)
+
 
 def _satisfies(value: Any, operator: str, expected: float | bool) -> bool:
     if operator == "bool":
@@ -75,47 +97,199 @@ def _satisfies(value: Any, operator: str, expected: float | bool) -> bool:
     raise EvaluationError(f"unknown release gate operator: {operator}")
 
 
-def derive_verified_evidence_metrics(evidence: Mapping[str, Any]) -> dict[str, Any]:
-    """Derive release metrics only from records already verified by their adapters.
+def _key(keys: Mapping[str, Ed25519PublicKey] | None, name: str) -> Ed25519PublicKey | None:
+    value = keys.get(name) if isinstance(keys, Mapping) else None
+    return value if isinstance(value, Ed25519PublicKey) else None
 
-    Caller-supplied metric shortcuts remain supported for the frozen evaluator's
-    unit fixtures, but a typed evidence record takes precedence and cannot be
-    overridden by a contradictory boolean.
+
+def _key_id(key_ids: Mapping[str, str] | None, name: str) -> str | None:
+    value = key_ids.get(name) if isinstance(key_ids, Mapping) else None
+    return value if isinstance(value, str) and value else None
+
+
+def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
+    bindings: list[dict[str, str]] = []
+    for kind, field in (
+        ("qualification_manifest", "manifest_id"),
+        ("qualification_evidence", "evidence_id"),
+        ("supply_chain_attestation", "attestation_id"),
+        ("vulnerability_scan", "scan_id"),
+        ("provenance_statement", "statement_id"),
+    ):
+        value = evidence.get(kind)
+        identifier = value.get(field) if isinstance(value, Mapping) else None
+        if isinstance(identifier, str) and identifier:
+            bindings.append({"kind": kind, "id": identifier})
+    return bindings
+
+
+def expected_release_report_id(report: Mapping[str, Any]) -> str:
+    identity = {
+        key: report[key]
+        for key in ("framework_version", "evidence_digest", "evidence_bindings", "gates", "summary")
+        if key in report
+    }
+    return "RGR-" + _digest(identity).upper()
+
+
+def _verified_qualification_metrics(
+    evidence: Mapping[str, Any],
+    *,
+    framework_version: str,
+    verification_keys: Mapping[str, Ed25519PublicKey] | None,
+    verification_key_ids: Mapping[str, str] | None,
+) -> tuple[dict[str, Any], list[str]]:
+    qualification = evidence.get("qualification_evidence")
+    if not isinstance(qualification, Mapping):
+        return {}, []
+    manifest = evidence.get("qualification_manifest")
+    public_key = _key(verification_keys, "qualification")
+    if not isinstance(manifest, Mapping) or public_key is None:
+        return {}, ["qualification evidence is present but no verified private manifest/public key was supplied"]
+    try:
+        verified_manifest = verify_manifest(manifest, public_key=public_key, key_id=_key_id(verification_key_ids, "qualification"))
+        if verified_manifest.get("framework_version") != framework_version:
+            raise QualificationError("qualification manifest framework version does not match the release")
+        verified = verify_qualification_evidence(
+            qualification,
+            manifest=verified_manifest,
+            public_key=public_key,
+            key_id=_key_id(verification_key_ids, "qualification"),
+        )
+    except QualificationError as exc:
+        return {}, [f"qualification evidence verification failed: {exc}"]
+    metrics = verified.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return {}, ["verified qualification evidence has no metrics object"]
+    forbidden = sorted(set(metrics) & _SUPPLY_CHAIN_METRICS)
+    if forbidden:
+        return {}, [f"qualification evidence cannot self-attest supply-chain metrics: {', '.join(forbidden)}"]
+    return {key: value for key, value in metrics.items() if key in _QUALIFICATION_METRICS}, []
+
+
+def _verified_supply_chain_metrics(
+    evidence: Mapping[str, Any],
+    *,
+    expected_bundle_root: str | None,
+    verification_keys: Mapping[str, Ed25519PublicKey] | None,
+    verification_key_ids: Mapping[str, str] | None,
+) -> tuple[dict[str, Any], list[str]]:
+    attestation = evidence.get("supply_chain_attestation")
+    if not isinstance(attestation, Mapping):
+        return {}, []
+    scan = evidence.get("vulnerability_scan")
+    provenance = evidence.get("provenance_statement")
+    release_key = _key(verification_keys, "supply_chain")
+    vulnerability_key = _key(verification_keys, "vulnerability")
+    provenance_key = _key(verification_keys, "provenance")
+    if release_key is None or vulnerability_key is None or provenance_key is None:
+        return {"signed_release": False, "provenance_verified": False, "critical_exploitable_cve_count": None}, [
+            "supply-chain evidence is present but release, vulnerability, and provenance public keys are incomplete"
+        ]
+    try:
+        if expected_bundle_root is None:
+            raise SupplyChainError("current control bundle root is required to verify supply-chain evidence")
+        if attestation.get("bundle_root") != expected_bundle_root:
+            raise SupplyChainError("supply-chain attestation is not bound to the current control bundle")
+        if not isinstance(scan, Mapping) or not isinstance(provenance, Mapping):
+            raise SupplyChainError("vulnerability scan and provenance statement are both required")
+        verified_scan = verify_vulnerability_scan(
+            scan,
+            public_key=vulnerability_key,
+            bundle_root=str(attestation.get("bundle_root", "")),
+            lock_digest=str(attestation.get("dependency_lock_digest", "")),
+            key_id=_key_id(verification_key_ids, "vulnerability"),
+        )
+        verified_attestation = verify_supply_chain_attestation(
+            attestation,
+            public_key=release_key,
+            key_id=_key_id(verification_key_ids, "supply_chain"),
+        )
+        scan_digest = _digest({key: value for key, value in verified_scan.items() if key != "signature_value"})
+        if verified_attestation.get("vulnerability_scan_id") != verified_scan.get("scan_id") or verified_attestation.get("vulnerability_scan_digest") != scan_digest:
+            raise SupplyChainError("vulnerability scan is not bound to the signed attestation")
+        verified_attestation = verify_provenance_statement(
+            verified_attestation,
+            provenance,
+            public_key=provenance_key,
+            key_id=_key_id(verification_key_ids, "provenance"),
+        )
+        sbom = verified_attestation.get("sbom")
+        canonical_sbom = bool(sbom) and _digest(sbom) == verified_attestation.get("sbom_digest")
+        dependencies_locked = (
+            verified_attestation.get("dependency_lock_present") is True
+            and isinstance(verified_attestation.get("dependency_lock_digest"), str)
+        )
+        return {
+            "signed_release": verified_attestation.get("signed_release") is True,
+            "provenance_verified": verified_attestation.get("provenance_verified") is True,
+            "canonical_sbom": canonical_sbom,
+            "dependencies_locked": dependencies_locked,
+            "critical_exploitable_cve_count": verified_scan.get("critical_exploitable_cve_count"),
+        }, []
+    except SupplyChainError as exc:
+        return {"signed_release": False, "provenance_verified": False, "critical_exploitable_cve_count": None}, [
+            f"supply-chain evidence verification failed: {exc}"
+        ]
+
+
+def derive_verified_evidence_metrics(
+    evidence: Mapping[str, Any],
+    *,
+    framework_version: str | None = None,
+    expected_bundle_root: str | None = None,
+    verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
+    verification_key_ids: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Derive metrics only after cryptographic verification at this boundary.
+
+    Raw ``metrics`` fields and self-declared ``verification_state`` values are
+    intentionally ignored. A release caller must provide the public keys for
+    the private qualification manifest/evidence and all supply-chain records.
     """
 
-    derived: dict[str, Any] = {}
-    attestation = evidence.get("supply_chain_attestation")
-    if isinstance(attestation, Mapping):
-        if attestation.get("verification_state") == "verified":
-            derived.update({
-                "signed_release": attestation.get("signed_release") is True,
-                "provenance_verified": attestation.get("provenance_verified") is True,
-                "canonical_sbom": bool(attestation.get("sbom")) and isinstance(attestation.get("sbom_digest"), str),
-                "dependencies_locked": attestation.get("dependency_lock_present") is True and isinstance(attestation.get("dependency_lock_digest"), str),
-            })
-        else:
-            derived.update({"signed_release": False, "provenance_verified": False})
-        scan = evidence.get("vulnerability_scan")
-        if isinstance(scan, Mapping) and scan.get("verification_state") == "verified" and scan.get("scan_id") == attestation.get("vulnerability_scan_id"):
-            derived["critical_exploitable_cve_count"] = scan.get("critical_exploitable_cve_count")
-        else:
-            derived["critical_exploitable_cve_count"] = None
-
-    qualification = evidence.get("qualification_evidence")
-    if isinstance(qualification, Mapping) and qualification.get("evidence_state") == "verified":
-        metrics = qualification.get("metrics")
-        if isinstance(metrics, Mapping):
-            derived.update(dict(metrics))
-    return derived
+    qualification_metrics, _ = _verified_qualification_metrics(
+        evidence,
+        framework_version=framework_version or "",
+        verification_keys=verification_keys,
+        verification_key_ids=verification_key_ids,
+    )
+    supply_metrics, _ = _verified_supply_chain_metrics(
+        evidence,
+        expected_bundle_root=expected_bundle_root,
+        verification_keys=verification_keys,
+        verification_key_ids=verification_key_ids,
+    )
+    return {**qualification_metrics, **supply_metrics}
 
 
-def evaluate_release_gates(framework_version: str, evidence: Mapping[str, Any], *, evaluated_at: str | None = None) -> dict[str, Any]:
+def evaluate_release_gates(
+    framework_version: str,
+    evidence: Mapping[str, Any],
+    *,
+    evaluated_at: str | None = None,
+    expected_bundle_root: str | None = None,
+    verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
+    verification_key_ids: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     if not isinstance(evidence, Mapping):
         raise EvaluationError("release evidence must be an object")
-    metrics = dict(evidence.get("metrics", evidence)) if isinstance(evidence.get("metrics", evidence), Mapping) else evidence.get("metrics", evidence)
-    if not isinstance(metrics, Mapping):
-        raise EvaluationError("release evidence metrics must be an object")
-    metrics = {**dict(metrics), **derive_verified_evidence_metrics(evidence)}
+    # Caller-provided metrics are deliberately not trusted. Keep them out of
+    # the evaluator entirely so a complete-looking JSON object cannot mint GA.
+    qualification_metrics, qualification_errors = _verified_qualification_metrics(
+        evidence,
+        framework_version=framework_version,
+        verification_keys=verification_keys,
+        verification_key_ids=verification_key_ids,
+    )
+    supply_metrics, supply_errors = _verified_supply_chain_metrics(
+        evidence,
+        expected_bundle_root=expected_bundle_root,
+        verification_keys=verification_keys,
+        verification_key_ids=verification_key_ids,
+    )
+    metrics = {**qualification_metrics, **supply_metrics}
+    verification_errors = qualification_errors + supply_errors
     gate_results = []
     for gate_id, rules in _RELEASE_RULES.items():
         missing = sorted(name for name in rules if name not in metrics)
@@ -129,23 +303,70 @@ def evaluate_release_gates(framework_version: str, evidence: Mapping[str, Any], 
         else:
             status = "pass"
             rationale = "all frozen threshold predicates satisfied"
+        if verification_errors and status == "unknown":
+            rationale = f"{rationale}; {'; '.join(verification_errors)}"
         gate_results.append({"gate_id": gate_id, "status": status, "missing_metrics": missing, "failed_metrics": failed, "rationale": rationale})
     summary = {"pass": sum(item["status"] == "pass" for item in gate_results), "fail": sum(item["status"] == "fail" for item in gate_results), "unknown": sum(item["status"] == "unknown" for item in gate_results), "ga_eligible": all(item["status"] == "pass" for item in gate_results)}
-    identity = {"framework_version": framework_version, "evidence_digest": _digest(metrics), "gates": gate_results, "summary": summary}
+    evidence_bindings = _evidence_bindings(evidence)
+    identity = {
+        "framework_version": framework_version,
+        "evidence_digest": _digest({"metrics": metrics, "evidence_bindings": evidence_bindings}),
+        "evidence_bindings": evidence_bindings,
+        "gates": gate_results,
+        "summary": summary,
+    }
     timestamp = evaluated_at or datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    return {"schema_version": "1.0.0", "report_id": "RGR-" + _digest(identity).upper(), **identity, "evaluated_at": timestamp}
+    return {"schema_version": "1.0.0", "report_id": expected_release_report_id(identity), **identity, "evaluated_at": timestamp}
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate VHEATM frozen release gates from explicit metrics.")
+    parser = argparse.ArgumentParser(description="Evaluate VHEATM frozen release gates from verified evidence records.")
     parser.add_argument("--root", type=Path)
     parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--qualification-manifest", type=Path)
+    parser.add_argument("--qualification-public-key", type=Path)
+    parser.add_argument("--supply-chain-public-key", type=Path)
+    parser.add_argument("--vulnerability-public-key", type=Path)
+    parser.add_argument("--provenance-public-key", type=Path)
+    parser.add_argument("--qualification-key-id")
+    parser.add_argument("--supply-chain-key-id")
+    parser.add_argument("--vulnerability-key-id")
+    parser.add_argument("--provenance-key-id")
     args = parser.parse_args()
     root = resolve_control_root(args.root)
+
+    def load_public_key(path: Path | None) -> Ed25519PublicKey | None:
+        if path is None:
+            return None
+        key = load_pem_public_key(path.read_bytes())
+        if not isinstance(key, Ed25519PublicKey):
+            raise EvaluationError(f"{path} does not contain an Ed25519 public key")
+        return key
+
     try:
         manifest = load_yaml((root / "manifests" / "vheatm-v17.yaml").read_text(encoding="utf-8"))
         evidence = load_json(args.evidence.read_text(encoding="utf-8"))
-        report = evaluate_release_gates(str(manifest["framework"]["version"]), evidence)
+        if args.qualification_manifest is not None:
+            evidence = {**evidence, "qualification_manifest": load_json(args.qualification_manifest.read_text(encoding="utf-8"))}
+        verification_keys = {
+            "qualification": load_public_key(args.qualification_public_key),
+            "supply_chain": load_public_key(args.supply_chain_public_key),
+            "vulnerability": load_public_key(args.vulnerability_public_key),
+            "provenance": load_public_key(args.provenance_public_key),
+        }
+        verification_key_ids = {
+            "qualification": args.qualification_key_id,
+            "supply_chain": args.supply_chain_key_id,
+            "vulnerability": args.vulnerability_key_id,
+            "provenance": args.provenance_key_id,
+        }
+        report = evaluate_release_gates(
+            str(manifest["framework"]["version"]),
+            evidence,
+            expected_bundle_root=build_bundle(root)["bundle_root"],
+            verification_keys=verification_keys,
+            verification_key_ids=verification_key_ids,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")
         return 1

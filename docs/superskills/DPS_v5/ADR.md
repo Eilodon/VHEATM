@@ -280,6 +280,8 @@ Cascade Review: ✅ Local contract and fail-closed tests completed; production o
 - [verified 2026-08-01] In this host, bubblewrap preflight cannot create the required network namespace and therefore returns `blocked`; no fallback action is attempted.
 - [verified 2026-08-01] Ed25519 tamper, target-binding, key-binding, and derived-count tests reject altered attestations/scans/manifests.
 - [verified 2026-08-01] Typed release evidence overrides contradictory raw metrics and keeps RG-13 ineligible when signing/provenance/CVE evidence is incomplete.
+- [verified 2026-08-01] Raw release metric objects cannot produce a passing gate; qualification and supply-chain records must verify cryptographically, and the report digest binds their content-addressed IDs.
+- [verified 2026-08-01] External provider execution uses bounded HTTPS only after broker authorization, and pilot observations must resolve to completed content-addressed provider runs.
 
 ### Owner and Known Debts
 

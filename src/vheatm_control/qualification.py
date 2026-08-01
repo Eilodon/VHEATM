@@ -55,6 +55,33 @@ def _sign(subject: Mapping[str, Any], private_key: Ed25519PrivateKey) -> str:
     return _b64(private_key.sign(_canonical(subject)))
 
 
+def _validate_measurements(measurements: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    metrics: dict[str, Any] = {}
+    for raw in measurements:
+        if not isinstance(raw, Mapping):
+            raise QualificationError("qualification measurements must be objects")
+        metric = str(raw.get("metric", ""))
+        if not metric or metric in metrics:
+            raise QualificationError("qualification metrics must be unique and named")
+        value = raw.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if not isinstance(value, bool):
+                raise QualificationError("qualification metric values must be numeric or boolean")
+        if not isinstance(raw.get("sample_count"), int) or raw["sample_count"] < 1:
+            raise QualificationError("qualification measurements require positive sample counts")
+        lower = raw.get("confidence_lower")
+        if not isinstance(lower, (int, float)) or isinstance(lower, bool) or lower < 0:
+            raise QualificationError("qualification measurements require a non-negative confidence lower bound")
+        method_digest = raw.get("method_digest")
+        if not isinstance(method_digest, str) or len(method_digest) != 64 or any(char not in "0123456789abcdef" for char in method_digest):
+            raise QualificationError("qualification measurements require a lowercase SHA-256 method digest")
+        refs = raw.get("evidence_refs")
+        if not isinstance(refs, Sequence) or isinstance(refs, (str, bytes)) or not refs or any(not str(ref).strip() for ref in refs):
+            raise QualificationError("qualification measurements require evidence references")
+        metrics[metric] = value
+    return metrics
+
+
 def expected_manifest_id(manifest: Mapping[str, Any]) -> str:
     identity = {key: value for key, value in manifest.items() if key not in {"manifest_id", "signature_algorithm", "signature_key_id", "signature_value", "verification_state"}}
     return "QMF-" + _digest(identity).upper()
@@ -106,6 +133,10 @@ def sign_manifest(manifest: Mapping[str, Any], *, private_key: Ed25519PrivateKey
 
 
 def verify_manifest(manifest: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None) -> dict[str, Any]:
+    if manifest.get("schema_version") != "1.0.0" or manifest.get("visibility") != "private":
+        raise QualificationError("qualification manifest schema or visibility is invalid")
+    if not isinstance(manifest.get("private_locator"), str) or not manifest["private_locator"].strip():
+        raise QualificationError("private qualification locator is required")
     if manifest.get("manifest_id") != expected_manifest_id(manifest):
         raise QualificationError("manifest identity does not match content")
     if manifest.get("case_count") != len(manifest.get("case_digests", [])) or manifest.get("corpus_digest") != _digest(manifest.get("case_digests", [])):
@@ -134,15 +165,12 @@ def build_qualification_evidence(
         raise QualificationError("qualification evidence requires a verified private manifest")
     if not evaluator_id or not evaluator_version or not independent_judge_id:
         raise QualificationError("qualification evaluator and independent judge identities are required")
+    if evaluator_id == independent_judge_id:
+        raise QualificationError("qualification evaluator and independent judge must be independent identities")
     normalized = [dict(item) for item in measurements]
-    if not normalized or any(int(item.get("sample_count", 0)) < 1 for item in normalized):
-        raise QualificationError("qualification measurements require positive sample counts")
-    metrics: dict[str, Any] = {}
-    for item in normalized:
-        metric = str(item.get("metric", ""))
-        if not metric or metric in metrics:
-            raise QualificationError("qualification metrics must be unique and named")
-        metrics[metric] = item.get("value")
+    if not normalized:
+        raise QualificationError("qualification evidence requires at least one measurement")
+    metrics = _validate_measurements(normalized)
     evidence: dict[str, Any] = {
         "schema_version": "1.0.0",
         "manifest_id": manifest["manifest_id"],
@@ -175,10 +203,23 @@ def sign_qualification_evidence(evidence: Mapping[str, Any], *, private_key: Ed2
 def verify_qualification_evidence(
     evidence: Mapping[str, Any], *, manifest: Mapping[str, Any], public_key: Ed25519PublicKey, key_id: str | None = None
 ) -> dict[str, Any]:
+    if evidence.get("schema_version") != "1.0.0":
+        raise QualificationError("qualification evidence schema version is invalid")
     if evidence.get("evidence_id") != expected_qualification_evidence_id(evidence):
         raise QualificationError("qualification evidence identity does not match content")
     if manifest.get("verification_state") != "verified" or evidence.get("manifest_id") != manifest.get("manifest_id"):
         raise QualificationError("qualification evidence is not bound to a verified manifest")
+    expected_manifest_digest = _digest({key: value for key, value in manifest.items() if key != "signature_value"})
+    if evidence.get("manifest_digest") != expected_manifest_digest:
+        raise QualificationError("qualification evidence manifest digest does not match the verified manifest")
+    if evidence.get("evaluator_id") == evidence.get("independent_judge_id"):
+        raise QualificationError("qualification evaluator and independent judge are not independent")
+    measurements = evidence.get("measurements")
+    if not isinstance(measurements, list) or not measurements:
+        raise QualificationError("qualification evidence requires measurements")
+    derived_metrics = _validate_measurements(measurements)
+    if evidence.get("metrics") != derived_metrics:
+        raise QualificationError("qualification metrics are not derived from the measurement records")
     _verify(evidence, public_key, key_id=key_id)
     verified = dict(evidence)
     verified["evidence_state"] = "verified"
