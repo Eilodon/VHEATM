@@ -30,6 +30,7 @@
 - Sandbox outcomes now bind schema-valid reference-monitor decisions and content-addressed tool receipts to the exact action; malformed authorization fails closed before backend launch.
 - All brokered action adapters now share semantic decision validation; malformed provider authorization is blocked before transport and cannot emit a completed run without a valid network receipt.
 - Pilot completion now re-verifies the persisted redacted network request, receipt identity, request/action digests, broker semantics, response digest, and completed-response requirement before accepting shadow/canary observations.
+- Canary preparation now re-evaluates the supplied typed release evidence with verification keys and the current bundle root, then requires exact equality with the proposed 16-gate release report; self-declared all-pass reports remain blocked.
 - Legacy `policy.py` authority has been migrated out of the runtime path; the canonical `ToolBroker` is now the only policy implementation, with historical code retained as non-authoritative migration text.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 - Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.

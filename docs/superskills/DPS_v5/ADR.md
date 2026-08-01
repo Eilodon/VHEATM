@@ -1001,3 +1001,73 @@ Start the next cycle when an external provider-run feed or operational pilot sto
 - Content-addressing detects accidental mutation but does not establish that the content was authorized.
 - Every persisted execution record needs a later semantic re-verification boundary, not only a builder-time check.
 - Storing only redacted network metadata gives the pilot verifier enough material to recompute authorization without leaking source payloads.
+
+## ADR-15 — Re-evaluate signed release evidence before enabling canary
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `release-gates` `supply-chain` `qualification`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when release-report evidence inputs or pilot authorization changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local canary fail-closed behavior; `NOT_PRODUCTION_QUALIFIED` for unavailable external evidence and operational rollout.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `REPLAY`
+**VOLATILITY:** `WATCHFUL` — release evidence keys, bundle roots, and RG-00…RG-15 contracts are release-bound inputs.
+
+### Context
+
+`prepare_pilot(profile="canary")` previously trusted a self-consistent `release_report`: a caller could replace every gate with `pass`, add a plausible evidence binding, recompute `report_id`, and satisfy the canary readiness checks without supplying or re-verifying the qualification and supply-chain records that generated those claims. A content-addressed report proves internal consistency, not evidence provenance.
+
+### Decision
+
+Canary preparation must receive the original typed `release_evidence`, verification public keys/key IDs, and the expected current bundle root. It re-runs `evaluate_release_gates()` using the report framework version and evaluation timestamp, then requires byte-for-byte semantic equality with the supplied report. Missing keys/evidence, invalid signatures, stale bundle binding, or any gate/report mismatch fail closed. Shadow preparation remains available as read-only readiness but cannot be upgraded to canary without this re-verification input.
+
+### Options Considered
+
+- Trust `report_id` and `ga_eligible`: rejected because both are recomputable from caller-controlled content.
+- Trust evidence binding IDs without loading evidence: rejected because IDs do not verify signatures, schemas, freshness, or bundle binding.
+- Add a boolean `verified` flag to the report: rejected because a self-declared flag is not authority.
+- Re-evaluate only after canary starts: rejected because tool-enabled rollout must be authorized before activation.
+
+### Impact
+
+Schemas changed: none; the existing release-report and typed evidence contracts are now required at the canary preparation boundary.
+Components changed: pilot preparation API, pilot regression test, lifecycle record.
+Breaking change: **YES** for callers that request canary without the evidence/key/bundle inputs required for independent re-evaluation.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `typed release evidence → evaluator verification → RG-00…RG-15 report → canary authorization`.
+Cascade Review: ✅ Done — RED self-declared all-pass report, GREEN canary rejection, shadow compatibility tests, full suite, validator, replay, bundle, lock, and build checks cover the path.
+
+### Consequences
+
+- A canary-ready record can no longer be minted from a forged report alone.
+- External qualification remains external: this boundary verifies supplied evidence but does not manufacture private gold, key custody, provider allowlisting, or successful live observations.
+- Shadow remains read-only and may be prepared with incomplete evidence, but its status cannot be promoted to canary without re-evaluation.
+
+### Evidence
+
+- [verified 2026-08-01] RED regression showed a self-declared 16-pass report with recomputed identity and fake evidence binding could reach the old canary path.
+- [verified 2026-08-01] GREEN regression now requires re-evaluation inputs and rejects that forged report; existing shadow and failed-canary tests remain green.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External key custody, private/time-sliced qualification, allowlisted provider qualification, fresh vulnerability scan, host namespace capability, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a real release-evidence store or canary controller is connected; bind its authorization record to the same evaluator output and rerun the complete RG-00…RG-15 suite.
+
+### Cycle Retrospective
+
+- A report's content ID is an integrity check, not an attestation of its inputs.
+- Tool-enabled rollout needs an evidence re-verification boundary before activation, not merely a readiness check after claims are assembled.
+- Reusing the canonical evaluator keeps canary policy aligned with release policy and avoids a second gate authority.
