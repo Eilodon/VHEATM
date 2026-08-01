@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from referencing import Registry, Resource
 
 from .activation import ActivationError, compile_activation
 from .bundle import BundleError, build_bundle, resolve_control_root
+from .capability_ledger import corpus_digest
 from .models import Manifest
 from .module_router import validate_module_repository
 from .serialization import load_json, load_yaml
@@ -221,6 +223,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
         supply_chain_evidence = _load_yaml(supply_chain_evidence_path)
         provider_allowlist = _load_yaml(provider_allowlist_path)
         eval_corpus = _load_yaml(eval_corpus_path)
+        module_registry = _load_yaml(module_registry_path)
         manifest_schema = _load_json(schema_dir / "vheatm-manifest.schema.json")
         policy_schema = _load_json(schema_dir / "runtime-policy.schema.json")
         context_schema = _load_json(schema_dir / "audit-context.schema.json")
@@ -253,6 +256,7 @@ def validate_repository(root: Path) -> list[ValidationIssue]:
     issues.extend(ValidationIssue("policies/qualification-methods.yaml", issue) for issue in _validate_qualification_methods(manifest, qualification_methods))
     issues.extend(ValidationIssue("policies/supply-chain-evidence.yaml", issue) for issue in _validate_supply_chain_evidence(manifest, supply_chain_evidence))
     issues.extend(ValidationIssue("policies/provider-allowlist.yaml", issue) for issue in _validate_provider_allowlist(manifest, provider_allowlist))
+    issues.extend(_validate_legacy_source(root, module_registry))
     try:
         bundle = build_bundle(root)
         issues.extend(_validate_schema(bundle, bundle_schema, registry, "control-bundle"))
@@ -304,6 +308,70 @@ def _validate_runtime_policy_invariants(policy: dict[str, Any]) -> list[Validati
         issues.append(ValidationIssue("runtime policy", "approval tokens must be single-use"))
     if policy.get("taint", {}).get("propagation") != "transitive":
         issues.append(ValidationIssue("runtime policy", "taint propagation must be transitive"))
+    return issues
+
+
+def _has_symlink_component(root: Path, relative: Path) -> bool:
+    current = root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _safe_repo_path(root: Path, value: Any, *, label: str) -> tuple[Path | None, str | None]:
+    if not isinstance(value, str) or not value.strip():
+        return None, f"{label} must be a non-empty repository-relative path"
+    relative = Path(value)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        return None, f"{label} must remain inside the repository"
+    candidate = root / relative
+    try:
+        candidate.resolve().relative_to(root)
+    except ValueError:
+        return None, f"{label} must remain inside the repository"
+    if _has_symlink_component(root, relative):
+        return None, f"{label} must not traverse symlinks"
+    return candidate, None
+
+
+def _has_symlink_tree(path: Path) -> bool:
+    return any(candidate.is_symlink() for candidate in path.rglob("*"))
+
+
+def _validate_legacy_source(root: Path, registry: dict[str, Any]) -> list[ValidationIssue]:
+    """Keep legacy archive provenance honest when only extracted files exist."""
+
+    source = registry.get("legacy_source")
+    if not isinstance(source, dict):
+        return [ValidationIssue("modules/registry.yaml", "legacy_source must be an object")]
+    issues: list[ValidationIssue] = []
+    status = source.get("archive_status")
+    basis = source.get("source_basis")
+    archive_path, archive_error = _safe_repo_path(root, source.get("archive_path"), label="legacy archive path")
+    if status == "verified":
+        if basis != "original_archive":
+            issues.append(ValidationIssue("modules/registry.yaml", "verified legacy archive must use source_basis=original_archive"))
+        if archive_error or archive_path is None or not archive_path.is_file():
+            issues.append(ValidationIssue("modules/registry.yaml", "legacy archive is declared verified but is unavailable"))
+        elif hashlib.sha256(archive_path.read_bytes()).hexdigest() != source.get("sha256") or archive_path.stat().st_size != source.get("size_bytes"):
+            issues.append(ValidationIssue("modules/registry.yaml", "verified legacy archive digest or size does not match the archive"))
+    elif status == "unavailable":
+        if basis != "extracted_corpus":
+            issues.append(ValidationIssue("modules/registry.yaml", "unavailable legacy archive must use source_basis=extracted_corpus"))
+        if source.get("archive_path") is not None or source.get("sha256") is not None or source.get("size_bytes") is not None:
+            issues.append(ValidationIssue("modules/registry.yaml", "unavailable legacy archive must not carry archive evidence"))
+    else:
+        issues.append(ValidationIssue("modules/registry.yaml", "legacy archive_status must be verified or unavailable"))
+
+    corpus_path, corpus_error = _safe_repo_path(root, source.get("corpus_root"), label="legacy corpus root")
+    if corpus_error or corpus_path is None or not corpus_path.is_dir():
+        issues.append(ValidationIssue("modules/registry.yaml", f"legacy extracted corpus is unavailable: {source.get('corpus_root')}"))
+    elif _has_symlink_tree(corpus_path):
+        issues.append(ValidationIssue("modules/registry.yaml", "legacy extracted corpus must not contain symlinked files"))
+    elif corpus_digest(corpus_path) != source.get("corpus_digest"):
+        issues.append(ValidationIssue("modules/registry.yaml", "legacy extracted corpus digest does not match registry"))
     return issues
 
 

@@ -1804,3 +1804,76 @@ Start the next cycle when a qualified host exposes an enforcement-point timing p
 - Approval-bound negative requests must test the post-approval guard, not only missing-token rejection.
 - Determinism and timing are different evidence contracts; keep wall-clock measurements out of replay identities.
 - Missing host timing must remain unknown even when every local broker denial succeeds.
+
+## ADR-26 — Re-baseline legacy provenance when the original archive is unavailable
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `provenance` `legacy-migration` `registry-integrity` `fail-closed`
+**Change Classification:** `INTEGRITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when the original V16 archive is supplied.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for extracted-corpus integrity; `NOT_ARCHIVE_VERIFIED` because the original V16 archive is unavailable.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — supplying the original archive must trigger a new content-addressed registry revision.
+
+### Context
+
+The module registry carried a plausible SHA-256 and size for `VHEATM-v16.1.1.skill`, but that archive was not present in the repository. The validator did not resolve the contradiction, so a future consumer could mistake an unresolvable archive claim for verified legacy provenance. The extracted corpus is present and already has a separate content digest in the capability ledger.
+
+### Decision
+
+Make legacy provenance explicit in the canonical registry. `archive_status=unavailable` and `source_basis=extracted_corpus` are required until the original archive is supplied; archive path, archive SHA-256, and archive size must be null in that state. The registry records the extracted corpus root and digest, and `vheatm-validate` resolves the root inside the repository, rejects symlink traversal, recomputes the digest, and rejects any archive declaration marked `verified` when the archive is missing or mismatched. Supplying the archive later requires a new registry/bundle identity and `archive_status=verified` with matching bytes and size.
+
+### Options Considered
+
+- Keep the old archive hash until someone supplies the file: rejected because an unverifiable hash is false assurance.
+- Treat the extracted corpus as byte-identical to the archive: rejected because extraction/repacking can change bytes and the original archive cannot be reconstructed from its contents.
+- Delete all legacy provenance: rejected because the extracted corpus remains useful and is already mapped by the capability ledger.
+- Mark the archive unavailable without validating the extracted corpus: rejected because the fallback baseline would then be mutable or ambiguous.
+
+### Impact
+
+Schemas changed: `schemas/module-registry.schema.json`.
+Canonical artifacts changed: `modules/registry.yaml`.
+Components changed: repository validator, capability-ledger validator, provenance lifecycle documentation, registry regression tests.
+Breaking change: **YES** for consumers that treated the old archive hash as verified provenance; they must distinguish archive verification from extracted-corpus re-baselining.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `legacy registry state → extracted corpus path/digest → control validation → bundle identity → migration provenance claims`.
+Cascade Review: ✅ Done — RED tests cover digest mutation and a missing archive labelled verified; GREEN validation covers the explicit unavailable state and content-bound extracted corpus.
+
+### Consequences
+
+- The repository no longer emits an apparently verified digest for a file it does not possess.
+- Extracted legacy files remain usable for semantic migration, but their status cannot be upgraded to archive verification by prose or a copied hash.
+- Archive delivery is a clean, reviewable external transition: replace the unavailable state, bind the actual archive path/bytes/size, and accept the resulting bundle-root change.
+- This closes a local provenance ambiguity but does not create private qualification, key custody, vulnerability, provider, host, or pilot evidence.
+
+### Evidence
+
+- [verified 2026-08-01] Focused RED/GREEN registry and capability-ledger tests reject a mutated extracted-corpus digest, symlinked corpus content, and a `verified` archive declaration whose file is absent.
+- [verified 2026-08-01] `.venv/bin/vheatm-validate --root .` passes with the extracted-corpus re-baseline.
+- [verified 2026-08-01] No original archive bytes or archive-verification claim were fabricated.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. The original V16 archive remains unavailable; private/time-sliced qualification, external key custody, fresh vulnerability evidence, provider qualification, host namespace/hard-stop qualification, UX research, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when `VHEATM-v16.1.1.skill` is supplied or officially superseded; verify its bytes independently, replace the explicit unavailable state, and rerun the bundle, migration, and release-evidence checks.
+
+### Cycle Retrospective
+
+- A content hash is not evidence when the addressed bytes are absent.
+- Re-baselining must preserve useful extracted material while making the loss of archive-level assurance machine-visible.
+- Provenance status belongs in the canonical registry, not only in a lifecycle note.

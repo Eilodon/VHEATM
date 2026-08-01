@@ -26,6 +26,10 @@ def corpus_digest(root: Path) -> str:
     return hashlib.sha256(_canonical(entries)).hexdigest()
 
 
+def _has_symlink_tree(root: Path) -> bool:
+    return any(path.is_symlink() for path in root.rglob("*"))
+
+
 def expected_ledger_id(ledger: Mapping[str, Any]) -> str:
     identity = {key: value for key, value in ledger.items() if key != "ledger_id"}
     return "LED-" + hashlib.sha256(_canonical(identity)).hexdigest().upper()
@@ -53,6 +57,9 @@ def validate_capability_ledger(root: Path, ledger: Mapping[str, Any], schema: Ma
         return errors
     if not corpus_root.is_dir():
         errors.append(f"legacy corpus is unavailable: {ledger['legacy_root']}")
+        return errors
+    if _has_symlink_tree(corpus_root):
+        errors.append("legacy corpus must not contain symlinked files")
         return errors
     if corpus_digest(corpus_root) != ledger["corpus_digest"]:
         errors.append("legacy corpus digest does not match capability ledger")

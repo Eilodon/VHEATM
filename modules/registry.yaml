@@ -95,5 +95,10 @@ modules:
 legacy_source:
   artifact: VHEATM-v16.1.1.skill
   version: 16.1.1
-  sha256: efdf9dc7255bebfa5277a729caeeb1edca64be456c62169241fa3573d9fb67bd
-  size_bytes: 202566
+  archive_status: unavailable
+  source_basis: extracted_corpus
+  archive_path: null
+  corpus_root: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate
+  corpus_digest: 2aabfd49c45ccdf0d15ef2b98613bf51c257934759c672d7bc53b74aafdbdfc9
+  sha256: null
+  size_bytes: null

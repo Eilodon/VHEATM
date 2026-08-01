@@ -74,6 +74,11 @@
       "required": [
         "artifact",
         "version",
+        "archive_status",
+        "source_basis",
+        "archive_path",
+        "corpus_root",
+        "corpus_digest",
         "sha256",
         "size_bytes"
       ],
@@ -86,15 +91,109 @@
           "type": "string",
           "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
         },
-        "sha256": {
+        "archive_status": {
+          "enum": [
+            "verified",
+            "unavailable"
+          ]
+        },
+        "source_basis": {
+          "enum": [
+            "original_archive",
+            "extracted_corpus"
+          ]
+        },
+        "archive_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "corpus_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "corpus_digest": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
         "size_bytes": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         }
       }
     }
-  }
+  },
+  "allOf": [
+      {
+        "if": {
+          "properties": {
+            "archive_status": {
+              "const": "verified"
+            }
+          },
+          "required": [
+            "archive_status"
+          ]
+        },
+        "then": {
+          "properties": {
+            "source_basis": {
+              "const": "original_archive"
+            },
+            "archive_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "archive_status": {
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "archive_status"
+          ]
+        },
+        "then": {
+          "properties": {
+            "source_basis": {
+              "const": "extracted_corpus"
+            },
+            "archive_path": {
+              "const": null
+            },
+            "sha256": {
+              "const": null
+            },
+            "size_bytes": {
+              "const": null
+            }
+          }
+        }
+      }
+    ]
 }

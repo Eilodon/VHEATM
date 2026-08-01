@@ -27,6 +27,7 @@
 - **Verified sandbox backend:** the executable whose bytes match the execute request's digest and whose open file descriptor is reused for reference-monitor preflight and action launch. <!-- from ADR: ADR-23 -->
 - **Claim gate binding:** the content-addressed `gate_trace` on a claim that identifies the gate(s) for which verified evidence is valid; report validation rejects cross-gate reuse. <!-- from ADR: ADR-24 -->
 - **Unauthorized tool-class matrix:** the deterministic seeded qualification exercise that submits schema-valid, policy-invalid requests for read, write, execute, network, and secrets and records broker denials without invoking an action backend. <!-- from ADR: ADR-25 -->
+- **Extracted-corpus re-baseline:** the explicit provenance state used when the original legacy archive is unavailable; the extracted corpus digest is verified, while archive verification remains false. <!-- from ADR: ADR-26 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -52,6 +53,7 @@
 - Execute authorization must bind the backend executable digest; per-run rehash plus FD-bound launch is required before a sandbox outcome can claim authorized execution. <!-- from ADR: ADR-23 -->
 - Verified gate evidence must bind its claim to every consuming gate; a generic verified claim cannot be reused across unrelated gates without a new content address. <!-- from ADR: ADR-24 -->
 - Passing gates cannot use `SRC-*` records as direct evidence; a source must remain lineage for a gate-bound claim or typed artifact. <!-- from ADR: ADR-24 -->
+- Legacy archive provenance must declare either a verifiable original archive or an unavailable archive with a content-addressed extracted-corpus root; an absent archive cannot retain a verified archive digest. <!-- from ADR: ADR-26 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -78,3 +80,4 @@
 - [2026-08] A verified claim can be semantically valid yet unrelated to the gate consuming it | Include `gate_trace` in claim identity and require report evidence to cover the consuming gate. <!-- from ADR: ADR-24 -->
 - [2026-08] A trusted source can still be raw, gate-irrelevant material | Reject direct source evidence at the passing-gate boundary and require a typed claim/artifact. <!-- from ADR: ADR-24 -->
 - [2026-08] Five broker denials do not prove host hard-stop latency | Keep `unauthorized_block_rate` evidence separate from `hard_stop_p99_seconds`, which remains unknown without a real host-level timing probe. <!-- from ADR: ADR-25 -->
+- [2026-08] A registry can carry a plausible legacy archive hash even when the archive is absent | Encode `archive_status` and `source_basis`, bind the extracted corpus digest, and reject an unavailable archive marked verified. <!-- from ADR: ADR-26 -->
