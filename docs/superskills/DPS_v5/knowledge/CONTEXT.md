@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 10 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 11 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -17,6 +17,7 @@
 - **Independent judge coverage:** the intersection of packet decision item IDs with verified private receipt case references used to authorize a critical trial count. <!-- from ADR: ADR-13 -->
 - **Persisted provider receipt chain:** the redacted network request, broker receipt, and provider response identity retained together so a later pilot boundary can re-verify authorization rather than trust a rehashed run ID. <!-- from ADR: ADR-14 -->
 - **Canary evidence revalidation:** the pre-rollout recomputation of the release report from typed evidence, verification keys, bundle root, and evaluator version before tools may be enabled. <!-- from ADR: ADR-15 -->
+- **Release-report identity boundary:** the schema, ordered RG-00…RG-15 gate set, derived summary, and evaluation timestamp that must agree before a report can authorize a pilot. <!-- from ADR: ADR-16 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -32,6 +33,7 @@
 - A content-addressed independent verdict is insufficient without its blind packet and exact randomized item coverage; packet identity, verdict binding, and private-case intersection must all hold before critical qualification metrics are derived. <!-- from ADR: ADR-13 -->
 - Content-addressing does not prove authorization; persisted provider runs must retain enough redacted network metadata to recompute receipt request/action binding before pilot completion. <!-- from ADR: ADR-14 -->
 - A self-consistent all-pass report is not a canary authorization; canary preparation must re-evaluate the underlying evidence and require exact report equality. <!-- from ADR: ADR-15 -->
+- A report ID must bind every identity-bearing field, including schema version and evaluation time; generated reports must pass the same schema boundary as caller-supplied reports. <!-- from ADR: ADR-16 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -47,3 +49,4 @@
 - [2026-08] A valid judge verdict can be detached from the packet or claim unpresented private cases | Bind the packet sidecar, exact provider/model/config/order fields, and decision IDs before deriving qualification metrics. <!-- from ADR: ADR-13 -->
 - [2026-08] A provider run can be rehashed after receipt tampering | Re-verify the persisted network request, broker semantics, receipt identity/digests, response digest, and completed status at every later evidence boundary. <!-- from ADR: ADR-14 -->
 - [2026-08] A release report can be rehashed after changing all gates to pass | Re-run the canonical evaluator with the original evidence and bundle/key bindings before enabling tools. <!-- from ADR: ADR-15 -->
+- [2026-08] A release report can be schema-invalid or share an ID across evaluation times | Validate the generated and pilot-bound report, derive the summary, and include timestamp/schema fields in the identity projection. <!-- from ADR: ADR-16 -->

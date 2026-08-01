@@ -1071,3 +1071,77 @@ Start the next cycle when a real release-evidence store or canary controller is 
 - A report's content ID is an integrity check, not an attestation of its inputs.
 - Tool-enabled rollout needs an evidence re-verification boundary before activation, not merely a readiness check after claims are assembled.
 - Reusing the canonical evaluator keeps canary policy aligned with release policy and avoids a second gate authority.
+
+## ADR-16 — Enforce canonical release-report identity at evaluator and pilot boundaries
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `release-gates` `pilot` `content-addressing` `schema-validation`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — re-evaluate when the release-report schema or identity fields change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local report-integrity enforcement; `NOT_PRODUCTION_QUALIFIED` for external release evidence and rollout.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — report identity fields, gate inventory, and canonical schemas are release-bound inputs.
+
+### Context
+
+The release evaluator validated typed input evidence but did not validate its own emitted report at the boundary. Pilot preparation separately trusted a report whose ID was internally consistent, even when required fields were missing or gate IDs were duplicated. The report ID also omitted `schema_version` and `evaluated_at`, allowing different report contents to share one identity. Duplicate evidence records could make the generated report violate its own `uniqueItems` contract instead of returning the intended typed unknown state.
+
+### Decision
+
+Add one shared `validate_release_report()` boundary. It validates the canonical release-report schema and date-time formats, checks the report ID against all identity-bearing fields including schema version and evaluation timestamp, requires exactly the ordered RG-00…RG-15 set, and derives the summary from gate statuses. Every evaluator output and every shadow/canary preparation input passes this guard. Evidence binding derivation is set-like and deterministic, so duplicate input IDs remain visible to qualification verification without producing an invalid report envelope.
+
+### Options Considered
+
+- Trust the report ID and `ga_eligible`: rejected because both can be recomputed from malformed caller content.
+- Validate only canary reports: rejected because shadow reports and direct evaluator callers are still persisted evidence inputs.
+- Relax `uniqueItems` in the report schema: rejected because duplicate evidence IDs obscure provenance and weaken the typed contract.
+- Keep evaluation time outside report identity: rejected because an immutable report must distinguish otherwise identical evaluations at different times.
+
+### Impact
+
+Schemas changed: none; existing `release-gate-report.schema.json` is now enforced at all report acceptance paths.
+Components changed: release evaluator, report identity derivation, pilot preparation, release-evidence and pilot regressions.
+Breaking change: **YES** for malformed, duplicate-gate, non-RFC-3339, or stale-content release reports.
+
+IMPACT RADIUS:
+BLAST RADIUS: WIDE
+Cascades: `typed evidence → RG-00…RG-15 evaluator → canonical release report → shadow/canary preparation`.
+Cascade Review: ✅ Done — evaluator, CLI output, shadow, canary, duplicate-evidence, identity, and schema paths were searched and tested.
+
+### Consequences
+
+- A report cannot enter pilot state unless its schema, gate inventory, derived summary, timestamp, and identity agree.
+- Re-evaluation at a different timestamp creates a distinct report ID, making persisted pilot provenance unambiguous.
+- Duplicate packet IDs still produce a typed unknown qualification result rather than an invalid report or a passing shortcut.
+- External signing, private corpus, vulnerability feed, provider qualification, host namespace, and operational canary evidence remain unavailable and fail-closed.
+
+### Evidence
+
+- [verified 2026-08-01] RED evaluator regression showed a non-RFC-3339 timestamp was accepted before the shared validator.
+- [verified 2026-08-01] RED pilot regression showed a schema-invalid shadow report was accepted before the shared validator.
+- [verified 2026-08-01] RED identity regression showed reports at different evaluation timestamps shared one report ID.
+- [verified 2026-08-01] GREEN release/pilot contract suite passes with duplicate packet evidence remaining `unknown` and malformed reports rejected.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release qualification and operational pilot evidence remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when the release-report schema adds an identity-bearing field or a live evidence store supplies a persisted report; add the field/store binding regression before accepting the new report shape.
+
+### Cycle Retrospective
+
+- A content-addressed ID is only as strong as the fields included in its identity projection.
+- Generated outputs need the same schema boundary as untrusted inputs; otherwise strict schemas can fail inside the producer.
+- Set-like evidence bindings preserve a valid report envelope, while the verifier still decides whether duplicate source records are acceptable.

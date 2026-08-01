@@ -148,6 +148,28 @@ modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD
 ---
 date: 2026-08-01
 sprint: v17-kernel-closure
+adr: ADR-16 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: release-report-identity-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Release-report identity boundary: added ✅
+
+### Bug Patterns
+- The evaluator and pilot trusted a report projection that omitted schema/timestamp identity and did not enforce the report schema at every boundary: observed and fixed; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Generated reports need schema validation just like supplied evidence: added ✅
+- Duplicate evidence inputs must not make the output envelope invalid: added ✅
+
+### Architectural Decisions Promoted
+- Release reports require canonical schema, ordered gate inventory, derived summary, and identity binding at evaluator and pilot boundaries: added to CONTEXT.md ✅
+
+---
+date: 2026-08-01
+sprint: v17-kernel-closure
 adr: ADR-13 in docs/superskills/DPS_v5/ADR.md
 modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
 ---
