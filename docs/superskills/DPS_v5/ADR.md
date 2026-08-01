@@ -1438,3 +1438,75 @@ Start the next cycle when a vulnerability feed, scanner allowlist/coverage contr
 - A signature authenticates a historical statement; it does not make that statement fresh.
 - Independence must be checked against cryptographic key material, not only key IDs or role labels.
 - Canonical release policy needs both a measurement rule and a time/authority boundary before a derived gate can pass.
+
+## ADR-21 — Revalidate immutable pilot identity at every lifecycle transition
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `pilot` `content-addressing` `lifecycle` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when pilot lifecycle fields, persistence, or external observation storage changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local immutable-record enforcement; `NOT_PRODUCTION_QUALIFIED` until a real shadow/canary observation run and operational evidence exist.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — lifecycle records may gain external store, signer, or operational receipt fields.
+
+### Context
+
+`prepare_pilot()` content-addressed the pilot record, but `complete_pilot()` and `rollback_pilot()` trusted the caller-provided mapping after checking only its status. A caller could mutate `read_only` or `tools_enabled` on a `ready` pilot and then submit observations consistent with the altered profile. The record remained schema-shaped, but the lifecycle transition no longer referred to the prepared pilot revision.
+
+### Decision
+
+Add one `expected_pilot_id()` identity helper and require `_require_current_pilot()` at the start of every mutating lifecycle transition. Preparation, completion, and rollback all use the same immutable-content projection; a changed field, missing ID, or mismatched ID raises `PilotError` before provider runs, observations, or rollback effects are considered. New revision IDs continue to include the updated content, so transitions remain content-addressed without silently mutating history.
+
+### Options Considered
+
+- Trust `status == ready/complete`: rejected because mutable caller fields can change execution mode without changing status.
+- Recompute identity only in `prepare_pilot()`: rejected because persisted records can be modified between preparation and completion/rollback.
+- Sign local pilot records with an embedded key: rejected because local key material cannot establish operational pilot authority.
+- Rebuild the entire pilot record from external storage: deferred; the local identity boundary must remain correct before an external store exists.
+
+### Impact
+
+Schemas changed: none.
+Components changed: pilot lifecycle identity helper, preparation/completion/rollback transitions, pilot regression tests, lifecycle documentation.
+Breaking change: **YES** for callers that mutate a prepared pilot mapping without recomputing its content-addressed revision.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `pilot record → lifecycle transition → observations/provider runs → shadow/canary evidence`.
+Cascade Review: ✅ Done — mutated-ready-pilot RED regression, shared-helper coverage for completion and rollback, full pilot contract tests, and release-gated pilot semantics cover the changed boundary.
+
+### Consequences
+
+- A pilot cannot change execution mode or scope between preparation and completion without creating a new revision and passing the transition boundary.
+- Rollback is protected by the same identity check, preventing a caller from applying rollback to altered content while retaining the old ID.
+- This proves local record integrity only; it does not prove an actual shadow/canary observation, host enforcement, provider qualification, or GA readiness.
+- Identity recomputation is negligible local cost; future persisted-store lookups must retain the same immutable projection.
+
+### Evidence
+
+- [verified 2026-08-01] RED pilot regression showed a caller-mutated `ready` pilot could complete with `tools_enabled=true`.
+- [verified 2026-08-01] GREEN test rejects the mutated pilot before provider-run/observation acceptance; existing pilot suite remains green.
+- [verified 2026-08-01] No external pilot observation, canary authorization, or GA evidence was created by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External shadow/canary observation, host namespace capability, provider qualification, key custody, private/time-sliced qualification, UX-04, and GA operational evidence remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when pilot records become externally persisted/signed or when a lifecycle field is added; add store/signer binding and rerun the mutation, rollback, and canary revalidation suite.
+
+### Cycle Retrospective
+
+- A content-addressed creation record is not immutable unless every later transition revalidates its identity.
+- Status checks are authorization state, not record integrity.
+- Shared identity projection prevents completion and rollback from drifting into separate trust models.

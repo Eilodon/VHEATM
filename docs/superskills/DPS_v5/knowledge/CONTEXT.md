@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 15 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 16 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -22,6 +22,7 @@
 - **Signed independent verdict:** a complete blind-judge verdict carrying a valid signature from a judge key distinct from the qualification evaluator key, required before it contributes release metrics. <!-- from ADR: ADR-18 -->
 - **Canonical qualification method:** a manifest-bound measurement definition whose estimator, confidence method, sample basis, and minimum population are hashed into the method digest required by RG evidence. <!-- from ADR: ADR-19 -->
 - **Supply-chain freshness boundary:** the manifest-bound maximum age and time-order check required before a signed vulnerability scan can contribute RG-13. <!-- from ADR: ADR-20 -->
+- **Immutable pilot transition:** the lifecycle check that recomputes a pilot revision ID before completion or rollback may consume its fields. <!-- from ADR: ADR-21 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -42,6 +43,7 @@
 - Content-addressed judge identity and packet binding are insufficient for release evidence; persisted verdicts require a distinct judge signature, while unsigned candidates remain non-qualifying. <!-- from ADR: ADR-18 -->
 - RG measurements must resolve to the canonical qualification-method policy before signatures or threshold predicates can expose their values; a signed arbitrary method digest remains ineligible. <!-- from ADR: ADR-19 -->
 - RG-13 requires a vulnerability scan to be within the canonical evaluation window and supply-chain, vulnerability, and provenance keys to be different key materials; signed stale or self-issued evidence remains blocked. <!-- from ADR: ADR-20 -->
+- Pilot status is not pilot integrity; completion and rollback must revalidate the content-addressed pilot ID before consuming mutable fields. <!-- from ADR: ADR-21 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -62,3 +64,4 @@
 - [2026-08] An isolated judge can emit a valid-looking record that is later replaced | Authenticate persisted verdicts with a dedicated judge key and reject reuse of the evaluator key before deriving qualification metrics. <!-- from ADR: ADR-18 -->
 - [2026-08] A signed measurement can name an arbitrary method digest | Bind every RG method digest to the schema-valid, manifest-versioned estimator policy before deriving release metrics. <!-- from ADR: ADR-19 -->
 - [2026-08] A signed empty vulnerability scan can be historical or self-issued across every supply-chain role | Enforce canonical freshness and compare public-key bytes at the RG-13 boundary. <!-- from ADR: ADR-20 -->
+- [2026-08] A `ready` pilot can be caller-mutated between preparation and completion | Recompute its immutable identity at every lifecycle transition, not only at creation. <!-- from ADR: ADR-21 -->

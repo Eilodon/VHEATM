@@ -33,6 +33,17 @@ def _timestamp(value: str | None = None) -> str:
     return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+def expected_pilot_id(pilot: Mapping[str, Any]) -> str:
+    """Return the identity digest for the current immutable pilot revision."""
+
+    return "PIL-" + _digest({key: value for key, value in pilot.items() if key != "pilot_id"}).upper()
+
+
+def _require_current_pilot(pilot: Mapping[str, Any]) -> None:
+    if not isinstance(pilot, Mapping) or pilot.get("pilot_id") != expected_pilot_id(pilot):
+        raise PilotError("pilot identity does not match its immutable content")
+
+
 def prepare_pilot(
     *,
     session_root: str,
@@ -110,17 +121,20 @@ def prepare_pilot(
     if profile == "canary" and tools_enabled and all(item["status"] == "pass" for item in normalized_drills):
         status = "ready"
     identity = {"session_root": session_root, "plan_id": plan_id, "release_report_id": release_report["report_id"], "profile": profile, "read_only": not tools_enabled, "tools_enabled": tools_enabled, "status": status, "rollback_plan": rollback_plan, "drills": normalized_drills}
-    return {"schema_version": "1.0.0", "pilot_id": "PIL-" + _digest(identity).upper(), **identity, "created_at": _timestamp(created_at)}
+    pilot = {"schema_version": "1.0.0", **identity, "created_at": _timestamp(created_at)}
+    pilot["pilot_id"] = expected_pilot_id(pilot)
+    return pilot
 
 
 def rollback_pilot(pilot: Mapping[str, Any], *, reason: str, occurred_at: str | None = None) -> dict[str, Any]:
+    _require_current_pilot(pilot)
     if pilot.get("status") not in {"ready", "complete"}:
         raise PilotError("only ready or complete pilots can be rolled back")
     if not reason.strip():
         raise PilotError("rollback requires a reason")
     updated = {key: value for key, value in pilot.items() if key != "pilot_id"}
     updated.update({"status": "rollback", "rollback_reason": reason, "rollback_at": _timestamp(occurred_at)})
-    updated["pilot_id"] = "PIL-" + _digest({key: value for key, value in updated.items() if key != "pilot_id"}).upper()
+    updated["pilot_id"] = expected_pilot_id(updated)
     return updated
 
 
@@ -131,6 +145,7 @@ def complete_pilot(
     provider_runs: Sequence[Mapping[str, Any]],
     completed_at: str | None = None,
 ) -> dict[str, Any]:
+    _require_current_pilot(pilot)
     if pilot.get("status") != "ready":
         raise PilotError("only a ready pilot can be completed")
     if not observations:
@@ -200,5 +215,5 @@ def complete_pilot(
         raise PilotError("pilot completion is blocked by failed or unknown observations")
     updated = {key: value for key, value in pilot.items() if key != "pilot_id"}
     updated.update({"status": "complete", "observations": sorted(normalized, key=lambda item: item["observation_id"]), "completed_at": _timestamp(completed_at)})
-    updated["pilot_id"] = "PIL-" + _digest({key: value for key, value in updated.items() if key != "pilot_id"}).upper()
+    updated["pilot_id"] = expected_pilot_id(updated)
     return updated

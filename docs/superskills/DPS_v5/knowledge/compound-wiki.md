@@ -320,3 +320,25 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - RG-13 requires the manifest-bound scan window and distinct supply-chain/vulnerability/provenance key material: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-21 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: immutable-pilot-transition-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Immutable pilot transition: added ✅
+
+### Bug Patterns
+- Pilot completion trusted a caller-mutated `ready` record after preparation: observed and fixed by shared identity revalidation on completion and rollback; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Status is not record integrity: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Every pilot lifecycle transition must recompute the content-addressed pilot identity before consuming its fields: added to CONTEXT.md ✅
+
+---

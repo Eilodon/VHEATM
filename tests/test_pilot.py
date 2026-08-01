@@ -120,6 +120,13 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     assert complete["pilot_id"] != pilot["pilot_id"]
     schema = load_json((Path("schemas") / "pilot-run.schema.json").read_text())
     Draft202012Validator(schema).validate(complete)
+    tampered_pilot = {**pilot, "read_only": False, "tools_enabled": True}
+    with pytest.raises(PilotError, match="identity"):
+        complete_pilot(
+            tampered_pilot,
+            observations=[{**observation, "read_only_confirmed": False}],
+            provider_runs=[provider_run],
+        )
     tampered_run = {**provider_run, "network_receipt": {**provider_run["network_receipt"], "action_digest": "0" * 64}}
     tampered_run["run_id"] = expected_provider_run_id(tampered_run)
     tampered_observation = {**observation, "provider_run_refs": [tampered_run["run_id"]]}
