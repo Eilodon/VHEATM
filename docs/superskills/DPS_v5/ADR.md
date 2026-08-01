@@ -2487,3 +2487,76 @@ Start the next qualification cycle when a signed scanner/provenance handoff, tru
 - A zero-finding scan is still only candidate evidence when scanner provenance and signer authority are absent.
 - Installed capability and permissive-looking kernel settings are weaker evidence than the exact enforcement preflight.
 - External blockers should be recorded with concrete observations and digests while preserving the release boundary.
+
+## ADR-35 — Qualify the reference monitor in an isolated privileged host candidate
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `reference-monitor` `sandbox` `host-qualification` `rg-09`
+**Change Classification:** `EXTERNAL CONSTRAINT CHANGE`
+**Review date:** 2026-09-02 — or earlier when an externally controlled host authority supplies a signed HAT and deployment binding.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for the observed privileged-container execution and typed local HQR/HAT verification; `NOT_PRODUCTION_QUALIFIED` because the signer is ephemeral and the deployment is not an externally trusted host population.
+**LAST CONFIRMED:** 2026-08-02 — `METRICS`, `RUNTIME`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — kernel namespace capability, Docker privilege profile, bubblewrap binary, and host authority are deployment-specific.
+
+### Context
+
+The default workspace host has bubblewrap installed but cannot create the mandatory network namespace, so its host qualification correctly remains blocked. A privileged, isolated Docker environment was available without changing the repository or weakening the runtime fallback. It can test the exact `SandboxExecutor` command path and establish whether the implementation works when the required host capability exists.
+
+### Decision
+
+Run the exact host qualification runner in a disposable privileged Ubuntu container with the checkout mounted as the qualification workspace, bubblewrap installed from the container distribution, and the runner invoked through the repository source. Preserve the resulting HQR and locally verified HAT as candidate evidence only. Do not change the default host policy, add a privileged Docker runtime fallback, or accept the ephemeral signing key as the host authority.
+
+### Options Considered
+
+- Treat the default host's installed binary as qualified: rejected because the exact namespace preflight fails.
+- Add a privileged Docker fallback to production sandbox execution: rejected because it would expand the runtime trust boundary and could turn privilege into an unreviewed authorization path.
+- Discard the container result entirely: rejected because the result is useful independent evidence that the digest-bound enforcement path works when the required capability is genuinely present, provided its candidate status is explicit.
+
+### Impact
+
+Schemas changed: none
+Components changed: host qualification evidence ledger only
+Breaking change: NO
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `qualified host capability → SandboxExecutor preflight → timeout-enforced HQR → HAT → trusted host registry → RG-09`; only the first four candidate links are observed here.
+Cascade Review: ✅ Done — exact runner output was schema-validated, HAT was signed/verified against the HQR, and the default host remains fail-closed.
+
+### Consequences
+
+- The reference-monitor implementation now has a real 3-sample candidate qualification under the required namespace capability, rather than only a mocked or unavailable-host result.
+- The measured candidate p99 is `0.12605191` seconds for the three observed timeout samples, below the roadmap threshold, but it is not a production claim.
+- The default host still produces no metric; no Docker privilege is silently introduced into runtime execution.
+- RG-09 remains unavailable to release evaluation until external host authority, deployment identity, population adequacy, and trusted registry custody are supplied.
+
+### Evidence
+
+- [verified 2026-08-02] Privileged Docker probe passed the exact bwrap preflight with read-only workspace, `--unshare-net`, cleared environment, capability drop, and namespace flags.
+- [verified 2026-08-02] Host runner emitted HQR `HQR-EAD766493FB21ABE113EC1D9443CB3D5754EC2B3CD0B7FB06EFFB058F0EEB6E5`; JSON digest `91ad21ea0b25896e3c08f14f94a97483151bbee6d653956e734cbeaace845446`; `status=complete`, `reference_monitor_status=observed`, 3/3 observations, `hard_stop_p99_seconds=0.12605191`.
+- [verified 2026-08-02] HQR validates with `validate_host_qualification_run`; local HAT `HAT-64B949EEF67AA604CA9D1ABCEC1C96822F3EA9C81A0CE650068699D4D6AD0A0A` signs and verifies against the exact HQR and current bundle root.
+- [verified 2026-08-02] The HAT key ID is `ephemeral-local-host-key`; no trusted host registry or external authority was supplied, so this evidence remains candidate/unverified at release boundary.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External host authority/key custody, deployment population adequacy, private qualification, judge/provider qualification, trusted vulnerability evidence, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next host qualification cycle when a controlled non-ephemeral host signer and deployment identity are supplied; rerun the same HQR method with the current bundle root, bind the HAT through the trusted registry, and require the resulting host population/freshness evidence before deriving RG-09.
+
+### Cycle Retrospective
+
+- An unavailable default host and a capable qualification host can coexist; evidence must bind the actual deployment rather than infer capability from installed packages.
+- A privileged test environment is useful for qualification only when it is explicitly kept outside the production runtime trust path.
+- A locally verified signature still lacks authority until the key registry and custody are externally supplied.
