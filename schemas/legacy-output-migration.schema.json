@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/legacy-output-migration.schema.json",
+  "title": "VHEATM legacy output migration record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "record_id", "legacy_mode", "status", "evidence_state", "authority_eligible", "taint_state", "source_digest", "required_sections", "missing_sections", "section_mappings", "diagnostics"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_id": {"type": "string", "pattern": "^MIG-[A-F0-9]{64}$"},
+    "legacy_mode": {"enum": ["FAST", "Standard", "Full"]},
+    "status": {"enum": ["complete", "unknown"]},
+    "evidence_state": {"enum": ["candidate", "unknown"]},
+    "authority_eligible": {"const": false},
+    "taint_state": {"const": "tainted"},
+    "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "required_sections": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "missing_sections": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "section_mappings": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["legacy_section", "canonical_schema", "present"],
+      "properties": {
+        "legacy_section": {"type": "string", "minLength": 1},
+        "canonical_schema": {"type": "string", "minLength": 1},
+        "present": {"type": "boolean"}
+      }
+    }},
+    "diagnostics": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

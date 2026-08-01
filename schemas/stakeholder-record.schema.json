@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/stakeholder-record.schema.json",
+  "title": "VHEATM typed stakeholder and ownership record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "record_id", "context_digest", "status", "epistemic_status", "authority_eligible", "primary_role", "secondary_roles", "org_context", "ownership_map", "missing_requirements"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_id": {"type": "string", "pattern": "^STK-[A-F0-9]{64}$"},
+    "context_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["complete", "unknown"]},
+    "epistemic_status": {"enum": ["candidate", "unknown"]},
+    "authority_eligible": {"const": false},
+    "primary_role": {"type": "string", "minLength": 1},
+    "secondary_roles": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "org_context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["auditor_team", "teams_in_scope"],
+      "properties": {
+        "auditor_team": {"type": ["string", "null"], "minLength": 1},
+        "teams_in_scope": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "ownership_map": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["component", "owning_team", "on_call", "escalation"],
+        "properties": {
+          "component": {"type": "string", "minLength": 1},
+          "owning_team": {"type": "string", "minLength": 1},
+          "on_call": {"type": "string", "minLength": 1},
+          "escalation": {"type": "string", "minLength": 1},
+          "sla": {"type": ["string", "null"], "minLength": 1}
+        }
+      }
+    },
+    "missing_requirements": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+  }
+}

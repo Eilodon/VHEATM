@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/assurance-maturity-delta.schema.json",
+  "title": "VHEATM assurance maturity delta record",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "record_id", "status", "claim_type", "evidence_state", "authority_eligible", "maturity_deltas", "missing_requirements", "diagnostics"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "record_id": {"type": "string", "pattern": "^AMD-[A-F0-9]{64}$"},
+    "status": {"enum": ["complete", "unknown"]},
+    "claim_type": {"const": "delta_only"},
+    "evidence_state": {"enum": ["candidate", "unknown"]},
+    "authority_eligible": {"const": false},
+    "maturity_deltas": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding_id", "finding_type", "samm_function", "samm_practice", "ssdf_mapping", "bsimm_baseline", "improvement_recommendation", "priority_action"],
+      "properties": {
+        "finding_id": {"type": "string", "minLength": 1},
+        "finding_type": {"enum": ["ONE-OFF", "RECURRING", "MISSING_CONTROL", "PROCESS_FAILURE"]},
+        "samm_function": {"enum": ["GOVERNANCE", "DESIGN", "IMPLEMENTATION", "VERIFICATION", "OPERATIONS"]},
+        "samm_practice": {"type": "string", "minLength": 1},
+        "ssdf_mapping": {"type": "string", "minLength": 1},
+        "bsimm_baseline": {"type": "boolean"},
+        "improvement_recommendation": {"type": "string", "minLength": 1},
+        "priority_action": {"enum": ["IMMEDIATE", "SHORT_TERM", "LONG_TERM"]}
+      }
+    }},
+    "missing_requirements": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "diagnostics": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

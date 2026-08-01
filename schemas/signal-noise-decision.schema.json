@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/signal-noise-decision.schema.json",
+  "title": "VHEATM signal-to-noise decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "hypothesis_id", "mode", "status", "verdict", "effective_priority", "security_exception", "skipped_questions", "diagnostics", "source_digest"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "decision_id": {"type": "string", "pattern": "^SNF-[A-F0-9]{64}$"},
+    "hypothesis_id": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["fast", "standard", "full"]},
+    "status": {"enum": ["complete", "unknown"]},
+    "verdict": {"type": ["string", "null"], "enum": ["maintain", "downgrade", "remove", null]},
+    "effective_priority": {"type": ["string", "null"], "enum": ["mandatory", "required", "recommended", "optional", null]},
+    "security_exception": {"type": "boolean"},
+    "skipped_questions": {"type": "array", "uniqueItems": true, "items": {"enum": ["Q1", "Q2", "Q3", "Q4"]}},
+    "diagnostics": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

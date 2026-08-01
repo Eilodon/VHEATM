@@ -1,5 +1,5 @@
 schema_version: 1.0.0
-corpus_id: EVC-636DE685B4FFB8E8B525282DCEDFD96E9B331E3DFDB33CD2ADA947453EE69E80
+corpus_id: EVC-88D33EA0EF903283471A34CDC48B00A188B8EA12E8147234E1702EF1226CD540
 corpus_version: v17.0.0-dev.1
 cases:
 - case_id: EVC-AUTHORITY-001
@@ -62,3 +62,41 @@ cases:
   seed: 10
   expected: block
   mutation: {target: release.attestation, operation: remove_signature}
+- case_id: EVC-SIGNAL-NOISE-UNKNOWN
+  family: migration
+  description: preserve unknown when signal-noise security and monitoring facts are absent
+  seed: 11
+  expected: unknown
+  mutation: {target: signal_noise.security_implication, operation: remove}
+- case_id: EVC-LEGACY-OUTPUT-TAINT
+  family: migration
+  description: keep incomplete legacy output non-authoritative and tainted
+  seed: 12
+  expected: block
+  mutation: {target: legacy_output.required_sections, operation: remove}
+- case_id: EVC-STAKEHOLDER-OWNER-BLOCK
+  family: migration
+  description: block enterprise stakeholder completion without an explicit owner map
+  seed: 13
+  expected: block
+  mutation: {target: stakeholder.ownership_map, operation: remove}
+- case_id: EVC-CROSS-CUTTING-ENTERPRISE
+  family: migration
+  description: require the enterprise cross-cutting L7.11 obligation and preserve typed ownership
+  seed: 14
+  expected: pass
+- case_id: EVC-TEMPORAL-ORDER
+  family: migration
+  description: qualify strictly ordered immutable snapshots and all six L4 sublayers
+  seed: 15
+  expected: pass
+- case_id: EVC-AI-RMF-UNKNOWN
+  family: migration
+  description: preserve unknown when AI-RMF governance and model provenance are undeclared
+  seed: 16
+  expected: unknown
+- case_id: EVC-ASSURANCE-DELTA
+  family: migration
+  description: emit a delta-only assurance mapping without minting maturity or certification
+  seed: 17
+  expected: pass

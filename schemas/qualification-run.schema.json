@@ -24,7 +24,7 @@
         "required": ["case_id", "family", "expected", "observed", "outcome", "details", "method_digest", "evidence_refs"],
         "properties": {
           "case_id": {"type": "string", "pattern": "^EVC-[A-Z0-9-]+$"},
-          "family": {"enum": ["authority", "determinism", "context", "typed_execution", "evidence", "security", "policy", "recovery", "privacy", "supply_chain"]},
+          "family": {"enum": ["authority", "determinism", "context", "typed_execution", "evidence", "security", "policy", "recovery", "privacy", "supply_chain", "migration"]},
           "expected": {"enum": ["reject", "unknown", "block", "pass"]},
           "observed": {"enum": ["reject", "unknown", "block", "pass"]},
           "outcome": {"enum": ["pass", "fail", "unknown"]},

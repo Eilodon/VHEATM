@@ -1,5 +1,5 @@
 schema_version: 1.0.0
-ledger_id: LED-10A9274AFE2E33754D8D22AD1E074333C1EF7627CA4F756025601223D6C6EFBA
+ledger_id: LED-6905DFE3CE85FEF2FEEF4FFB589AC5E0A7DD35E7CA2B7D3BF0CF143B1A7CAE3B
 framework_version: 17.0.0-dev.1
 legacy_root: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate
 corpus_digest: 2aabfd49c45ccdf0d15ef2b98613bf51c257934759c672d7bc53b74aafdbdfc9
@@ -106,48 +106,48 @@ entries:
   source_sections: [signal and noise filter]
   trigger: evidence triage is explicitly requested
   typed_inputs: [source_records, claims]
-  algorithm_or_protocol: deferred capability pending typed filtering contract
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: four-question signal/noise decision with explicit FAST-mode skips and security exception
+  typed_outputs: [signal_noise_decision]
   failure_semantics: no silent discard; unresolved items remain unknown
   mode_adaptation: profile controls maximum disclosure only
-  evidence_requirement: source digest, trust zone, and disposition reason
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: hypothesis digest, question trace, disposition reason, and unresolved diagnostics
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS]
+  tests: [tests/test_migration_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-SIGNAL-NOISE-UNKNOWN]
 - capability_id: CAP-LEGACY-07
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/06-output-schemas.md
   source_digest: c85d062295305a7017f3e0bee8a1cd1bee792f7b2c1a46eeeabffd8ca8cd7d57
   source_sections: [legacy output schema inventory]
   trigger: legacy output is requested by a canonical module
   typed_inputs: [module_contract, artifact_envelope]
-  algorithm_or_protocol: deferred capability pending schema migration map
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: static legacy mode section map to canonical JSON Schemas with taint-preserving migration records
+  typed_outputs: [legacy_output_migration]
   failure_semantics: untyped output is rejected from authoritative execution
   mode_adaptation: compatibility output cannot weaken canonical schemas
-  evidence_requirement: schema ref and producer run id
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-TYPED-OUTPUT-REJECTION]
+  evidence_requirement: source digest, section presence map, canonical schema refs, and non-authoritative taint state
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EXECUTION-FIDELITY]
+  tests: [tests/test_migration_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-LEGACY-OUTPUT-TAINT]
 - capability_id: CAP-LEGACY-08
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/07-stakeholder-templates.md
   source_digest: d38d4c8dfed50c28b6c03888d6359ba95ee309438f6eb89ed05ce64989b7b530
   source_sections: [stakeholder templates]
   trigger: stakeholder or decision-owner information is incomplete
   typed_inputs: [audit_context]
-  algorithm_or_protocol: deferred capability pending context contract extension
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: typed primary/secondary stakeholder declaration plus enterprise ownership map
+  typed_outputs: [stakeholder_record]
   failure_semantics: absent owner is unknown, never inferred
   mode_adaptation: organization scope remains separate from lifecycle stage
-  evidence_requirement: explicit stakeholder and decision-owner fields
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CONTEXT-UNKNOWN-FAILSAFE]
+  evidence_requirement: context digest, explicit decision owner, stakeholder roles, and ownership/escalation map
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-CONTEXT-CONTRACT, MOD-SYSTEM-MAPS]
+  tests: [tests/test_migration_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-STAKEHOLDER-OWNER-BLOCK]
 - capability_id: CAP-LEGACY-09
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/08-pattern-globalization.md
   source_digest: 56e8d68125a66cd344036c1e5fb5d13eb91456e7511131f9dd5e30c2c01105ae
@@ -202,16 +202,16 @@ entries:
   source_sections: [cross-cutting layer]
   trigger: cross-cutting obligation is identified
   typed_inputs: [audit_context, gate_plan]
-  algorithm_or_protocol: deferred capability pending explicit gate ownership
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: canonical L7.1-L7.11 obligation map with enterprise L7.11 escalation
+  typed_outputs: [cross_cutting_scan]
   failure_semantics: no implicit cross-cutting pass
   mode_adaptation: obligations are phase and intent scoped
-  evidence_requirement: gate-owner and typed artifact lineage
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: context digest, active obligation IDs, owner map, and unresolved diagnostics
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-CROSS-CUTTING-ENTERPRISE]
 - capability_id: CAP-LEGACY-13
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/12-compound-feature-decomp.md
   source_digest: 610415f9ce6efbe358461baaab51da3b4ad9724eb73566c38b5246d0f20ad1cd
@@ -282,16 +282,16 @@ entries:
   source_sections: [temporal scan mode]
   trigger: temporal or drift analysis is requested
   typed_inputs: [subject_snapshots, timestamps]
-  algorithm_or_protocol: deferred capability pending versioned temporal contract
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: strict ordered immutable snapshot contract with six L4 sublayer ownership records
+  typed_outputs: [temporal_scan]
   failure_semantics: clock or snapshot mismatch blocks temporal claims
   mode_adaptation: captured_at and snapshot digests are mandatory
-  evidence_requirement: ordered immutable snapshots with timezone-aware timestamps
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: unique snapshot IDs, content digests, timezone-aware timestamps, and owner map
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-TEMPORAL-ORDER]
 - capability_id: CAP-LEGACY-18
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/17-hybrid-verification.md
   source_digest: 3d62e1e58a6ed250665e83c91fb8c9a751c92c5275542c340cec96d68a7d853c
@@ -314,16 +314,16 @@ entries:
   source_sections: [AI-native addenda]
   trigger: AI-specific risk is identified
   typed_inputs: [audit_context, model_output]
-  algorithm_or_protocol: deferred capability pending normative AI risk contract
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: typed AI-RMF overlay with provider/model/config provenance and human oversight checks
+  typed_outputs: [ai_rmf_overlay]
   failure_semantics: model output remains tainted and cannot pass directly
   mode_adaptation: provider/model/config digests must be explicit
-  evidence_requirement: model receipt, provenance, and independent adjudication
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: provider/model/config digests, input-output lineage, oversight, governance, and monitoring coverage
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS, MOD-ADVERSARIAL-PASS]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-AI-RMF-UNKNOWN]
 - capability_id: CAP-LEGACY-20
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/19-language-profiles.md
   source_digest: c238732d95ffc6133128f3622a8c22618a84feec0230dc0569986d1998ed6635
@@ -367,9 +367,9 @@ entries:
   failure_semantics: denied or unavailable tool remains blocked
   mode_adaptation: read-only shadow profile precedes approved tool-enabled profile
   evidence_requirement: full request digest, receipt, and journal event
-  disposition: missing
-  correction_adr: []
-  module_owner: []
+  disposition: corrected
+  correction_adr: [ADR-V17-TYPED-AUTHORITY]
+  module_owner: [MOD-EXECUTION-FIDELITY]
   tests: [tests/test_tool_broker.py, tests/test_session_store.py]
   eval_cases: [EVAL-POLICY-DENY-BY-DEFAULT]
 - capability_id: CAP-LEGACY-23
@@ -426,48 +426,48 @@ entries:
   source_sections: [assurance maturity overlay]
   trigger: assurance maturity claim is requested
   typed_inputs: [release_evidence, capability_ledger]
-  algorithm_or_protocol: deferred capability pending versioned maturity policy
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: delta-only assurance overlay mapped to explicit SAMM, SSDF, and BSIMM evidence fields
+  typed_outputs: [assurance_maturity_delta]
   failure_semantics: no certification or maturity claim without release evidence
   mode_adaptation: stable profile and release gates are separate axes
-  evidence_requirement: signed release evidence and unresolved risk inventory
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: finding IDs, named assurance dimensions, evidence references, and unresolved risk inventory
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-CLOSURE-METRICS]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-ASSURANCE-DELTA]
 - capability_id: CAP-LEGACY-27
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/26-nist-ai-rmf-overlay.md
   source_digest: 1e8aca1c5d03da19b16f499c66b3df44ec0145b3d430848f402cad8e2e3b8c9e
   source_sections: [NIST AI RMF overlay]
   trigger: standards mapping is requested
   typed_inputs: [control_bundle, release_evidence]
-  algorithm_or_protocol: deferred mapping profile; standards text never overrides canonical policy
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: typed NIST AI RMF mapping overlay with pinned namespace and explicit scope limitations
+  typed_outputs: [ai_rmf_overlay]
   failure_semantics: unpinned or draft mapping is non-normative
   mode_adaptation: standards namespace and version must be explicit
-  evidence_requirement: pinned source, mapping digest, and scope limitations
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: pinned source, mapping digest, governance status, and scope limitations
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS, MOD-ADVERSARIAL-PASS]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-AI-RMF-UNKNOWN]
 - capability_id: CAP-LEGACY-28
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/27-l4-sublayers.md
   source_digest: 5966fdb37baf63dcb9b8be886678f5f351ca60636ba822cec7d32eef98c6eba6
   source_sections: [L4 sublayers]
   trigger: higher-order layer coverage is requested
   typed_inputs: [gate_plan, capability_ledger]
-  algorithm_or_protocol: deferred capability pending layer-to-gate ownership map
-  typed_outputs: [unknown_capability_result]
+  algorithm_or_protocol: explicit L4.1-L4.6 sublayer ownership map bound to immutable temporal scan records
+  typed_outputs: [temporal_scan]
   failure_semantics: unowned layer cannot be reported as covered
   mode_adaptation: disclosure follows the active gate plan
-  evidence_requirement: explicit owner, typed output, and evaluation case
-  disposition: missing
-  correction_adr: []
-  module_owner: []
-  tests: [tests/test_capability_ledger.py]
-  eval_cases: [EVAL-CAPABILITY-MISSING-BLOCK]
+  evidence_requirement: explicit sublayer owner, snapshot lineage, typed output, and evaluation case
+  disposition: corrected
+  correction_adr: [ADR-V17-MIGRATION-CAPABILITIES]
+  module_owner: [MOD-EVIDENCE-ANCHORS]
+  tests: [tests/test_overlay_capabilities.py, tests/test_capability_ledger.py]
+  eval_cases: [EVAL-TEMPORAL-ORDER]
 - capability_id: CAP-LEGACY-29
   source_file: docs/VHEATM-bản gốc tham khảo/vheatm-ultimate/references/28-auditor-defense.md
   source_digest: afe871f62b6eec64510e6d3106405b8987a5a9f839b95dcd2ab9e9e50e36dd21

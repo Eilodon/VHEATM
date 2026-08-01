@@ -17,7 +17,7 @@
 - SQLite WAL plus filesystem CAS session store with immutable snapshots, idempotent event keys, monotonic plan attachment, replay, and tamper detection.
 - Brokered Python AST/linkage adapters with versioned descriptors, source-snapshot binding, read receipts, candidate-only output, and separate deterministic validation receipts.
 - Blind independent-judge packet/verdict contracts with spawn-process isolation, randomized order, provider/model/config binding, timeout blocking, divergence detection, and HITL escalation.
-- Capability ledger for all 33 legacy corpus files; 22 are corrected/owned and 11 remain explicitly `missing` rather than being silently promoted.
+- Capability ledger for all 33 legacy corpus files; 32 are corrected/owned and UX-04 remains explicitly `missing` because real user-research evidence is unavailable.
 - Seeded evaluation corpus, frozen RG-00…RG-15 metric evaluator, canonical SBOM evidence, and a shadow/canary pilot record with rollback and outage/clock-skew drills.
 - Machine-readable standards baseline with namespace/review semantics, plus a canonical `uv.lock` bound into the bundle and supply-chain attestation.
 - Digest-bound bubblewrap reference-monitor adapter with read-only workspace, mandatory network namespace preflight, cleared environment, dropped capabilities, resource limits, and typed blocked run evidence.
@@ -28,15 +28,16 @@
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 - Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.
 - Private qualification ingestion now verifies a signed manifest, an absolute/file locator, exact time-slice membership, case digests, corpus identity, and framework binding before emitting a payload-free `PQR-*` receipt; qualification evidence and release reports must bind to and re-verify that receipt.
+- Semantic migration now has schema-bound, non-authoritative records for signal/noise decisions, FAST/Standard/Full legacy-output mapping, enterprise stakeholder ownership, cross-cutting L7 obligations, ordered temporal/L4 scans, AI-RMF governance, and assurance maturity deltas; unknown and tainted states remain explicit.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 216 passed.
-- `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 10/10 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs.
-- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `cbebf37dadc88b56461d60282fbce7400ab89474200c331868f400a682b1b7aa` with 172 canonical entries.
+- `.venv/bin/pytest -o addopts=''` — 231 passed.
+- `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs.
+- Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root `9e65dbef1ffdfb0d6b714be90b635ac4973f32d53d6ecd585ab4bbb291cce657` with 181 canonical entries.
 - Session, analyzer, judge, capability, release-gate, private-corpus, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell interpolation, or target-code import/execution in the control runtime; the only subprocess boundary is the explicit digest-bound sandbox adapter with `shell=False`, while activation remains parser-backed (`ast.literal_eval` only).

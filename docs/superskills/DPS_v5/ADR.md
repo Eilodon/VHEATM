@@ -436,3 +436,71 @@ Start the next cycle when the real private vault or an approved independent qual
 - A typed record is not evidence until its source boundary is verified; the receipt makes that boundary explicit without exporting private payloads.
 - Absolute locators and half-open time slices remove ambient path and boundary ambiguity from local verification.
 - The correct completion state is an executable verifier plus honest external blockers, not a synthetic private corpus or GA report.
+
+## ADR-7 — Typed semantic migration overlays remain candidate-only
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `semantic-migration` `unknown-safety` `taint` `temporal` `ai-rmf`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when UX research and the external qualification prerequisites are available.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local contract behavior; `NOT_PRODUCTION_QUALIFIED` for user-impact, standards, or external operational claims.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`
+**VOLATILITY:** `WATCHFUL` — legacy semantics and external evidence boundaries must remain bound to canonical schemas and policy.
+
+### Context
+
+The capability ledger correctly preserved unresolved legacy behavior, but several high-value migration references still had no executable contract. Marking them corrected without a typed boundary would turn prose equivalence into an authority bypass. The remaining UX-04 capability also requires real user-research evidence that is not present in this workspace.
+
+### Decision
+
+Add schema-validated candidate records for signal/noise decisions, FAST/Standard/Full output migration, stakeholder ownership, cross-cutting L7 obligations, strict ordered temporal snapshots with all six L4 sublayers, AI-RMF governance/model provenance, and delta-only assurance maturity mapping. These builders use canonical static maps and preserve `unknown`, missing ownership, and tainted legacy output. Every record has `authority_eligible: false`; none can manufacture a gate result, certification, maturity score, or UX claim. The ledger marks 32 of 33 legacy files corrected/owned and leaves UX-04 missing until external user research is supplied.
+
+### Options Considered
+
+- Mark all legacy references corrected from unit-test coverage: rejected because implementation presence is not evidence of semantic equivalence or user impact.
+- Infer enterprise owners, AI governance, or temporal order from nearby fields: rejected because missing or ambiguous declarations resolve to `unknown`.
+- Treat migrated legacy output as canonical report data: rejected because compatibility output remains tainted and non-authoritative.
+
+### Impact
+
+Schemas changed: `signal-noise-decision.schema.json`, `legacy-output-migration.schema.json`, `stakeholder-record.schema.json`, `cross-cutting-scan.schema.json`, `temporal-scan.schema.json`, `ai-rmf-overlay.schema.json`, and `assurance-maturity-delta.schema.json`.
+Components changed: migration capability builders, overlay builders, capability ledger, seeded evaluation corpus/runner, validator, and package bundle.
+Breaking change: YES — callers must use typed records and cannot treat migration overlays as authoritative gate or release evidence.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `legacy reference → typed candidate record → schema/ledger/eval validation`; no overlay result enters `gate plan → gate result → release report` without an independent policy-approved evidence boundary.
+Cascade Review: ✅ Done — each new record is schema-validated, content-addressed, tested, and represented by a seeded case where local behavior is deterministic.
+
+### Consequences
+
+- Seven formerly missing semantic capabilities now have executable local contracts and evaluation coverage; UX-04 remains an honest external blocker.
+- Enterprise L7.11, strict temporal ordering, AI-RMF missing governance, and assurance delta-only behavior are explicit and regression-tested.
+- Public seeded migration cases improve regression coverage but remain `public_seeded`/`unverified`; they do not satisfy private gold, independent judge, provider, signing, vulnerability, sandbox-host, or pilot gates.
+
+### Evidence
+
+- [verified 2026-08-01] Repository validation and targeted migration/overlay/ledger/qualification tests pass after the slice.
+- [verified 2026-08-01] The seeded runner dispatches all migration cases through static typed builders; no keyword or model-generated routing is used.
+- [verified 2026-08-01] The capability ledger validates with exactly one remaining `missing` disposition: UX-04.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release qualification debt remains intentionally open: user research, private vault/gold corpus, independent judge, key custody, provider qualification, host namespace capability, fresh vulnerability evidence, and shadow/canary observations.
+
+### Next Cycle Trigger
+
+Start the next cycle when UX research or any external qualification prerequisite becomes available. Bind its immutable source/key identity, add the evidence record, rerun the complete RG matrix, and retain `unknown`/`blocked` for every missing prerequisite.
+
+### Cycle Retrospective
+
+- A migration capability is only closed when its input, output, failure semantics, and authority boundary are executable and testable.
+- Overlay completeness is useful for planning, but candidate overlays must stay outside release authority until independently validated.
+- The final missing capability is a data-availability blocker, not a reason to weaken the policy.

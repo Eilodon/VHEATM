@@ -19,6 +19,8 @@ from .evaluator import PlanIntegrityError, assert_plan_matches, evaluate_manifes
 from .evaluation import validate_eval_corpus
 from .execution import ExecutionError, run_module, selection_digest, validate_module_run
 from .module_router import load_and_route, validate_module_repository
+from .migration_capabilities import build_stakeholder_record, evaluate_signal_noise, migrate_legacy_output
+from .overlay_capabilities import build_ai_rmf_overlay, build_assurance_maturity_delta, build_cross_cutting_scan, build_temporal_scan
 from .provenance import ProvenanceError, ProvenanceRegistry, build_claim_record, build_source_record, build_validation_receipt
 from .serialization import load_json, load_yaml
 from .session_store import SessionStore
@@ -331,6 +333,93 @@ def _supply_chain_case(root: Path, case: Mapping[str, Any], observed_at: str) ->
     return result, []
 
 
+def _migration_case(root: Path, case: Mapping[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    case_id = str(case["case_id"])
+    if case_id == "EVC-SIGNAL-NOISE-UNKNOWN":
+        decision = evaluate_signal_noise(
+            {
+                "hypothesis_id": case_id,
+                "original_priority": "required",
+                "worst_case": {"description": "unknown migration signal", "probability": "unknown"},
+                "security_implication": None,
+                "monitorable": None,
+                "time_to_detect_hours": None,
+                "time_to_fix_hours": None,
+            },
+            mode="standard",
+            root=root,
+        )
+        observed = "unknown" if decision["status"] == "unknown" and decision["verdict"] is None else "pass"
+        details = {"status": decision["status"], "verdict": decision["verdict"], "diagnostics": decision["diagnostics"]}
+        method = "signal-noise-unknown-preservation-v1"
+    elif case_id == "EVC-LEGACY-OUTPUT-TAINT":
+        migrated = migrate_legacy_output({"context": {"mode": "DESIGN"}}, mode="FAST", root=root)
+        observed = "block" if migrated["status"] == "unknown" and not migrated["authority_eligible"] and migrated["taint_state"] == "tainted" else "pass"
+        details = {"status": migrated["status"], "missing_sections": migrated["missing_sections"], "authority_eligible": migrated["authority_eligible"], "taint_state": migrated["taint_state"]}
+        method = "legacy-output-taint-boundary-v1"
+    elif case_id == "EVC-STAKEHOLDER-OWNER-BLOCK":
+        record = build_stakeholder_record({"context_mode": "enterprise", "goal": "seeded release", "stakeholder": "security"}, primary_role="security", root=root)
+        observed = "block" if record["status"] == "unknown" and "ownership_map" in record["missing_requirements"] else "pass"
+        details = {"status": record["status"], "missing_requirements": record["missing_requirements"], "authority_eligible": record["authority_eligible"]}
+        method = "stakeholder-owner-map-boundary-v1"
+    elif case_id == "EVC-CROSS-CUTTING-ENTERPRISE":
+        record = build_cross_cutting_scan({"context_mode": "enterprise"}, active_subcategories=("L7.1", "L7.4"), root=root)
+        obligation_ids = {item["id"] for item in record["obligations"]}
+        observed = "pass" if record["status"] == "complete" and "L7.11" in obligation_ids else "fail"
+        details = {"status": record["status"], "obligation_ids": sorted(obligation_ids), "authority_eligible": record["authority_eligible"]}
+        method = "enterprise-cross-cutting-obligation-map-v1"
+    elif case_id == "EVC-TEMPORAL-ORDER":
+        record = build_temporal_scan(
+            [
+                {"snapshot_id": "SNAP-001", "captured_at": "2026-08-01T00:00:00Z", "digest": "a" * 64},
+                {"snapshot_id": "SNAP-002", "captured_at": "2026-08-01T01:00:00Z", "digest": "b" * 64},
+            ],
+            mode="standard",
+            root=root,
+        )
+        observed = "pass" if record["status"] == "complete" and len(record["sublayers"]) == 6 else "fail"
+        details = {"status": record["status"], "snapshot_count": len(record["snapshots"]), "sublayer_count": len(record["sublayers"]), "authority_eligible": record["authority_eligible"]}
+        method = "temporal-ordered-snapshot-boundary-v1"
+    elif case_id == "EVC-AI-RMF-UNKNOWN":
+        record = build_ai_rmf_overlay(
+            {"declarations": {"ai_integrated": "yes"}},
+            model=None,
+            ai_inputs=(),
+            ai_outputs=(),
+            human_oversight_points=0,
+            governance={},
+            monitoring_coverage=None,
+            root=root,
+        )
+        observed = "unknown" if record["status"] == "unknown" and not record["authority_eligible"] else "pass"
+        details = {"status": record["status"], "missing_requirements": record["missing_requirements"], "authority_eligible": record["authority_eligible"]}
+        method = "ai-rmf-unknown-preservation-v1"
+    elif case_id == "EVC-ASSURANCE-DELTA":
+        record = build_assurance_maturity_delta(
+            [
+                {
+                    "finding_id": "FND-ASSURANCE-001",
+                    "priority": "mandatory",
+                    "finding_type": "MISSING_CONTROL",
+                    "samm_function": "GOVERNANCE",
+                    "samm_practice": "policy",
+                    "ssdf_mapping": "PO.1",
+                    "bsimm_baseline": False,
+                    "improvement_recommendation": "assign an owner",
+                    "priority_action": "IMMEDIATE",
+                }
+            ],
+            root=root,
+        )
+        observed = "pass" if record["status"] == "complete" and record["claim_type"] == "delta_only" and not record["authority_eligible"] else "fail"
+        details = {"status": record["status"], "claim_type": record["claim_type"], "delta_count": len(record["maturity_deltas"]), "authority_eligible": record["authority_eligible"]}
+        method = "assurance-delta-only-boundary-v1"
+    else:
+        raise QualificationRunnerError(f"unknown migration case: {case_id}")
+    result = _case_result(case, observed=observed, details=details, method=method)
+    return result, []
+
+
 def _run_case(root: Path, manifest: Mapping[str, Any], case: Mapping[str, Any], observed_at: str, bundle_root: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     family = str(case["family"])
     handlers = {
@@ -344,6 +433,7 @@ def _run_case(root: Path, manifest: Mapping[str, Any], case: Mapping[str, Any], 
         "recovery": lambda: _recovery_case(case, observed_at),
         "privacy": lambda: _privacy_case(root, case, observed_at),
         "supply_chain": lambda: _supply_chain_case(root, case, observed_at),
+        "migration": lambda: _migration_case(root, case),
     }
     handler = handlers.get(family)
     if handler is None:
