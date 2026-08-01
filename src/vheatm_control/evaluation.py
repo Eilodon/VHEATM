@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
-from .judge import JudgeError, validate_verdict_binding
+from .judge import JudgeError, validate_verdict_binding, verify_signed_verdict
 from .qualification import QualificationError, measurement_sample_basis, verify_manifest, verify_qualification_evidence
 from .qualification_private import PrivateCorpusError, verify_private_corpus_receipt
 from .serialization import load_json, load_yaml
@@ -114,6 +115,10 @@ def _key(keys: Mapping[str, Ed25519PublicKey] | None, name: str) -> Ed25519Publi
 def _key_id(key_ids: Mapping[str, str] | None, name: str) -> str | None:
     value = key_ids.get(name) if isinstance(key_ids, Mapping) else None
     return value if isinstance(value, str) and value else None
+
+
+def _public_key_bytes(key: Ed25519PublicKey) -> bytes:
+    return key.public_bytes(Encoding.Raw, PublicFormat.Raw)
 
 
 def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
@@ -346,8 +351,16 @@ def _verified_qualification_metrics(
         return {}, []
     manifest = evidence.get("qualification_manifest")
     public_key = _key(verification_keys, "qualification")
+    judge_public_key = _key(verification_keys, "judge")
     if not isinstance(manifest, Mapping) or public_key is None:
         return {}, ["qualification evidence is present but no verified private manifest/public key was supplied"]
+    if judge_public_key is None:
+        return {}, ["qualification evidence is present but no independent judge public key was supplied"]
+    if _public_key_bytes(public_key) == _public_key_bytes(judge_public_key):
+        return {}, ["qualification and independent judge verification keys must be distinct"]
+    judge_key_id = _key_id(verification_key_ids, "judge")
+    if judge_key_id is None:
+        return {}, ["qualification evidence is present but no independent judge key ID was supplied"]
     try:
         verified_manifest = verify_manifest(manifest, public_key=public_key, key_id=_key_id(verification_key_ids, "qualification"))
         if verified_manifest.get("framework_version") != framework_version:
@@ -421,6 +434,7 @@ def _verified_qualification_metrics(
         for ref in verified.get("judge_verdict_refs", []):
             verdict = verdict_by_id[ref]
             packet = packet_by_id[str(verdict.get("packet_id"))]
+            verify_signed_verdict(verdict, public_key=judge_public_key, key_id=judge_key_id)
             validate_verdict_binding(packet, verdict)
             if verdict.get("status") != "complete" or verdict.get("epistemic_status") != "independent_candidate":
                 raise JudgeError("referenced independent judge verdict is not complete and independent")
@@ -652,10 +666,12 @@ def main() -> int:
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--qualification-manifest", type=Path)
     parser.add_argument("--qualification-public-key", type=Path)
+    parser.add_argument("--judge-public-key", type=Path)
     parser.add_argument("--supply-chain-public-key", type=Path)
     parser.add_argument("--vulnerability-public-key", type=Path)
     parser.add_argument("--provenance-public-key", type=Path)
     parser.add_argument("--qualification-key-id")
+    parser.add_argument("--judge-key-id")
     parser.add_argument("--supply-chain-key-id")
     parser.add_argument("--vulnerability-key-id")
     parser.add_argument("--provenance-key-id")
@@ -678,12 +694,14 @@ def main() -> int:
         _validate_typed_evidence_documents(root, evidence)
         verification_keys = {
             "qualification": load_public_key(args.qualification_public_key),
+            "judge": load_public_key(args.judge_public_key),
             "supply_chain": load_public_key(args.supply_chain_public_key),
             "vulnerability": load_public_key(args.vulnerability_public_key),
             "provenance": load_public_key(args.provenance_public_key),
         }
         verification_key_ids = {
             "qualification": args.qualification_key_id,
+            "judge": args.judge_key_id,
             "supply_chain": args.supply_chain_key_id,
             "vulnerability": args.vulnerability_key_id,
             "provenance": args.provenance_key_id,

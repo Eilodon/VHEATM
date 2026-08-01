@@ -22,6 +22,9 @@
         "properties": {"item_id": {"type": "string", "minLength": 1}, "label": {"enum": ["yes", "no", "unknown"]}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}
       }
     },
-    "generated_at": {"type": "string", "format": "date-time"}
+    "generated_at": {"type": "string", "format": "date-time"},
+    "signature_algorithm": {"type": ["string", "null"], "enum": ["ed25519", null]},
+    "signature_key_id": {"type": ["string", "null"], "minLength": 1},
+    "signature_value": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+={0,2}$"}
   }
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import multiprocessing
@@ -8,6 +9,9 @@ import random
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Callable, Mapping, Sequence
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 
 class JudgeError(ValueError):
@@ -204,6 +208,44 @@ def expected_verdict_id(verdict: Mapping[str, Any]) -> str:
         if key in verdict
     }
     return _content_id("JVR", identity)
+
+
+def _signed_verdict_subject(verdict: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in verdict.items()
+        if key not in {"verdict_id", "signature_algorithm", "signature_key_id", "signature_value"}
+    }
+
+
+def sign_verdict(verdict: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
+    """Attach an independent judge signature to a complete candidate verdict."""
+
+    validate_verdict_identity(verdict)
+    if verdict.get("status") != "complete" or verdict.get("epistemic_status") != "independent_candidate":
+        raise JudgeError("only a complete independent candidate verdict can be signed")
+    if not isinstance(key_id, str) or not key_id.strip():
+        raise JudgeError("judge signing key ID is required")
+    signed = dict(verdict)
+    signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
+    signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical_bytes(_signed_verdict_subject(signed)))).decode("ascii")
+    return signed
+
+
+def verify_signed_verdict(verdict: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None) -> None:
+    """Verify the independent signer before a verdict contributes release metrics."""
+
+    validate_verdict_identity(verdict)
+    if verdict.get("status") != "complete" or verdict.get("epistemic_status") != "independent_candidate":
+        raise JudgeError("persisted independent evidence requires a complete independent verdict")
+    if verdict.get("signature_algorithm") != "ed25519" or not isinstance(verdict.get("signature_value"), str):
+        raise JudgeError("independent judge verdict signature is missing")
+    if key_id is not None and verdict.get("signature_key_id") != key_id:
+        raise JudgeError("independent judge signing key does not match")
+    try:
+        public_key.verify(base64.urlsafe_b64decode(str(verdict["signature_value"])), _canonical_bytes(_signed_verdict_subject(verdict)))
+    except (InvalidSignature, ValueError) as exc:
+        raise JudgeError("independent judge verdict signature is invalid") from exc
 
 
 def validate_verdict_identity(verdict: Mapping[str, Any]) -> None:

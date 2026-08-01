@@ -3,8 +3,19 @@ from __future__ import annotations
 import time
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from vheatm_control.judge import JudgeError, build_blind_packet, compare_verdicts, expected_verdict_id, resolve_hitl, run_independent_judge, validate_verdict_binding
+from vheatm_control.judge import (
+    JudgeError,
+    build_blind_packet,
+    compare_verdicts,
+    expected_verdict_id,
+    resolve_hitl,
+    run_independent_judge,
+    sign_verdict,
+    validate_verdict_binding,
+    verify_signed_verdict,
+)
 
 
 def judge_yes(packet):
@@ -68,3 +79,16 @@ def test_verdict_binding_requires_exact_packet_item_coverage() -> None:
     malformed["verdict_id"] = expected_verdict_id(malformed)
     with pytest.raises(JudgeError, match="exactly cover packet items"):
         validate_verdict_binding(packet, malformed)
+
+
+def test_signed_verdict_is_required_for_persisted_independent_evidence() -> None:
+    packet = _packet()
+    candidate = run_independent_judge(packet, judge_yes)["verdict"]
+    key = Ed25519PrivateKey.generate()
+    signed = sign_verdict(candidate, private_key=key, key_id="judge-key")
+    verify_signed_verdict(signed, public_key=key.public_key(), key_id="judge-key")
+
+    tampered = {**signed, "decisions": [dict(signed["decisions"][0]), dict(signed["decisions"][1], label="no")]}
+    tampered["verdict_id"] = expected_verdict_id(tampered)
+    with pytest.raises(JudgeError, match="signature"):
+        verify_signed_verdict(tampered, public_key=key.public_key(), key_id="judge-key")
