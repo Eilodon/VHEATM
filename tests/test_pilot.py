@@ -79,5 +79,10 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     tampered_observation = {**observation, "provider_run_refs": [tampered_run["run_id"]]}
     with pytest.raises(PilotError, match="receipt authorization chain"):
         complete_pilot(pilot, observations=[tampered_observation], provider_runs=[tampered_run])
+    invalid_config_run = {**provider_run, "config_digest": "not-a-digest"}
+    invalid_config_run["run_id"] = expected_provider_run_id(invalid_config_run)
+    invalid_config_observation = {**observation, "provider_run_refs": [invalid_config_run["run_id"]]}
+    with pytest.raises(PilotError, match="receipt authorization chain"):
+        complete_pilot(pilot, observations=[invalid_config_observation], provider_runs=[invalid_config_run])
     with pytest.raises(PilotError, match="unknown"):
         complete_pilot(pilot, observations=[{**observation, "status": "unknown"}], provider_runs=[provider_run])

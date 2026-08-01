@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
@@ -99,6 +100,8 @@ def _validate_network_request(network_request: Mapping[str, Any]) -> None:
     required = {"schema_version", "request_id", "requester", "tool_class", "scope", "destination", "data_classes", "redacted"}
     if not isinstance(network_request, Mapping) or network_request.get("schema_version") != "1.0.0" or not required.issubset(network_request):
         raise ProviderAdapterError("provider network request is incomplete")
+    if set(network_request) - required:
+        raise ProviderAdapterError("provider network request contains unsupported fields")
     if not isinstance(network_request.get("request_id"), str) or not network_request["request_id"]:
         raise ProviderAdapterError("provider network request_id is invalid")
     if not isinstance(network_request.get("requester"), str) or not network_request["requester"].strip():
@@ -108,7 +111,8 @@ def _validate_network_request(network_request: Mapping[str, Any]) -> None:
     if not isinstance(network_request.get("scope"), str) or not network_request["scope"].startswith("workspace:"):
         raise ProviderAdapterError("provider network request scope is invalid")
     destination = network_request.get("destination")
-    if not isinstance(destination, str) or urlparse(destination).scheme != "https" or not urlparse(destination).hostname:
+    parsed_destination = urlparse(destination) if isinstance(destination, str) else None
+    if not isinstance(destination, str) or parsed_destination is None or parsed_destination.scheme != "https" or not parsed_destination.hostname or parsed_destination.username or parsed_destination.password:
         raise ProviderAdapterError("provider network request destination must be HTTPS")
     data_classes = network_request.get("data_classes")
     if not isinstance(data_classes, list) or not data_classes or any(not isinstance(item, str) or not item for item in data_classes) or len(data_classes) != len(set(data_classes)):
@@ -122,6 +126,9 @@ def _validate_network_receipt(network_request: Mapping[str, Any], receipt: Mappi
         if status == "completed":
             raise ProviderAdapterError("completed provider run requires an authorization receipt")
         return
+    receipt_required = {"id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"}
+    if not receipt_required.issubset(receipt) or set(receipt) - receipt_required:
+        raise ProviderAdapterError("provider network receipt is incomplete or contains unsupported fields")
     if receipt.get("request_id") != network_request.get("request_id"):
         raise ProviderAdapterError("provider network receipt is not bound to the network request")
     if receipt.get("tool_class") != "network" or receipt.get("decision") not in {"allow", "deny"}:
@@ -201,8 +208,21 @@ def verify_provider_run(run: Mapping[str, Any]) -> None:
     required = {"schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
     if not isinstance(run, Mapping) or run.get("schema_version") != "1.0.0" or not required.issubset(run):
         raise ProviderAdapterError("provider run is incomplete")
+    if set(run) - required - {"error"}:
+        raise ProviderAdapterError("provider run contains unsupported fields")
     if run.get("run_id") != expected_provider_run_id(run):
         raise ProviderAdapterError("provider run identity is invalid")
+    if not isinstance(run.get("request_id"), str) or not run["request_id"]:
+        raise ProviderAdapterError("provider run request_id is invalid")
+    provider_id = run.get("provider_id")
+    if not isinstance(provider_id, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{2,63}", provider_id):
+        raise ProviderAdapterError("provider run provider_id is invalid")
+    if not isinstance(run.get("provider_version"), str) or not run["provider_version"].strip():
+        raise ProviderAdapterError("provider run provider_version is invalid")
+    for field in ("config_digest", "request_digest", "response_digest"):
+        value = run.get(field)
+        if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
+            raise ProviderAdapterError(f"provider run {field} is invalid")
     if run.get("status") not in {"completed", "blocked", "unknown"}:
         raise ProviderAdapterError("provider run status is invalid")
     if run.get("epistemic_status") != ("candidate" if run.get("status") == "completed" else "unknown"):
@@ -217,6 +237,8 @@ def verify_provider_run(run: Mapping[str, Any]) -> None:
         raise ProviderAdapterError("provider run response digest is invalid")
     if run.get("status") == "completed" and not isinstance(response, Mapping):
         raise ProviderAdapterError("completed provider run requires a provider response")
+    if "error" in run and (not isinstance(run["error"], str) or not run["error"].strip()):
+        raise ProviderAdapterError("provider run error is invalid")
     _timestamp(str(run.get("generated_at")))
 
 
