@@ -35,8 +35,10 @@ def _packet():
     return build_blind_packet(
         source_session_root="a" * 64, judge_context_root="b" * 64,
         origin_provider_id="origin.provider", origin_model_id="origin-model",
-        judge_provider_id="judge.provider", judge_model_id="judge-model",
-        config_digest="c" * 64, rubric_digest="d" * 64, order_seed="e" * 64,
+        judge_provider_id="judge.test", judge_provider_version="1.0.0",
+        judge_endpoint="https://judge.example.test/evaluate", judge_adapter_profile="judge-json-v1",
+        judge_model_id="judge-model",
+        config_digest="5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c", rubric_digest="d" * 64, order_seed="e" * 64,
         items=[{"item_id": "f-1", "text": "Is the control present?"}, {"item_id": "f-2", "text": "Is the evidence fresh?"}],
     )
 
@@ -54,8 +56,23 @@ def test_same_context_or_provider_cannot_be_marked_independent() -> None:
         build_blind_packet(
             source_session_root="a" * 64, judge_context_root="a" * 64,
             origin_provider_id="origin.provider", origin_model_id="origin-model",
-            judge_provider_id="judge.provider", judge_model_id="judge-model",
-            config_digest="c" * 64, rubric_digest="d" * 64, order_seed="e" * 64,
+            judge_provider_id="judge.test", judge_provider_version="1.0.0",
+            judge_endpoint="https://judge.example.test/evaluate", judge_adapter_profile="judge-json-v1",
+            judge_model_id="judge-model",
+            config_digest="5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c", rubric_digest="d" * 64, order_seed="e" * 64,
+            items=[{"item_id": "f-1", "text": "x"}],
+        )
+
+
+def test_non_allowlisted_judge_provider_is_rejected() -> None:
+    with pytest.raises(JudgeError, match="not allowlisted"):
+        build_blind_packet(
+            source_session_root="a" * 64, judge_context_root="b" * 64,
+            origin_provider_id="origin.provider", origin_model_id="origin-model",
+            judge_provider_id="judge.provider", judge_provider_version="1.0.0",
+            judge_endpoint="https://judge.example.test/evaluate", judge_adapter_profile="judge-json-v1",
+            judge_model_id="judge-model",
+            config_digest="5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c", rubric_digest="d" * 64, order_seed="e" * 64,
             items=[{"item_id": "f-1", "text": "x"}],
         )
 

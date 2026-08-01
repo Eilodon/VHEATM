@@ -13,6 +13,8 @@ from typing import Any, Callable, Mapping, Sequence
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
+from .provider_policy import ProviderPolicyError, validate_provider_binding
+
 
 class JudgeError(ValueError):
     """Raised when an independent-judge packet or verdict is invalid."""
@@ -61,6 +63,9 @@ def build_blind_packet(
     origin_provider_id: str,
     origin_model_id: str,
     judge_provider_id: str,
+    judge_provider_version: str,
+    judge_endpoint: str,
+    judge_adapter_profile: str,
     judge_model_id: str,
     config_digest: str,
     rubric_digest: str,
@@ -73,8 +78,20 @@ def build_blind_packet(
         raise JudgeError("independent judge requires a distinct judge context root")
     if not origin_provider_id or not origin_model_id or not judge_provider_id or not judge_model_id:
         raise JudgeError("judge and origin provider/model identifiers are required")
+    if not judge_provider_version or not judge_endpoint or not judge_adapter_profile:
+        raise JudgeError("judge provider version, endpoint and adapter profile are required")
     if origin_provider_id == judge_provider_id or origin_model_id == judge_model_id:
         raise JudgeError("same provider or model cannot be labelled independent")
+    try:
+        validate_provider_binding(
+            judge_provider_id,
+            judge_provider_version,
+            endpoint=judge_endpoint,
+            config_digest=config_digest,
+            adapter_profile=judge_adapter_profile,
+        )
+    except ProviderPolicyError as exc:
+        raise JudgeError(str(exc)) from exc
     normalized = []
     seen: set[str] = set()
     for item in items:
@@ -93,7 +110,9 @@ def build_blind_packet(
     identity = {
         "source_session_root": source_session_root, "judge_context_root": judge_context_root,
         "origin_provider_id": origin_provider_id, "origin_model_id": origin_model_id,
-        "judge_provider_id": judge_provider_id, "judge_model_id": judge_model_id,
+        "judge_provider_id": judge_provider_id, "judge_provider_version": judge_provider_version,
+        "judge_endpoint": judge_endpoint, "judge_adapter_profile": judge_adapter_profile,
+        "judge_model_id": judge_model_id,
         "config_digest": config_digest, "rubric_digest": rubric_digest, "order_seed": order_seed,
         "order_digest": _order_digest(normalized), "items": normalized,
     }
@@ -103,16 +122,26 @@ def build_blind_packet(
 
 
 def _validate_packet(packet: Mapping[str, Any]) -> None:
-    required = {"schema_version", "packet_id", "request_id", "source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items"}
+    required = {"schema_version", "packet_id", "request_id", "source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_provider_version", "judge_endpoint", "judge_adapter_profile", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items"}
     if not isinstance(packet, Mapping) or packet.get("schema_version") != "1.0.0" or not required.issubset(packet):
         raise JudgeError("blind judge packet is incomplete")
     if packet["source_session_root"] == packet["judge_context_root"]:
         raise JudgeError("judge context root must be distinct from source session root")
     if packet["origin_provider_id"] == packet["judge_provider_id"] or packet["origin_model_id"] == packet["judge_model_id"]:
         raise JudgeError("same provider/model cannot be independent")
+    try:
+        validate_provider_binding(
+            str(packet["judge_provider_id"]),
+            str(packet["judge_provider_version"]),
+            endpoint=str(packet["judge_endpoint"]),
+            config_digest=str(packet["config_digest"]),
+            adapter_profile=str(packet["judge_adapter_profile"]),
+        )
+    except ProviderPolicyError as exc:
+        raise JudgeError(str(exc)) from exc
     if _order_digest(packet["items"]) != packet["order_digest"]:
         raise JudgeError("blind packet order digest mismatch")
-    expected_packet = _content_id("JPK", {key: packet[key] for key in ("source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items")})
+    expected_packet = _content_id("JPK", {key: packet[key] for key in ("source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_provider_version", "judge_endpoint", "judge_adapter_profile", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items")})
     if packet["packet_id"] != expected_packet:
         raise JudgeError("blind packet id mismatch")
     if packet["request_id"] != _content_id("JDR", {"packet_id": packet["packet_id"], "judge_context_root": packet["judge_context_root"]}):

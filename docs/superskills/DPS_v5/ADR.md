@@ -2339,3 +2339,78 @@ Start the next cycle when the deployment supplies a controlled authority root an
 - A public-key signature proves integrity, not role authority; authority must be a separately verified, content-addressed handoff.
 - Registry identity must be part of report identity, otherwise a release report can be replayed with a different signer set while retaining the same evidence IDs.
 - Keep the external root explicit and untrusted in local fixtures: a local signed registry is a contract test, not production custody.
+
+## ADR-33 — Bind independent judge packets to the canonical provider descriptor
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `independent-judge` `provider-binding` `endpoint-integrity` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-02 — or earlier when judge provider onboarding, endpoint rotation, or packet identity changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local packet/provider identity binding; `NOT_PRODUCTION_QUALIFIED` because the judge service, external qualification authority, and judge-key custody remain unavailable.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — judge endpoints, model/configuration descriptors, qualification state, and external signer custody are deployment-bound.
+
+### Context
+
+Blind judge packets already separated the judge context and provider/model identifiers from the origin audit, randomized item order, and bound a configuration digest. The packet provider identity was otherwise free-form: a caller could name an unallowlisted judge provider or omit the provider version, endpoint, and adapter profile. A signed verdict could therefore be structurally independent while referring to an implementation that was not represented by the canonical provider policy.
+
+### Decision
+
+Add a pending `judge.test@1.0.0` descriptor to the manifest-bound provider allowlist and require every blind packet to carry and validate the canonical judge provider version, exact HTTPS endpoint, adapter profile, and configuration digest. Packet identity includes these fields, and downstream packet validation repeats the descriptor binding before process execution, verdict binding, or qualification evidence consumption. The descriptor remains `pending`; this change proves implementation identity binding only and cannot qualify the judge service or mint RG-07 evidence.
+
+### Options Considered
+
+- Trust only `judge_provider_id` and `judge_model_id`: rejected because provider identity without version/configuration/endpoint permits implementation drift.
+- Bind only the configuration digest: rejected because the same configuration can be sent to an unapproved endpoint or adapter profile.
+- Mark the local test judge `qualified`: rejected because a schema fixture and local callback do not establish independent judge operation, external authority, or statistical validity.
+- Remove provider identity from the packet: rejected because downstream evidence needs an immutable, auditable origin for the independent verdict.
+
+### Impact
+
+Schemas changed: `schemas/judge-packet.schema.json`
+Canonical policy changed: `policies/provider-allowlist.yaml`
+Components changed: blind packet builder/validator, judge/release fixtures, provider policy inventory, lifecycle plan
+Breaking change: **YES** for packet callers that omit the judge provider version, endpoint, adapter profile, or use a descriptor not present in the canonical allowlist.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `canonical judge descriptor → blind packet identity → isolated judge process → signed verdict → private qualification → RG-07/release report`
+Cascade Review: ✅ Done — RED unallowlisted-provider regression, canonical policy/schema binding, targeted judge/release verification, and global packet-construction scan cover the changed boundary.
+
+### Consequences
+
+- An independent judge packet cannot be created for an unallowlisted or endpoint/configuration-drifted implementation.
+- Revalidating a persisted packet protects later verdict and private-case evidence consumers from packet identity tampering.
+- Local judge contract tests remain useful, but `judge.test` is explicitly pending and cannot authorize canary or production qualification.
+- External judge deployment, provider qualification, independent key custody, private gold data, and RG-07 statistical evidence remain open and fail closed.
+
+### Evidence
+
+- [verified 2026-08-02] RED test `test_non_allowlisted_judge_provider_is_rejected` failed with `DID NOT RAISE JudgeError` before the binding was implemented.
+- [verified 2026-08-02] Targeted `.venv/bin/pytest -o addopts='' -q tests/test_judge.py tests/test_release_evidence.py` passes with `19 passed` after the binding change.
+- [verified 2026-08-02] `.venv/bin/pytest -o addopts='' -q` passes with `296 passed in 67.29s`; `vheatm-validate --root .`, `uv lock --check --prerelease allow`, `uv build --wheel --sdist --prerelease allow`, and low-risk evaluate/route all pass after the canonical policy/schema change.
+- [verified 2026-08-02] Global scan found the packet builder and every packet-validation path; all production packet paths now call the canonical provider binding, and no provider is marked `qualified` by this change.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External judge service/qualification, authority/key custody, private time-sliced corpus, vulnerability freshness/coverage, host namespace qualification, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when an external judge descriptor is proposed or `judge.test` changes state; bind its external qualification record, signer/rotation authority, model/configuration snapshot, and fresh private packet population before accepting RG-07 evidence.
+
+### Cycle Retrospective
+
+- Provider/model labels and configuration digests are not sufficient implementation identity when endpoint and adapter profile remain caller-controlled.
+- A pending canonical descriptor closes a routing/identity gap without laundering a test service into qualification evidence.
+- Packet identity must be revalidated at every downstream evidence boundary, not only when the packet is first constructed.

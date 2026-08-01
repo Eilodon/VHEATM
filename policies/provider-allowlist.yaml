@@ -17,3 +17,10 @@ providers:
     endpoint: https://provider.example.test/analyze
     config_digest: f8897ec81fff73eb5b173a5289b6e194ab76d9d91f6bb8a76cc0bf84c69024f0
     qualification_evidence_refs: []
+  - provider_id: judge.test
+    provider_versions: ["1.0.0"]
+    qualification_state: pending
+    adapter_profile: judge-json-v1
+    endpoint: https://judge.example.test/evaluate
+    config_digest: 5a1a6363c4c7eab9cd90aacc3cd96f693f2816a185f0dd9f5b074f4678af7c5c
+    qualification_evidence_refs: []

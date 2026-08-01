@@ -4,7 +4,7 @@
   "title": "VHEATM blind independent-judge packet",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "packet_id", "request_id", "source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items"],
+  "required": ["schema_version", "packet_id", "request_id", "source_session_root", "judge_context_root", "origin_provider_id", "origin_model_id", "judge_provider_id", "judge_provider_version", "judge_endpoint", "judge_adapter_profile", "judge_model_id", "config_digest", "rubric_digest", "order_seed", "order_digest", "items"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "packet_id": {"type": "string", "pattern": "^JPK-[A-F0-9]{64}$"},
@@ -14,6 +14,9 @@
     "origin_provider_id": {"type": "string", "minLength": 1},
     "origin_model_id": {"type": "string", "minLength": 1},
     "judge_provider_id": {"type": "string", "minLength": 1},
+    "judge_provider_version": {"type": "string", "minLength": 1},
+    "judge_endpoint": {"type": "string", "pattern": "^https://[^\\s]+$"},
+    "judge_adapter_profile": {"type": "string", "pattern": "^[a-z][a-z0-9.-]{2,63}$"},
     "judge_model_id": {"type": "string", "minLength": 1},
     "config_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "rubric_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
