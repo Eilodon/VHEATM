@@ -169,3 +169,25 @@ modules: [MOD-EVIDENCE-ANCHORS, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD
 - Qualification metrics require exact packet/verdict binding and private-case intersection coverage: added to CONTEXT.md ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-14 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: pilot-receipt-chain-revalidation
+
+### New Domain Terms Added to CONTEXT.md
+- Persisted provider receipt chain: added ✅
+
+### Bug Patterns
+- Pilot trusted a re-content-addressed provider run without rechecking its embedded receipt authorization: observed and fixed at the pilot boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Content-addressing does not prove authorization: added to CONTEXT.md Domain Gotchas ✅
+- Persisted provider records need redacted request material for later verification: added to CONTEXT.md Architectural Decisions ✅
+
+### Architectural Decisions Promoted
+- Pilot completion must re-verify provider request/receipt/response semantics at the persisted evidence boundary: added to CONTEXT.md ✅
+
+---
