@@ -1951,3 +1951,80 @@ Start the next cycle when the external attestation service changes its SBOM/lock
 - A correctly signed record can still describe the wrong bytes; authority and subject binding must be verified separately.
 - Comparing a declared root string is weaker than rebuilding the source-derived inventory at the consuming gate.
 - Keep external trust prerequisites unknown rather than replacing them with local test keys or synthetic scanner feeds.
+
+## ADR-28 — Measure host hard-stop capability through the real sandbox boundary
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `sandbox` `host-qualification` `RG-09` `fail-closed`
+**Change Classification:** `EVIDENCE-BOUNDARY HARDENING`
+**Review date:** 2026-09-02 — or earlier when an independently controlled qualification host is available.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local probe integrity; `NOT_PRODUCTION_QUALIFIED` because this checkout cannot supply external host attestation or a successful shadow/canary observation.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — host kernel, namespace policy, bubblewrap packaging, and deployment controls can change independently of the source bundle.
+
+### Context
+
+RG-09 requires both complete unauthorized-action blocking and a real host-level `hard_stop_p99_seconds` measurement. The seeded runner intentionally measured only broker denials; inferring process hard-stop latency from those denials would conflate policy evaluation with reference-monitor enforcement. The sandbox adapter already performs a digest-bound bubblewrap preflight and reports timeout enforcement, but there was no bounded qualification record that exercised that exact host boundary or made an unavailable namespace explicit.
+
+### Decision
+
+Add a separate `vheatm-qualify-host` runner and `host-qualification-run` schema. The runner accepts only a canonical `bwrap`/`bubblewrap` executable name, rehashes its bytes, uses the canonical `ToolBroker`, submits approval-bound `sleep 60` execute requests through `SandboxExecutor`, and records a hard-stop observation only when the executor reports `timeout:enforced`. Namespace/preflight failure emits repeated `unavailable` observations, no hard-stop measurement, and a non-zero CLI status. Host identity is reduced to a non-identifying digest; raw host names and user identifiers are excluded.
+
+The record is always `evidence_state=unverified`. It is not ingested as trusted private qualification evidence and cannot populate release metrics or make RG-09/GA pass. External custody, independent attestation, private population binding, and pilot evidence remain required at the release boundary.
+
+### Options Considered
+
+- Derive hard-stop latency from broker denial timestamps: rejected because denial is not host process termination and would create a false RG-09 measurement.
+- Run the command directly on the host: rejected because it bypasses the reference monitor and violates the runtime boundary.
+- Mark the local timeout record verified: rejected because local execution lacks independent host authority and production deployment identity.
+- Add a synthetic `hard_stop_p99_seconds` to the seeded public replay: rejected because seeded replay must remain deterministic and public/unverified.
+
+### Impact
+
+Schemas changed: `schemas/host-qualification-run.schema.json`.
+Canonical artifacts changed: package entry point and required-schema registry.
+Components changed: host qualification runner, sandbox boundary, canonical method binding, host qualification tests.
+Breaking change: **NO** for release consumers; the new record is diagnostic/unverified and does not alter RG-09 evaluation.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `host capability/preflight → digest-bound sandbox timeout → typed host record → independent evidence handoff`; release gates remain unchanged and fail-closed.
+Cascade Review: ✅ Done — unavailable backend, forged complete status, real sandbox-path behavior, and release non-minting regressions cover the new boundary.
+
+### Consequences
+
+- A qualified host can now produce a reproducible, content-addressed measurement candidate from the actual sandbox kill path.
+- A host without the required namespace capability is visible as `blocked/unavailable`, rather than being mistaken for a failed command or a passing latency result.
+- The host record contains no external signature or independent-judge authority; it is a handoff artifact, not production qualification.
+- External host attestation, private/time-sliced gold data, provider qualification, fresh vulnerability evidence, UX-04 research, and successful shadow/canary observation remain open.
+
+### Evidence
+
+- [verified 2026-08-02] RED test failed at import before the host runner existed; GREEN host contract tests pass and validate the typed unavailable, forged-complete, release-non-minting, and real-sandbox branches.
+- [verified 2026-08-02] Local host CLI emitted `status=blocked`, `reference_monitor_status=unavailable`, `backend_digest=null`, and no measurements when the backend path was unavailable; exit status was 2.
+- [verified 2026-08-02] An arbitrary executable supplied as `--backend` is rejected as non-canonical and cannot be reported as a bubblewrap hard-stop probe.
+- [verified 2026-08-02] Pattern-globalize scan found no sibling schema producer that omits a required observation reason in the changed evidence family.
+- [verified 2026-08-02] Canonical validator passes; the host record remains outside trusted RG metric derivation.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Independent host attestation, private qualification, external key custody, scanner freshness/coverage, provider qualification, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a controlled qualification host supplies an independently signed host identity/capability record and a private population binding; add the external verification boundary before allowing the host measurement to contribute RG-09.
+
+### Cycle Retrospective
+
+- A preflight failure must be evidence of unavailable enforcement, not evidence of a slow or fast hard stop.
+- Timing evidence must come from the action boundary that actually kills the process; policy denial timing is a different metric.
+- Local probes are useful only when their unverified status and release non-minting behavior are machine-enforced.

@@ -54,6 +54,7 @@ vheatm-control = "vheatm_control.mcp_server:main"
 vheatm-init = "vheatm_control.init_cmd:main"
 vheatm-doctor = "vheatm_control.doctor:main"
 vheatm-qualify-public = "vheatm_control.qualification_runner:main"
+vheatm-qualify-host = "vheatm_control.host_qualification:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
