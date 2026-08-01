@@ -4,7 +4,7 @@
   "title": "VHEATM canonical semantic scoring profiles",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "policy_id", "policy_version", "framework_version", "qbr", "brs", "calibration"],
+  "required": ["schema_version", "policy_id", "policy_version", "framework_version", "qbr", "brs", "rpn", "calibration"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "policy_id": {"const": "vheatm-semantic-profiles"},
@@ -12,21 +12,32 @@
     "framework_version": {"type": "string", "minLength": 1},
     "qbr": {
       "type": "object", "additionalProperties": false,
-      "required": ["dimensions", "max_score", "mandatory_threshold", "adjustments", "fmea_mapping"],
+      "required": ["dimensions", "max_score", "dimension_max", "fmea_risk_max", "mandatory_threshold", "required_threshold", "brs_blast_radius_floor", "adjustments", "fmea_mapping"],
       "properties": {
         "dimensions": {"type": "object", "additionalProperties": false, "required": ["user_facing_impact", "data_integrity_risk", "security_risk", "blast_radius"], "properties": {"user_facing_impact": {"const": 4}, "data_integrity_risk": {"const": 4}, "security_risk": {"const": 3}, "blast_radius": {"const": 2}}},
         "max_score": {"const": 48},
+        "dimension_max": {"const": 3},
+        "fmea_risk_max": {"const": 3},
         "mandatory_threshold": {"const": 17},
+        "required_threshold": {"const": 9},
+        "brs_blast_radius_floor": {"const": 8},
         "adjustments": {"type": "object", "additionalProperties": false, "required": ["design", "self_audit", "org_capture"], "properties": {"design": {"const": 1.2}, "self_audit": {"const": 1.2}, "org_capture": {"const": 1.15}}},
-        "fmea_mapping": {"type": "object", "additionalProperties": false, "required": ["severity_to_user_facing", "system_effect_to_integrity", "cause_to_security", "blast_radius_scope", "undetectable_floor"], "properties": {"severity_to_user_facing": {"type": "array", "minItems": 1}, "system_effect_to_integrity": {"type": "object", "minProperties": 1}, "cause_to_security": {"type": "object", "minProperties": 1}, "blast_radius_scope": {"type": "object", "minProperties": 1}, "undetectable_floor": {"const": 8}}}
+        "fmea_mapping": {"type": "object", "additionalProperties": false, "required": ["severity_to_user_facing", "system_effect_to_integrity", "cause_to_security", "blast_radius_scope", "blast_radius_boundaries", "undetectable_floor"], "properties": {"severity_to_user_facing": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["max", "value"], "properties": {"max": {"type": "integer", "minimum": 1, "maximum": 10}, "value": {"type": "integer", "minimum": 0, "maximum": 3}}}}, "system_effect_to_integrity": {"type": "object", "additionalProperties": false, "required": ["corruption", "partial", "operational"], "properties": {"corruption": {"type": "integer", "minimum": 0, "maximum": 3}, "partial": {"type": "integer", "minimum": 0, "maximum": 3}, "operational": {"type": "integer", "minimum": 0, "maximum": 3}}}, "cause_to_security": {"type": "object", "additionalProperties": false, "required": ["auth_bypass_injection", "data_exposure", "resource_exhaustion", "other"], "properties": {"auth_bypass_injection": {"type": "integer", "minimum": 0, "maximum": 3}, "data_exposure": {"type": "integer", "minimum": 0, "maximum": 3}, "resource_exhaustion": {"type": "integer", "minimum": 0, "maximum": 3}, "other": {"type": "integer", "minimum": 0, "maximum": 3}}}, "blast_radius_scope": {"type": "object", "additionalProperties": false, "required": ["local", "multi_component", "widespread"], "properties": {"local": {"type": "integer", "minimum": 0, "maximum": 3}, "multi_component": {"type": "integer", "minimum": 0, "maximum": 3}, "widespread": {"type": "integer", "minimum": 0, "maximum": 3}}}, "blast_radius_boundaries": {"type": "object", "additionalProperties": false, "required": ["local_max", "multi_component_max"], "properties": {"local_max": {"const": 1}, "multi_component_max": {"const": 4}}}, "undetectable_floor": {"const": 8}}}
       }
     },
     "brs": {
-      "type": "object", "additionalProperties": false, "required": ["weights", "thresholds", "unknown_sla_floor"],
+      "type": "object", "additionalProperties": false, "required": ["weights", "thresholds", "unknown_sla_floor", "escalation_threshold"],
       "properties": {
         "weights": {"type": "object", "additionalProperties": false, "required": ["teams_directly_affected", "sla_chains_at_risk", "regulatory_obligations"], "properties": {"teams_directly_affected": {"const": 1}, "sla_chains_at_risk": {"const": 2}, "regulatory_obligations": {"const": 3}}},
         "thresholds": {"type": "object", "additionalProperties": false, "required": ["contained", "elevated", "high"], "properties": {"contained": {"const": 3}, "elevated": {"const": 7}, "high": {"const": 12}}},
-        "unknown_sla_floor": {"const": 1}
+        "unknown_sla_floor": {"const": 1},
+        "escalation_threshold": {"const": 8}
+      }
+    },
+    "rpn": {
+      "type": "object", "additionalProperties": false, "required": ["thresholds"],
+      "properties": {
+        "thresholds": {"type": "object", "additionalProperties": false, "required": ["mandatory", "required", "recommended"], "properties": {"mandatory": {"const": 125}, "required": {"const": 50}, "recommended": {"const": 25}}}
       }
     },
     "calibration": {

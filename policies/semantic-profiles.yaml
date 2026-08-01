@@ -9,7 +9,11 @@ qbr:
     security_risk: 3
     blast_radius: 2
   max_score: 48
+  dimension_max: 3
+  fmea_risk_max: 3
   mandatory_threshold: 17
+  required_threshold: 9
+  brs_blast_radius_floor: 8
   adjustments:
     design: 1.20
     self_audit: 1.20
@@ -33,6 +37,9 @@ qbr:
       local: 1
       multi_component: 2
       widespread: 3
+    blast_radius_boundaries:
+      local_max: 1
+      multi_component_max: 4
     undetectable_floor: 8
 brs:
   weights:
@@ -43,7 +50,13 @@ brs:
     contained: 3
     elevated: 7
     high: 12
+  escalation_threshold: 8
   unknown_sla_floor: 1
+rpn:
+  thresholds:
+    mandatory: 125
+    required: 50
+    recommended: 25
 calibration:
   pre_calibration_max_cycles: 5
   pre_calibration_threshold: 0.60
