@@ -709,3 +709,76 @@ Start the next cycle by expanding independent RG-00…RG-15 measurement coverage
 - A compatibility module is safe only when it cannot create a second authority decision.
 - Archiving legacy code as non-runtime text preserves provenance without preserving an executable bypass.
 - Removing duplicate policy tests reduces count but improves evidence quality because the remaining tests exercise the canonical authority.
+
+## ADR-11 — Enforce typed evidence schemas at every evaluator entry point
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `release-gates` `schema-boundary` `qualification` `supply-chain`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when a new typed release-evidence document or external evidence ingestion path is introduced.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local fail-closed behavior; `NOT_PRODUCTION_QUALIFIED` for external evidence custody and independent release operations.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `PACKAGE BUILD`
+**VOLATILITY:** `WATCHFUL` — typed evidence schemas and external release feeds can evolve, but schema and signature checks must remain coupled.
+
+### Context
+
+The release CLI validated typed evidence schemas before invoking the evaluator, but callers of the direct `evaluate_release_gates()` and `derive_verified_evidence_metrics()` APIs bypassed that boundary. Cryptographic identity and signature verification alone did not reject a signed document with an undeclared field, and the schema validators did not enforce declared date-time formats. This allowed schema-invalid signed material to be treated as verified release evidence by an in-process caller.
+
+### Decision
+
+Centralize typed evidence schema validation in the evaluation module and invoke it before any cryptographic verifier at every evaluator entry point. Validate qualification manifest, private corpus receipt, qualification evidence, supply-chain attestation, vulnerability scan, provenance statement, and independent judge verdict records with the canonical JSON Schemas and `FormatChecker`. Qualification schema errors discard all qualification metrics and leave affected gates `unknown`; supply-chain schema errors inject only explicit blocking values so RG-13 cannot pass. The CLI uses the same helper, raw caller metrics remain ignored, and malformed evidence never becomes production GA evidence.
+
+### Options Considered
+
+- Rely on the CLI preflight: rejected because Python API callers would retain a weaker trust boundary.
+- Extend each cryptographic verifier with ad-hoc schema checks: rejected because schema coverage would diverge across document types and entry points.
+- Raise an exception for every malformed supply record: rejected because the release report contract must remain typed and fail-closed rather than disappear at the API boundary.
+
+### Impact
+
+Schemas changed: none; existing canonical qualification, judge, supply-chain, vulnerability, provenance, and release-report schemas are now enforced consistently.
+Components changed: `evaluation.py`, release-evidence regression fixtures/tests, lifecycle verification record.
+Breaking change: **YES** for direct evaluator callers that previously supplied signed but schema-invalid documents.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `typed evidence → schema boundary → cryptographic verification → RG-00…RG-15 metrics → release report`.
+Cascade Review: ✅ Done — targeted RED/GREEN, release-evidence regression suite, full suite, repository validation, evaluate/route, public replay, bundle, lock, and package build all passed.
+
+### Consequences
+
+- Direct and CLI evaluator paths now share one schema and format-validation boundary.
+- A valid signature cannot promote undeclared, malformed, or format-invalid fields into release metrics.
+- Existing local mechanism fixtures must themselves be schema-valid; this does not change their status into independent or production qualification.
+- External key custody, private/time-sliced gold data, independent judging, vulnerability feed, provider qualification, host namespace capability, shadow/canary observation, and UX research remain open blockers.
+
+### Evidence
+
+- [verified 2026-08-01] RED test demonstrated that a signed qualification document with an extra field incorrectly produced `ga_eligible=True`; the regression now blocks it and leaves qualification gates unknown.
+- [verified 2026-08-01] `.venv/bin/vheatm-validate --root .` passed and `.venv/bin/pytest -q -o addopts=''` passed with 231 tests.
+- [verified 2026-08-01] Low-risk evaluate/route completed with 15 selected, 7 unselected, and 0 unresolved modules; public replay completed 17/17 with `public_seeded`/`unverified` state.
+- [verified 2026-08-01] `uv lock --check --prerelease=allow`, `uv build --wheel --sdist`, bundle generation, and `git diff --check` passed.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release evidence remains unavailable and must stay `unknown`/`blocked` until supplied through the verified boundary.
+
+### Next Cycle Trigger
+
+Start the next cycle when a new typed release-evidence schema/field is added or an external qualification/supply-chain feed is connected; add its boundary regression and rerun the complete RG-00…RG-15 suite before accepting any new metric.
+
+### Cycle Retrospective
+
+- A signature proves authorship and content integrity, not conformance to the canonical document contract.
+- CLI-only validation is not a trust boundary when the library exposes a direct evaluator API.
+- Schema-invalid local fixtures surfaced immediately once the direct boundary used the same uppercase content-addressed ID rules as the canonical schemas.
+- Fail-closed reports are more useful than exceptions for malformed supply evidence because they preserve explicit RG-13 failure semantics.

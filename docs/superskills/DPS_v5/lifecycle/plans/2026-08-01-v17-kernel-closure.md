@@ -25,6 +25,7 @@
 - Release-gate evaluation now ignores caller-supplied metric shortcuts, verifies qualification and supply-chain signatures at the trust boundary, and binds the report digest to the content-addressed evidence IDs.
 - External providers now have a bounded HTTPS transport with TLS, redirect refusal, timeout/response caps, metadata-only payloads, and broker-before-network ordering; pilot completion requires content-addressed completed provider runs.
 - Qualification evidence now binds to content-addressed independent-judge verdicts, rejects undeclared metrics, enforces critical sample floors, and validates typed evidence schemas at CLI ingest.
+- Direct evaluator APIs now enforce the same typed evidence schemas and RFC 3339 format checks before cryptographic verification; schema-invalid qualification stays unknown and schema-invalid supply-chain evidence cannot pass RG-13.
 - Sandbox outcomes now bind schema-valid reference-monitor decisions and content-addressed tool receipts to the exact action; malformed authorization fails closed before backend launch.
 - All brokered action adapters now share semantic decision validation; malformed provider authorization is blocked before transport and cannot emit a completed run without a valid network receipt.
 - Legacy `policy.py` authority has been migrated out of the runtime path; the canonical `ToolBroker` is now the only policy implementation, with historical code retained as non-authoritative migration text.
@@ -39,7 +40,8 @@ Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
 - `.venv/bin/pytest -o addopts=''` — 231 passed.
-- `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs.
+- Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
+- `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs; visibility remains `public_seeded` and evidence state `unverified`.
 - Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root is regenerated after this canonical adapter/schema change and remains content-addressed.
 - Session, analyzer, judge, capability, release-gate, private-corpus, supply-chain, and pilot contract tests — pass; incomplete release evidence remains unknown/blocking by design.
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
