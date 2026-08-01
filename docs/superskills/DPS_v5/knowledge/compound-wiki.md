@@ -495,3 +495,29 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Host timing must be measured through the real sandbox boundary and handed off as unverified evidence until independent host authority and private population binding exist: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-29 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: signed-host-attestation-rg09
+
+### New Domain Terms Added to CONTEXT.md
+- Independent host attestation: added ✅
+- Strict JSON boundary: added ✅
+
+### Bug Patterns
+- A private qualification record could self-supply the host hard-stop metric: observed and fixed by separating private metrics from HAT-derived RG-09 evidence; no PATTERN-DEBT entry (first occurrence).
+- Non-finite JSON constants could pass Draft 2020-12 numeric schemas in Python: observed and fixed at the shared parser, provider transport, SessionStore readers, and typed qualification validators; no PATTERN-DEBT entry (global runtime scan resolved).
+
+### Gotchas Captured
+- A signature does not bind an unsigned key label: added to CONTEXT.md Domain Gotchas ✅
+- JSON Schema `number` does not reject Python `NaN`: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- RG-09 hard-stop latency is consumed only from a current-bundle-bound, independently signed HAT; local HQR evidence remains unverified and external key custody remains open: added to CONTEXT.md ✅
+- Shared JSON ingestion rejects duplicate keys and non-finite constants before evidence/state interpretation: added to CONTEXT.md ✅
+
+---
