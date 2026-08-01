@@ -7,11 +7,13 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
+from vheatm_control.bundle import build_bundle
 from vheatm_control.judge import expected_verdict_id
 from vheatm_control.qualification import (
     QualificationError,
     build_private_time_slice_manifest,
     build_qualification_evidence,
+    expected_qualification_evidence_id,
     sign_manifest,
     sign_qualification_evidence,
     verify_qualification_evidence,
@@ -54,13 +56,20 @@ def test_private_time_sliced_manifest_and_measurements_are_signed_and_bound(tmp_
     }
     judge_verdict["verdict_id"] = expected_verdict_id(judge_verdict)
     measurements = [{"metric": "critical_recall_lower_ci", "value": 0.96, "sample_count": 100, "confidence_lower": 0.96, "method_digest": expected_method_digest("critical_recall_lower_ci"), "evidence_refs": [receipt["receipt_id"]]}]
-    evidence = build_qualification_evidence(manifest=verified_manifest, private_corpus_receipt_id=receipt["receipt_id"], evaluator_id="eval:v17", evaluator_version="1.0.0", independent_judge_id="judge:v17", judge_verdict_refs=[judge_verdict["verdict_id"]], measurements=measurements, generated_at="2026-08-01T00:00:00Z")
+    bundle_root = build_bundle(ROOT)["bundle_root"]
+    evidence = build_qualification_evidence(manifest=verified_manifest, bundle_root=bundle_root, private_corpus_receipt_id=receipt["receipt_id"], evaluator_id="eval:v17", evaluator_version="1.0.0", independent_judge_id="judge:v17", judge_verdict_refs=[judge_verdict["verdict_id"]], measurements=measurements, generated_at="2026-08-01T00:00:00Z")
     signed = sign_qualification_evidence(evidence, private_key=key, key_id="evidence-key")
-    verified = verify_qualification_evidence(signed, manifest=verified_manifest, public_key=key.public_key(), key_id="evidence-key")
+    verified = verify_qualification_evidence(signed, manifest=verified_manifest, expected_bundle_root=bundle_root, public_key=key.public_key(), key_id="evidence-key")
     assert verified["evidence_state"] == "verified"
     assert verified["metrics"]["critical_recall_lower_ci"] == 0.96
     Draft202012Validator(load_json((ROOT / "schemas" / "qualification-manifest.schema.json").read_text(encoding="utf-8"))).validate(verified_manifest)
     Draft202012Validator(load_json((ROOT / "schemas" / "qualification-evidence.schema.json").read_text(encoding="utf-8"))).validate(verified)
+
+    tampered = {**signed, "bundle_root": "0" * 64}
+    tampered["evidence_id"] = expected_qualification_evidence_id(tampered)
+    tampered = sign_qualification_evidence(tampered, private_key=key, key_id="evidence-key")
+    with pytest.raises(QualificationError, match="bundle root"):
+        verify_qualification_evidence(tampered, manifest=verified_manifest, expected_bundle_root=bundle_root, public_key=key.public_key(), key_id="evidence-key")
 
 
 def test_measurement_method_digest_is_bound_to_canonical_method_policy() -> None:
@@ -78,7 +87,7 @@ def test_qualification_requires_verified_manifest_and_rejects_tampering() -> Non
     key = Ed25519PrivateKey.generate()
     manifest = build_private_time_slice_manifest(framework_version="17.0.0-dev.1", private_locator="vault://gold", time_slice_start="2026-07-01T00:00:00Z", time_slice_end="2026-08-01T00:00:00Z", case_digests=["a" * 64], generated_at="2026-08-01T00:00:00Z")
     with pytest.raises(QualificationError, match="verified private manifest"):
-        build_qualification_evidence(manifest=manifest, private_corpus_receipt_id="PQR-" + "A" * 64, evaluator_id="eval", evaluator_version="1", independent_judge_id="judge", judge_verdict_refs=[], measurements=[], generated_at="2026-08-01T00:00:00Z")
+        build_qualification_evidence(manifest=manifest, bundle_root=build_bundle(ROOT)["bundle_root"], private_corpus_receipt_id="PQR-" + "A" * 64, evaluator_id="eval", evaluator_version="1", independent_judge_id="judge", judge_verdict_refs=[], measurements=[], generated_at="2026-08-01T00:00:00Z")
     tampered = dict(sign_manifest(manifest, private_key=key, key_id="gold-key"))
     tampered["case_count"] = 2
     with pytest.raises(QualificationError):

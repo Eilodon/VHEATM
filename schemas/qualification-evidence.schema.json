@@ -4,11 +4,12 @@
   "title": "VHEATM independently qualified measurement evidence",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "evidence_id", "manifest_id", "private_corpus_receipt_id", "manifest_digest", "evaluator_id", "evaluator_version", "independent_judge_id", "judge_verdict_refs", "measurements", "metrics", "evidence_state", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
+  "required": ["schema_version", "evidence_id", "manifest_id", "bundle_root", "private_corpus_receipt_id", "manifest_digest", "evaluator_id", "evaluator_version", "independent_judge_id", "judge_verdict_refs", "measurements", "metrics", "evidence_state", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "evidence_id": {"type": "string", "pattern": "^QEV-[A-F0-9]{64}$"},
     "manifest_id": {"type": "string", "pattern": "^QMF-[A-F0-9]{64}$"},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "private_corpus_receipt_id": {"type": "string", "pattern": "^PQR-[A-F0-9]{64}$"},
     "manifest_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "evaluator_id": {"type": "string", "minLength": 1},

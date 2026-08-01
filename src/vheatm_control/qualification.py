@@ -218,6 +218,7 @@ def expected_qualification_evidence_id(evidence: Mapping[str, Any]) -> str:
 def build_qualification_evidence(
     *,
     manifest: Mapping[str, Any],
+    bundle_root: str,
     private_corpus_receipt_id: str,
     evaluator_id: str,
     evaluator_version: str,
@@ -228,6 +229,8 @@ def build_qualification_evidence(
 ) -> dict[str, Any]:
     if manifest.get("verification_state") != "verified":
         raise QualificationError("qualification evidence requires a verified private manifest")
+    if not isinstance(bundle_root, str) or not re.fullmatch(r"[a-f0-9]{64}", bundle_root):
+        raise QualificationError("qualification evidence requires a lowercase SHA-256 bundle root")
     if not evaluator_id or not evaluator_version or not independent_judge_id:
         raise QualificationError("qualification evaluator and independent judge identities are required")
     if evaluator_id == independent_judge_id:
@@ -248,6 +251,7 @@ def build_qualification_evidence(
     evidence: dict[str, Any] = {
         "schema_version": "1.0.0",
         "manifest_id": manifest["manifest_id"],
+        "bundle_root": bundle_root,
         "private_corpus_receipt_id": private_corpus_receipt_id,
         "manifest_digest": _digest({key: value for key, value in manifest.items() if key != "signature_value"}),
         "evaluator_id": evaluator_id,
@@ -277,12 +281,16 @@ def sign_qualification_evidence(evidence: Mapping[str, Any], *, private_key: Ed2
 
 
 def verify_qualification_evidence(
-    evidence: Mapping[str, Any], *, manifest: Mapping[str, Any], public_key: Ed25519PublicKey, key_id: str | None = None, root: Path | None = None
+    evidence: Mapping[str, Any], *, manifest: Mapping[str, Any], public_key: Ed25519PublicKey, key_id: str | None = None, expected_bundle_root: str | None = None, root: Path | None = None
 ) -> dict[str, Any]:
     if evidence.get("schema_version") != "1.0.0":
         raise QualificationError("qualification evidence schema version is invalid")
     if evidence.get("evidence_id") != expected_qualification_evidence_id(evidence):
         raise QualificationError("qualification evidence identity does not match content")
+    if not isinstance(evidence.get("bundle_root"), str) or not re.fullmatch(r"[a-f0-9]{64}", evidence["bundle_root"]):
+        raise QualificationError("qualification evidence bundle root is invalid")
+    if expected_bundle_root is not None and evidence.get("bundle_root") != expected_bundle_root:
+        raise QualificationError("qualification evidence is not bound to the current bundle root")
     if manifest.get("verification_state") != "verified" or evidence.get("manifest_id") != manifest.get("manifest_id"):
         raise QualificationError("qualification evidence is not bound to a verified manifest")
     if not isinstance(evidence.get("private_corpus_receipt_id"), str) or not re.fullmatch(r"PQR-[A-F0-9]{64}", evidence["private_corpus_receipt_id"]):

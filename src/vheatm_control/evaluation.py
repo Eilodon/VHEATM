@@ -343,6 +343,7 @@ def _verified_qualification_metrics(
     evidence: Mapping[str, Any],
     *,
     framework_version: str,
+    expected_bundle_root: str | None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None,
     verification_key_ids: Mapping[str, str] | None,
     schema_root: Path | None = None,
@@ -350,6 +351,8 @@ def _verified_qualification_metrics(
     qualification = evidence.get("qualification_evidence")
     if not isinstance(qualification, Mapping):
         return {}, []
+    if expected_bundle_root is None:
+        return {}, ["qualification evidence requires the current control bundle root"]
     manifest = evidence.get("qualification_manifest")
     public_key = _key(verification_keys, "qualification")
     judge_public_key = _key(verification_keys, "judge")
@@ -369,6 +372,7 @@ def _verified_qualification_metrics(
         verified = verify_qualification_evidence(
             qualification,
             manifest=verified_manifest,
+            expected_bundle_root=expected_bundle_root,
             public_key=public_key,
             key_id=_key_id(verification_key_ids, "qualification"),
             root=schema_root,
@@ -647,6 +651,7 @@ def derive_verified_evidence_metrics(
         qualification_metrics, _ = _verified_qualification_metrics(
             evidence,
             framework_version=framework_version or "",
+            expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
             schema_root=validation_root,
@@ -701,6 +706,7 @@ def evaluate_release_gates(
         qualification_metrics, qualification_errors = _verified_qualification_metrics(
             evidence,
             framework_version=framework_version,
+            expected_bundle_root=expected_bundle_root,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
             schema_root=validation_root,

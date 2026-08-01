@@ -37,6 +37,7 @@ from vheatm_control.supply_chain import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BUNDLE_ROOT = build_bundle(ROOT)["bundle_root"]
 
 
 def _method_digest(metric: str) -> str:
@@ -192,6 +193,7 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
     judge_packet, verdict, _ = _release_judge_fixture(receipt)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
@@ -213,6 +215,7 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key()},
         verification_key_ids={"qualification": "qualification-key"},
         schema_root=ROOT,
@@ -232,6 +235,7 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
             "independent_judge_verdicts": [same_key_verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key(), "judge": key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
         schema_root=ROOT,
@@ -249,6 +253,7 @@ def test_release_gates_reject_measurement_with_unknown_method_digest(tmp_path: P
     judge_packet, verdict, _ = _release_judge_fixture(receipt, signing_key=judge_key)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
@@ -270,6 +275,7 @@ def test_release_gates_reject_measurement_with_unknown_method_digest(tmp_path: P
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
         schema_root=ROOT,
@@ -287,6 +293,7 @@ def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_pat
     judge_packet, verdict, _ = _release_judge_fixture(receipt, signing_key=judge_key)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
@@ -308,6 +315,7 @@ def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_pat
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
         schema_root=ROOT,
@@ -325,6 +333,7 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
     judge_packet, verdict, _ = _release_judge_fixture(receipt, signing_key=judge_key)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
@@ -349,6 +358,7 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
         schema_root=ROOT,
@@ -366,6 +376,7 @@ def test_release_gates_reject_critical_trials_without_independent_case_coverage(
     judge_packet, verdict, _ = _release_judge_fixture(receipt, case_refs=[receipt["case_refs"][0]], signing_key=judge_key)
     evidence = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",
@@ -387,6 +398,7 @@ def test_release_gates_reject_critical_trials_without_independent_case_coverage(
             "independent_judge_verdicts": [verdict],
         },
         evaluated_at="2026-08-01T00:00:00Z",
+        expected_bundle_root=BUNDLE_ROOT,
         verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
         verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
         schema_root=ROOT,
@@ -424,6 +436,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     ]
     qualification = build_qualification_evidence(
         manifest=verified_manifest,
+        bundle_root=BUNDLE_ROOT,
         private_corpus_receipt_id=private_receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",

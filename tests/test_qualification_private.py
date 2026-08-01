@@ -7,6 +7,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from jsonschema import Draft202012Validator
 
+from vheatm_control.bundle import build_bundle
 from vheatm_control.qualification import build_private_time_slice_manifest, build_qualification_evidence, sign_manifest, verify_manifest
 from vheatm_control.qualification_private import (
     PrivateCorpusError,
@@ -129,6 +130,7 @@ def test_qualification_evidence_binds_ingested_private_corpus_receipt(tmp_path: 
     receipt = ingest_private_corpus(manifest, corpus_path=corpus_path, public_key=key.public_key(), key_id="gold-key", verified_at="2026-08-01T00:00:00Z")
     evidence = build_qualification_evidence(
         manifest=verify_manifest(manifest, public_key=key.public_key(), key_id="gold-key"),
+        bundle_root=build_bundle(ROOT)["bundle_root"],
         private_corpus_receipt_id=receipt["receipt_id"],
         evaluator_id="eval:v17",
         evaluator_version="1.0.0",

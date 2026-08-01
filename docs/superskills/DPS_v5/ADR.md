@@ -2188,3 +2188,76 @@ Start the next cycle when a provider policy item changes from `pending` to `qual
 - A broker receipt can be valid while the adapter is pointed at the wrong endpoint; authorization and implementation identity must be checked separately.
 - Configuration digests must be produced by one canonical helper; independently reimplemented JSON serialization creates silent binding drift.
 - Keep pending local fixtures useful for shadow tests, but never make a test endpoint or test evidence satisfy the external qualification boundary.
+
+## ADR-31 — Bind private qualification evidence to the current control bundle
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `private-corpus` `bundle-binding` `replay-resistance` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-02 — or earlier when the qualification evaluator, evidence schema, or bundle identity projection changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local bundle binding and release fail-closed behavior; `NOT_PRODUCTION_QUALIFIED` because the private corpus, external qualification authority, independent judge custody, and production key registry remain unavailable.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — evaluator builds, canonical schemas, and private qualification procedures may rotate independently of the corpus time slice.
+
+### Context
+
+Private qualification already bound a signed manifest to a payload-free corpus receipt, time slice, case digests, and independent judge references. It did not bind the resulting signed measurement evidence to the exact control bundle evaluated. A valid signed measurement could therefore be replayed against a different bundle whose framework version remained unchanged, weakening the meaning of RG-00…RG-15 metrics.
+
+### Decision
+
+Require `bundle_root` on every `qualification-evidence` record and include it in the content-addressed evidence ID and signature subject. The builder accepts only a lowercase SHA-256 root. The verifier validates the field and, when requested, compares it to the current expected root. Release evaluation now treats a qualification evidence record without an explicitly supplied current bundle root as unavailable and leaves its dependent RG metrics `unknown`; with a root, it passes the same value into cryptographic evidence verification. Private manifest/corpus time-slice semantics remain separate from the bundle binding, and no private corpus or qualification claim is created by this change.
+
+### Options Considered
+
+- Bind only the framework version: rejected because multiple bundle revisions share a framework version.
+- Trust the signed manifest's time slice as release freshness: rejected because corpus capture time does not identify the evaluated runtime bytes.
+- Let release callers omit the expected root and rely on the evidence's self-declared root: rejected because that allows replay against an arbitrary bundle.
+- Recompute qualification metrics locally from private payloads: rejected because the private corpus must remain undisclosed and external authority owns the qualification population.
+
+### Impact
+
+Schemas changed: `schemas/qualification-evidence.schema.json`
+Components changed: qualification evidence builder/verifier, release evaluator, private qualification and release-evidence tests, lifecycle plan
+Breaking change: **YES** for qualification evidence records that omit `bundle_root`, and for release calls that supply private evidence without `expected_bundle_root`.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `private time-slice manifest/receipt → signed qualification evidence → expected bundle root → RG-00…RG-15 → release report/pilot`
+Cascade Review: ✅ Done — direct verifier mutation regression, typed schema validation, release no-root behavior, full qualification/release tests, and full-suite verification cover the changed boundary.
+
+### Consequences
+
+- Signed private metrics cannot be silently reused for a different canonical bundle.
+- The evaluator can distinguish an internally valid but release-unbound qualification record from evidence eligible for current RG derivation.
+- Lower-level evidence verification remains usable for explicit offline inspection, but the release evaluator always requires the current root when qualification evidence is present.
+- External private corpus access, key custody, authority registry, independent judge operations, and actual RG measurements remain unavailable and fail closed.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression showed qualification evidence had no accepted bundle binding; GREEN tests now reject a re-signed evidence record whose root differs from the current bundle.
+- [verified 2026-08-02] Release-evidence tests pass with `expected_bundle_root` on all qualification-bearing evaluations; omission leaves qualification metrics missing/unknown.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .` passes and `.venv/bin/pytest -o addopts='' -q` passes with `291 passed`; no external private or GA evidence was fabricated.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External private corpus, qualification/judge authority, key custody, vulnerability freshness/coverage, provider qualification, host namespace qualification, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a signed private qualification package is supplied for a new bundle root or the qualification evaluator version changes; reverify corpus slice, judge coverage, method digests, key authority, and all RG-00…RG-15 bindings before accepting the package.
+
+### Cycle Retrospective
+
+- A signed time slice identifies the population, not the bytes that produced the current release.
+- The consumer must supply the current bundle root; a self-declared root in evidence is not a trust anchor.
+- Keep private payloads out of receipts while retaining enough immutable population and bundle identity to reject replay.
