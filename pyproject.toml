@@ -27,6 +27,7 @@ vheatm-route = "vheatm_control.module_router:main"
 vheatm-validate-report = "vheatm_control.report_validator:main"
 vheatm-broker = "vheatm_control.tool_broker:main"
 vheatm-probe-python = "vheatm_control.structural_probe:main"
+vheatm-link-python = "vheatm_control.python_linker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
