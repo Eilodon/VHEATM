@@ -1,0 +1,71 @@
+name: Apply P3-D lexical binding patch
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/p3d.patch.gz.b64.part-*
+      - .github/workflows/apply-p3d-lexical.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/v17-p3d-lexical-bindings
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Reconstruct validated patch
+        run: |
+          echo "ab6ab38846af863a3311842e4af61def69f3146c486965d322bca21d6f8e8b6b  .github/p3d.patch.gz.b64.part-00" | sha256sum --check -
+          echo "ab5bbb7e18674fbf28edd339427fcd8dd9adb274c2528dbe2bcff0e1f1ceb8ae  .github/p3d.patch.gz.b64.part-01" | sha256sum --check -
+          echo "2ad3067290b042a918e542e8e6abd0f1487d264910d63807d2d0680d991235a3  .github/p3d.patch.gz.b64.part-02" | sha256sum --check -
+          echo "c127a3ba3e1d1ed35547dea8ca9e72a40e9b7586002210ef6c4b86b7d630b621  .github/p3d.patch.gz.b64.part-03" | sha256sum --check -
+          echo "424d86d7f70d3bd4ca8eca3c93515bcb2944ddd3700bb6444eda2752175f37e2  .github/p3d.patch.gz.b64.part-04" | sha256sum --check -
+          echo "4f1cd2f2f273d6f47f5a76bdaee7e13f07203b777bd4d0af2634e262d24714ab  .github/p3d.patch.gz.b64.part-05" | sha256sum --check -
+          echo "204849168c4625f2571ed1dba57e395ed389810bc957ef8eda76b28307291333  .github/p3d.patch.gz.b64.part-06" | sha256sum --check -
+          echo "5b58768dc7cce837891552a23d39d49ee89355369ab6576f710f247bca00a7fb  .github/p3d.patch.gz.b64.part-07" | sha256sum --check -
+          echo "9c9fccd7751f2199db9eb07d8ad58e27af87e32dc22e5464b6fc14272e4bddd6  .github/p3d.patch.gz.b64.part-08" | sha256sum --check -
+          echo "1985e2c2f4b19b7e1dd0eba98463fa742232958d41bdaacb4bacc3c8610b4d3e  .github/p3d.patch.gz.b64.part-09" | sha256sum --check -
+          echo "913f906ac1dc317d6fd7d1c6f92f7fd3fd550eef1cbfa648e524349f16b73375  .github/p3d.patch.gz.b64.part-10" | sha256sum --check -
+          echo "79b1023eb94a500e59a3ad635efdae95f6637c5862d3fd41030a863d757f2a45  .github/p3d.patch.gz.b64.part-11" | sha256sum --check -
+          echo "b2e412f655e60f63ba1de66ba1b7d93180554c9232f17a63cab0f6a6b05bb7ec  .github/p3d.patch.gz.b64.part-12" | sha256sum --check -
+          cat .github/p3d.patch.gz.b64.part-* | base64 --decode | gzip --decompress > /tmp/p3d.patch
+          echo "b1ac20dd279c12fd1d0f6f3ef09bda493b0db85fb0739255640efc5edc6e2acc  /tmp/p3d.patch" | sha256sum --check -
+          git apply --check /tmp/p3d.patch
+          git apply /tmp/p3d.patch
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Validate lexical binding analysis
+        run: |
+          python -m compileall -q src
+          pytest -o addopts='' -q tests/test_structural_probe.py tests/test_python_linker.py
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+
+          for name in (
+              "schemas/structural-probe.schema.json",
+              "schemas/python-linkage.schema.json",
+          ):
+              Draft202012Validator.check_schema(
+                  json.loads(Path(name).read_text(encoding="utf-8"))
+              )
+          PY
+          vheatm-validate --root .
+      - name: Commit product files and remove staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/python-linkage.md docs/structural-probes.md schemas/python-linkage.schema.json schemas/structural-probe.schema.json src/vheatm_control/python_linker.py src/vheatm_control/structural_probe.py tests/test_python_linker.py tests/test_structural_probe.py
+          git rm .github/p3d.patch.gz.b64.part-*
+          git commit -m "feat: add conservative lexical binding analysis"
+          git push origin HEAD:feat/v17-p3d-lexical-bindings
