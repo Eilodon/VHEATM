@@ -191,3 +191,25 @@ modules: [MOD-AGENT-SECURITY, MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-
 - Pilot completion must re-verify provider request/receipt/response semantics at the persisted evidence boundary: added to CONTEXT.md ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-15 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canary-evidence-revalidation
+
+### New Domain Terms Added to CONTEXT.md
+- Canary evidence revalidation: added ✅
+
+### Bug Patterns
+- Canary trusted a self-rehashed all-pass report without re-evaluating its underlying evidence: observed and fixed at the canary preparation boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Report identity is not evidence attestation: added to CONTEXT.md Domain Gotchas ✅
+- Tool-enabled rollout requires pre-activation revalidation: added to CONTEXT.md Architectural Decisions ✅
+
+### Architectural Decisions Promoted
+- Canary preparation must reuse the canonical evaluator and compare the complete report before enabling tools: added to CONTEXT.md ✅
+
+---
