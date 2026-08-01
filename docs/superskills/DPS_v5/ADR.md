@@ -2560,3 +2560,78 @@ Start the next host qualification cycle when a controlled non-ephemeral host sig
 - An unavailable default host and a capable qualification host can coexist; evidence must bind the actual deployment rather than infer capability from installed packages.
 - A privileged test environment is useful for qualification only when it is explicitly kept outside the production runtime trust path.
 - A locally verified signature still lacks authority until the key registry and custody are externally supplied.
+
+## ADR-36 — Isolate signing and key custody behind a fail-closed Unix-socket service
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `signer-service` `key-custody` `trust-boundary` `fail-closed`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-02 — or earlier when an operational signer service, socket policy, key rotation, or trust-registry handoff is supplied.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for the local protocol/client boundary; `NOT_PRODUCTION_QUALIFIED` because no external signer process, controlled socket ownership, authority root, or key custody was available in the workspace.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `PACKAGE`
+**VOLATILITY:** `WATCHFUL` — signer deployment, socket ownership, key rotation, service authorization, and external trust registry are operational inputs.
+
+### Context
+
+Release evidence already had Ed25519 verification and a trusted-key registry boundary, but signing helpers accepted private key objects directly in the same Python process. That is useful for isolated fixtures, yet it does not implement the roadmap's third process trust boundary: signer/key service. A transport callback that could mutate a request before verification would also create a signature-over-the-wrong-payload path.
+
+### Decision
+
+Add a typed external signer protocol with strict request/response schemas and a `SignerClient` that accepts only canonical payload bytes, bundle/framework/purpose/key identity, and an expected public key. `SocketSignerTransport` uses an absolute, non-symlink AF_UNIX endpoint, bounded JSON-lines frames, timeout, and strict duplicate-key JSON parsing. The client snapshots the request before crossing the callback boundary, verifies response identity and Ed25519 signature against the original payload, and converts service errors or malformed responses to `SignerServiceError`; it never accepts or falls back to local private key material. Existing private-key signing helpers remain fixture utilities and do not authorize release evidence.
+
+### Options Considered
+
+- Keep private-key objects in the runtime signing path: rejected because key custody remains inside the control process and violates the intended process boundary.
+- Use HTTPS for signer calls: rejected for V17 because it expands egress and endpoint trust; a local Unix socket keeps the signer boundary explicit and local-first.
+- Trust the response's key ID without verifying the signature: rejected because response metadata is untrusted and cannot prove the signed bytes.
+- Verify the callback-mutated request: rejected because a transport can replace the payload and produce a self-consistent but unrelated signature.
+
+### Impact
+
+Schemas changed: `schemas/signer-request.schema.json`, `schemas/signer-response.schema.json`
+Components changed: `src/vheatm_control/signer_service.py`, schema registry validation, package inventory, signer contract tests, lifecycle evidence
+Breaking change: **NO** for existing fixture signing helpers; **YES** for new external signer clients that do not provide a bound Ed25519 public key or a valid signer response.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `canonical payload → signer request → Unix-socket process → response binding → Ed25519 verification → external trust registry → release evidence`
+Cascade Review: ✅ Done — TDD RED/GREEN coverage, STRIDE mutation review, schema validation, packaging, and full repository verification cover the changed boundary.
+
+### Consequences
+
+- Runtime callers now have a concrete key-custody seam without importing private key material.
+- A missing signer process, malformed response, wrong purpose/key/bundle, oversized frame, endpoint symlink, or signature mismatch stays fail-closed.
+- The protocol does not itself create signer authority, service ownership, key rotation, or release qualification; those remain external prerequisites and no local fixture is promoted.
+- Existing fixture helpers still use private keys for deterministic tests; they remain non-authoritative and must not be wired into release evaluation.
+
+### Evidence
+
+- [verified 2026-08-02] RED test `test_signer_client_rejects_transport_mutation_of_the_original_request` failed with `DID NOT RAISE SignerServiceError` before the request snapshot was added.
+- [verified 2026-08-02] Six signer tests pass, including content-addressed request/no-key-material, response cryptographic binding, unavailable-service fail-closed, bounded Unix-socket transport, and transport-mutation rejection.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .` and `.venv/bin/vheatm-doctor --root .` pass; full `.venv/bin/pytest -o addopts='' -q` passes with `301 passed in 63.03s`.
+- [verified 2026-08-02] `uv build --wheel --sdist` includes `signer_service.py`, `signer-request.schema.json`, and `signer-response.schema.json`; the regenerated bundle contains 200 canonical entries.
+- [verified 2026-08-02] No operational signer service or trusted signer registry was available, so this change creates no signed GA/RG-13/RG-09 evidence.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External signer service ownership, key custody/rotation, authority root and registry, private/time-sliced qualification, provider/judge qualification, host authority, trusted vulnerability provenance, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next signer qualification cycle when an operational absolute Unix-socket signer endpoint and externally controlled public key are supplied; require a successful request/response probe, socket ownership evidence, rotation/revocation record, current trust registry, and current-bundle verification before consuming any resulting signature in release evidence.
+
+### Cycle Retrospective
+
+- A signing primitive is not a key-custody boundary; the caller must be unable to supply private material to the production client.
+- Callback seams need immutable snapshots because even a local test transport can mutate a shared mapping and make an unrelated signature appear valid.
+- Protocol completion and authority completion are separate milestones; the former can be verified locally while the latter must remain unknown until externally handed off.
