@@ -2683,7 +2683,7 @@ Cascade Review: ✅ Done — focused RED/GREEN regressions, the existing signer 
 - The three supply-chain artifact types share one external key-custody seam and cannot silently switch authority paths.
 - The local fixture path remains useful for deterministic unit tests but is visibly separate from production trust establishment.
 - This change does not create a scanner signature, signer authority, trust registry, or GA evidence; those prerequisites remain external and unknown.
-- Qualification, judge, and host signing helpers remain fixture or authority-specific until their records have the same bundle-bound service contract and external handoff.
+- Qualification and judge signing helpers remain fixture or authority-specific until their records have the same bundle-bound service contract and external handoff.
 
 ### Evidence
 
@@ -2709,3 +2709,78 @@ Start the next supply-chain signing cycle when an operational signer endpoint an
 - Wiring a protocol into a producer is a distinct closure step: a verified transport alone does not prove every artifact builder uses it.
 - Bundle and purpose binding must be passed at the producer boundary, not reconstructed by a downstream evaluator.
 - Fixture compatibility can remain, but its authority limits must be explicit and tested at the external boundary.
+
+## ADR-38 — Extend external signer delegation to host attestations and trust registries
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `signer-service` `host-attestation` `trust-registry` `key-custody`
+**Change Classification:** `IMPLEMENTATION`
+**Review date:** 2026-09-02 — or earlier when authority rotation, deployment custody, or the remaining qualification/judge producers change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local producer delegation and exact binding; `NOT_PRODUCTION_QUALIFIED` because no operational signer service, authority root, rotation record, or trusted host deployment is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`
+**VOLATILITY:** `WATCHFUL` — signer custody, authority rotation, host deployment identity, and trust-registry operations are external inputs.
+
+### Context
+
+The signer protocol was connected to supply-chain producers, but host attestations and trusted key registries still accepted in-process private keys only. Those records directly influence RG-09 and every signed release-evidence role. A caller could also provide a framework version different from the artifact's own framework identity; because the signer receipt is not stored in the record, that mismatch would not be recoverable downstream.
+
+### Decision
+
+Add `SignerClient` delegation to `sign_host_attestation` and `sign_trust_registry`. Each producer requires the expected Ed25519 public key, binds the signer request to its own framework version, current bundle root, role key, and purpose (`host` or `authority`), verifies the returned receipt through the client, and rejects combined local/external key inputs. Service failures remain typed errors and never fall back to local signing. Existing private-key paths remain deterministic fixture compatibility paths.
+
+### Options Considered
+
+- Keep host/registry private-key signing in-process: rejected because the two records define host and release trust and must share the custody boundary.
+- Trust the caller-supplied signer framework version: rejected because a request can be cryptographically valid while scoped to a different release framework.
+- Persist an unverified signer receipt: rejected because producer output must remain ordinary typed evidence and downstream verification must rely on the record's own canonical subject.
+- Fall back to a local private key on service outage: rejected because authority unavailability must remain visible and fail closed.
+
+### Impact
+
+Schemas changed: none
+Components changed: `src/vheatm_control/host_attestation.py`, `src/vheatm_control/trust_registry.py`, host/trust regression tests, lifecycle evidence
+Breaking change: **NO** for existing fixture callers; **YES** for external signing without an exact framework/bundle binding or expected public key.
+
+IMPACT RADIUS: **CRITICAL**
+BLAST RADIUS: WIDE
+Cascades: `host/run or trust registry → canonical subject → SignerClient → framework/bundle/purpose/key binding → Ed25519 verification → RG-09/release role resolution`
+Cascade Review: ✅ Done — RED/GREEN producer tests, exact framework mismatch tests, mixed-key rejection, targeted release suite, schema validation, and global signing-surface scan cover the changed boundary.
+
+### Consequences
+
+- Host and authority records now use the same process/key-custody seam as supply-chain evidence.
+- A caller cannot relabel a host or registry signing request to another framework without a producer-side rejection.
+- Qualification manifests/evidence and judge verdicts remain the next producer integration surface; they lack a complete persisted framework/bundle binding in their current schemas and remain fixture/authority-specific.
+- This does not create a trusted authority root, operational signer, host population evidence, or GA release claim.
+
+### Evidence
+
+- [verified 2026-08-02] RED tests failed with `unexpected keyword argument 'signer'` for both producers before delegation existed.
+- [verified 2026-08-02] GREEN producer tests pass with `5 passed`; host/trust/release targeted suite passes with `36 passed in 21.72s`.
+- [verified 2026-08-02] Full `.venv/bin/pytest -o addopts='' -q` passes with `309 passed in 62.71s` after the host/trust producer regressions.
+- [verified 2026-08-02] Framework mismatch regressions fail closed; mixed local/external input is rejected before any transport call.
+- [verified 2026-08-02] `.venv/bin/vheatm-validate --root .`, compilation, and diff checks pass; no external authority or signer service was available, so no RG-09/GA evidence is promoted.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Qualification/judge producer signer integration, external signer custody, authority root/rotation, private qualification, provider/judge qualification, host deployment authority, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next signer-producer cycle when qualification or judge records gain explicit current framework/bundle fields; route those producers through `SignerClient`, add exact mismatch/outage regressions, and rerun the full RG-00…RG-15 evidence suite before consuming their signatures.
+
+### Cycle Retrospective
+
+- A service boundary is incomplete if authority-bearing producers can still bypass it with private key objects.
+- Metadata sent to a signer must be checked against the producer's canonical identity before transport; response binding alone cannot repair a wrong caller scope.
+- Keep records simple and content-addressed, but require the signer request scope to be an exact projection of the record rather than caller-only metadata.

@@ -55,13 +55,14 @@
 - Independent judge packets now bind the judge provider version, exact HTTPS endpoint, adapter profile, and configuration digest to the canonical provider allowlist before packet identity or verdict evidence can be consumed; the local `judge.test` descriptor remains `pending`.
 - External signer/key custody now has a typed fail-closed protocol: canonical payloads cross only an absolute, non-symlink AF_UNIX transport, request/response schemas bind purpose/key/bundle/digest, the client snapshots requests before transport, and Ed25519 verification is performed against the original bytes. No private key enters this client, and no local signer service is available to authorize release evidence.
 - Bundle-bound supply-chain, vulnerability, and provenance builders can now delegate signing to the external `SignerClient`; signer outages, malformed authority inputs, and mixed local/external key paths fail closed, while private-key helpers remain fixture-only compatibility paths.
+- Host attestations and trusted key registries now use the same external signer boundary with exact framework/bundle/key binding; framework mismatches and mixed local/external signing fail closed before authority-bearing records are emitted.
 
 ## Verification gates
 
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts='' -q` — 304 passed in 62.34s.
+- `.venv/bin/pytest -o addopts='' -q` — 309 passed in 62.71s.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
@@ -84,6 +85,7 @@ Fresh evidence for this cycle:
 - Judge-provider binding regression — an unallowlisted judge provider is rejected before packet identity is created; packet replay/verification rechecks version, endpoint, adapter profile, and configuration binding. Targeted judge/release tests pass, while external judge qualification remains unavailable.
 - Independent-judge runtime boundary — the local callback is used only as the spawn-process test seam; packet identity, signed verdict verification, and the trusted registry remain mandatory before qualification consumption. It is not treated as an external judge deployment or qualification shortcut.
 - Signer/supply-chain boundary — eight focused tests cover content-addressed requests, no private-key material, response binding, crypto verification, bounded Unix-socket framing, unavailable-service fail-closed behavior, transport mutation, and external signing of all three bundle-bound supply-chain artifact types; the external service/authority/key-rotation handoff remains unavailable.
+- Authority-producer boundary — host-attestation and trust-registry producers delegate through `SignerClient`; five focused regressions cover host/trust signing, exact framework binding, and mixed-key rejection. The external service, authority root, rotation, and deployment custody remain unavailable.
 
 ## Latest prerequisite probe (2026-08-02)
 

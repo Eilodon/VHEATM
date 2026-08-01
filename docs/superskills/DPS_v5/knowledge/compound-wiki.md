@@ -704,3 +704,25 @@ modules: [MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
 - Bundle-bound supply-chain artifact builders use one external signer boundary with explicit purpose separation; fixture private-key paths remain non-authoritative: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-38 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY]
+---
+
+## Cycle: authority-producer-signer-delegation
+
+### New Domain Terms Added to CONTEXT.md
+- Authority-producer signer boundary: added ✅
+
+### Bug Patterns
+- Host and trust-registry producers could bypass the external custody protocol even after the generic signer service existed: observed and fixed; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A signer response can be valid while the caller requested the wrong framework scope; producers must compare scope to their canonical record before transport: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Authority-bearing host and trust-registry records use the external signer boundary, while qualification/judge records remain separate until their schemas persist complete framework/bundle scope: added to CONTEXT.md Architectural Decisions ✅
+
+---
