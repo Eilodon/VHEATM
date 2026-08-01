@@ -18,6 +18,7 @@ from vheatm_control.host_attestation import (
 from vheatm_control.host_qualification import expected_host_qualification_run_id
 from vheatm_control.qualification_methods import expected_method_digest
 from vheatm_control.serialization import load_yaml
+from vheatm_control.trust_registry import build_trust_registry, sign_trust_registry
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -225,6 +226,19 @@ def test_verified_host_attestation_is_the_only_source_for_release_hard_stop_metr
         key_id="host-key",
     )
     evidence = {"host_qualification_run": run, "host_qualification_attestation": signed}
+    authority = Ed25519PrivateKey.generate()
+    registry = build_trust_registry(
+        framework_version="17.0.0-dev.1",
+        bundle_root=run["bundle_root"],
+        authority_id="test-host-authority:v17",
+        authority_public_key=authority.public_key(),
+        authority_key_id="test-host-registry-key",
+        role_keys={"host": (key.public_key(), "host-key")},
+        valid_from="2026-08-01T00:00:00Z",
+        valid_until="2026-08-03T00:00:00Z",
+        generated_at="2026-08-02T00:00:00Z",
+    )
+    signed_registry = sign_trust_registry(registry, private_key=authority, key_id="test-host-registry-key")
 
     without_key = derive_verified_evidence_metrics(
         evidence,
@@ -236,8 +250,9 @@ def test_verified_host_attestation_is_the_only_source_for_release_hard_stop_metr
     with_key = derive_verified_evidence_metrics(
         evidence,
         expected_bundle_root=run["bundle_root"],
-        verification_keys={"host": key.public_key()},
-        verification_key_ids={"host": "host-key"},
+        trusted_key_registry=signed_registry,
+        trust_registry_authority_key=authority.public_key(),
+        trust_registry_authority_key_id="test-host-registry-key",
         schema_root=ROOT,
     )
 

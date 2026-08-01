@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from jsonschema import Draft202012Validator
 
 from vheatm_control.bundle import build_bundle
@@ -34,6 +35,7 @@ from vheatm_control.supply_chain import (
     sign_vulnerability_scan,
     verify_vulnerability_scan,
 )
+from vheatm_control.trust_registry import build_trust_registry, sign_trust_registry
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +44,30 @@ BUNDLE_ROOT = build_bundle(ROOT)["bundle_root"]
 
 def _method_digest(metric: str) -> str:
     return expected_method_digest(metric, root=ROOT)
+
+
+def _trusted_registry_kwargs(
+    verification_keys: dict[str, Ed25519PublicKey],
+    verification_key_ids: dict[str, str],
+    bundle_root: str,
+) -> dict[str, object]:
+    authority = Ed25519PrivateKey.generate()
+    registry = build_trust_registry(
+        framework_version="17.0.0-dev.1",
+        bundle_root=bundle_root,
+        authority_id="test-release-authority:v17",
+        authority_public_key=authority.public_key(),
+        authority_key_id="test-release-registry-key",
+        role_keys={role: (key, verification_key_ids[role]) for role, key in verification_keys.items()},
+        valid_from="2026-08-01T00:00:00Z",
+        valid_until="2026-08-20T00:00:00Z",
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    return {
+        "trusted_key_registry": sign_trust_registry(registry, private_key=authority, key_id="test-release-registry-key"),
+        "trust_registry_authority_key": authority.public_key(),
+        "trust_registry_authority_key_id": "test-release-registry-key",
+    }
 
 
 def test_release_evaluator_rejects_non_rfc3339_evaluated_at() -> None:
@@ -216,8 +242,7 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key()}, {"qualification": "qualification-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
@@ -236,8 +261,7 @@ def test_release_gates_reject_unsigned_independent_verdict(tmp_path: Path) -> No
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key(), "judge": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     same_key_rg05 = next(item for item in same_key_report["gates"] if item["gate_id"] == "RG-05")
@@ -276,8 +300,7 @@ def test_release_gates_reject_measurement_with_unknown_method_digest(tmp_path: P
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
@@ -316,8 +339,7 @@ def test_release_gates_reject_critical_trials_larger_than_private_corpus(tmp_pat
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
@@ -359,8 +381,7 @@ def test_release_gates_reject_out_of_domain_qualification_metrics(tmp_path: Path
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
@@ -399,8 +420,7 @@ def test_release_gates_reject_critical_trials_without_independent_case_coverage(
         },
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=BUNDLE_ROOT,
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key"}, BUNDLE_ROOT),
         schema_root=ROOT,
     )
     rg05 = next(item for item in report["gates"] if item["gate_id"] == "RG-05")
@@ -498,8 +518,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert report["summary"] == {"pass": 16, "fail": 0, "unknown": 0, "ga_eligible": True}
@@ -510,8 +529,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         evidence,
         evaluated_at="2026-08-10T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "host": host_key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "host": "host-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     stale_rg13 = next(item for item in stale_report["gates"] if item["gate_id"] == "RG-13")
@@ -529,8 +547,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         same_key_evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     same_key_rg13 = next(item for item in same_key_report["gates"] if item["gate_id"] == "RG-13")
@@ -542,8 +559,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         {**evidence, "independent_judge_packets": []},
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert next(item for item in packet_missing["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
@@ -553,8 +569,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         {**evidence, "independent_judge_packets": [judge_packet, judge_packet]},
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert next(item for item in duplicate_packet["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
@@ -566,8 +581,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         {**evidence, "independent_judge_verdicts": [verdict_mismatch]},
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "judge": judge_key.public_key(), "supply_chain": key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "judge": "judge-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert next(item for item in binding_mismatch["gates"] if item["gate_id"] == "RG-05")["status"] == "unknown"
@@ -582,8 +596,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         schema_tampered_evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert schema_blocked["summary"]["ga_eligible"] is False
@@ -598,8 +611,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         {**evidence, "supply_chain_attestation": supply_schema_invalid},
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert next(item for item in supply_schema_blocked["gates"] if item["gate_id"] == "RG-13")["status"] == "fail"
@@ -611,8 +623,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
         missing_receipt,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={"qualification": key.public_key(), "supply_chain": key.public_key(), "vulnerability": key.public_key(), "provenance": key.public_key()},
-        verification_key_ids={"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"},
+        **_trusted_registry_kwargs({"qualification": key.public_key(), "supply_chain": supply_chain_key.public_key(), "vulnerability": vulnerability_key.public_key(), "provenance": provenance_key.public_key()}, {"qualification": "qualification-key", "supply_chain": "supply-chain-key", "vulnerability": "vulnerability-key", "provenance": "provenance-key"}, base_attestation["bundle_root"]),
         schema_root=ROOT,
     )
     assert blocked_report["summary"]["ga_eligible"] is False
@@ -684,16 +695,19 @@ def test_release_gates_reject_signed_attestation_with_noncanonical_sbom() -> Non
         evidence,
         evaluated_at="2026-08-01T00:00:00Z",
         expected_bundle_root=base_attestation["bundle_root"],
-        verification_keys={
-            "supply_chain": release_key.public_key(),
-            "vulnerability": vulnerability_key.public_key(),
-            "provenance": provenance_key.public_key(),
-        },
-        verification_key_ids={
-            "supply_chain": "supply-chain-key",
-            "vulnerability": "vulnerability-key",
-            "provenance": "provenance-key",
-        },
+        **_trusted_registry_kwargs(
+            {
+                "supply_chain": release_key.public_key(),
+                "vulnerability": vulnerability_key.public_key(),
+                "provenance": provenance_key.public_key(),
+            },
+            {
+                "supply_chain": "supply-chain-key",
+                "vulnerability": "vulnerability-key",
+                "provenance": "provenance-key",
+            },
+            base_attestation["bundle_root"],
+        ),
         schema_root=ROOT,
     )
     rg13 = next(item for item in report["gates"] if item["gate_id"] == "RG-13")

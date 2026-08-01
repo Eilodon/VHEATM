@@ -55,6 +55,9 @@ def prepare_pilot(
     rollback_plan: str,
     created_at: str | None = None,
     release_evidence: Mapping[str, Any] | None = None,
+    trusted_key_registry: Mapping[str, Any] | None = None,
+    trust_registry_authority_key: Any | None = None,
+    trust_registry_authority_key_id: str | None = None,
     verification_keys: Mapping[str, Any] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
     expected_bundle_root: str | None = None,
@@ -79,8 +82,10 @@ def prepare_pilot(
             raise PilotError("canary requires a fully evidenced release report")
         if (
             not isinstance(release_evidence, Mapping)
-            or not isinstance(verification_keys, Mapping)
-            or not verification_keys
+            or not isinstance(trusted_key_registry, Mapping)
+            or trust_registry_authority_key is None
+            or not isinstance(trust_registry_authority_key_id, str)
+            or not trust_registry_authority_key_id
             or not isinstance(expected_bundle_root, str)
             or not isinstance(release_report.get("framework_version"), str)
         ):
@@ -91,8 +96,9 @@ def prepare_pilot(
                 release_evidence,
                 evaluated_at=str(release_report.get("evaluated_at", "")),
                 expected_bundle_root=expected_bundle_root,
-                verification_keys=verification_keys,
-                verification_key_ids=verification_key_ids,
+                trusted_key_registry=trusted_key_registry,
+                trust_registry_authority_key=trust_registry_authority_key,
+                trust_registry_authority_key_id=trust_registry_authority_key_id,
                 schema_root=schema_root,
             )
         except (EvaluationError, TypeError, ValueError) as exc:

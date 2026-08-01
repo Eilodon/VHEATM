@@ -85,6 +85,7 @@ REQUIRED_SCHEMA_FILES = frozenset(
         "vheatm-manifest.schema.json",
         "validation-receipt.schema.json",
         "vulnerability-scan.schema.json",
+        "trust-key-registry.schema.json",
     }
 )
 

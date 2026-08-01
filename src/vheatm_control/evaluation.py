@@ -27,6 +27,7 @@ from .supply_chain import (
     verify_vulnerability_scan_freshness,
 )
 from .supply_chain_policy import SupplyChainPolicyError, distinct_signing_key_roles
+from .trust_registry import TrustRegistryError, resolve_trusted_verification_keys
 
 
 class EvaluationError(ValueError):
@@ -117,7 +118,68 @@ def _public_key_bytes(key: Ed25519PublicKey) -> bytes:
     return key.public_bytes(Encoding.Raw, PublicFormat.Raw)
 
 
-def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
+_TRUSTED_EVIDENCE_FIELDS = (
+    "qualification_manifest",
+    "private_corpus_receipt",
+    "qualification_evidence",
+    "host_qualification_attestation",
+    "supply_chain_attestation",
+    "vulnerability_scan",
+    "provenance_statement",
+)
+
+
+def _requires_trusted_key_registry(evidence: Mapping[str, Any]) -> bool:
+    if any(isinstance(evidence.get(field), Mapping) and bool(evidence.get(field)) for field in _TRUSTED_EVIDENCE_FIELDS):
+        return True
+    return any(isinstance(evidence.get(field), list) and bool(evidence.get(field)) for field in ("independent_judge_packets", "independent_judge_verdicts"))
+
+
+def _evidence_framework_version(evidence: Mapping[str, Any]) -> str:
+    for field in _TRUSTED_EVIDENCE_FIELDS:
+        value = evidence.get(field)
+        if isinstance(value, Mapping) and isinstance(value.get("framework_version"), str):
+            return str(value["framework_version"])
+    return ""
+
+
+def _resolve_release_verification_material(
+    evidence: Mapping[str, Any],
+    *,
+    framework_version: str,
+    expected_bundle_root: str | None,
+    evaluated_at: str,
+    trusted_key_registry: Mapping[str, Any] | None,
+    trust_registry_authority_key: Ed25519PublicKey | None,
+    trust_registry_authority_key_id: str | None,
+    direct_keys: Mapping[str, Ed25519PublicKey] | None,
+    direct_key_ids: Mapping[str, str] | None,
+    schema_root: Path | None,
+) -> tuple[dict[str, Ed25519PublicKey], dict[str, str], list[str]]:
+    if not _requires_trusted_key_registry(evidence):
+        return {}, {}, []
+    if direct_keys or direct_key_ids:
+        return {}, {}, ["direct verification keys are not accepted for signed release evidence; supply an externally signed trusted key registry"]
+    if not isinstance(trusted_key_registry, Mapping) or not isinstance(trust_registry_authority_key, Ed25519PublicKey) or not isinstance(trust_registry_authority_key_id, str) or not trust_registry_authority_key_id:
+        return {}, {}, ["signed release evidence requires an externally signed trusted key registry and authority key"]
+    if expected_bundle_root is None:
+        return {}, {}, ["trusted key registry requires the current control bundle root"]
+    try:
+        keys, key_ids = resolve_trusted_verification_keys(
+            trusted_key_registry,
+            authority_public_key=trust_registry_authority_key,
+            authority_key_id=trust_registry_authority_key_id,
+            framework_version=framework_version,
+            expected_bundle_root=expected_bundle_root,
+            evaluated_at=evaluated_at,
+            root=schema_root,
+        )
+    except TrustRegistryError as exc:
+        return {}, {}, [f"trusted key registry verification failed: {exc}"]
+    return keys, key_ids, []
+
+
+def _evidence_bindings(evidence: Mapping[str, Any], trusted_key_registry: Mapping[str, Any] | None = None) -> list[dict[str, str]]:
     bindings: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
 
@@ -141,6 +203,9 @@ def _evidence_bindings(evidence: Mapping[str, Any]) -> list[dict[str, str]]:
         identifier = value.get(field) if isinstance(value, Mapping) else None
         if isinstance(identifier, str) and identifier:
             add(kind, identifier)
+    registry_id = trusted_key_registry.get("registry_id") if isinstance(trusted_key_registry, Mapping) else None
+    if isinstance(registry_id, str) and registry_id:
+        add("trusted_key_registry", registry_id)
     verdicts = evidence.get("independent_judge_verdicts")
     if isinstance(verdicts, list):
         for verdict in verdicts:
@@ -628,6 +693,9 @@ def derive_verified_evidence_metrics(
     *,
     framework_version: str | None = None,
     expected_bundle_root: str | None = None,
+    trusted_key_registry: Mapping[str, Any] | None = None,
+    trust_registry_authority_key: Ed25519PublicKey | None = None,
+    trust_registry_authority_key_id: str | None = None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
     evaluated_at: str | None = None,
@@ -636,11 +704,25 @@ def derive_verified_evidence_metrics(
     """Derive metrics only after cryptographic verification at this boundary.
 
     Raw ``metrics`` fields and self-declared ``verification_state`` values are
-    intentionally ignored. A release caller must provide the public keys for
-    the private qualification manifest/evidence and all supply-chain records.
+    intentionally ignored. Signed evidence must arrive with an externally
+    signed trusted key registry; direct caller-supplied role keys are not a
+    release authority.
     """
 
     validation_root = resolve_control_root(schema_root)
+    effective_framework_version = framework_version or _evidence_framework_version(evidence)
+    resolved_keys, resolved_key_ids, _ = _resolve_release_verification_material(
+        evidence,
+        framework_version=effective_framework_version,
+        expected_bundle_root=expected_bundle_root,
+        evaluated_at=_release_timestamp(evaluated_at),
+        trusted_key_registry=trusted_key_registry,
+        trust_registry_authority_key=trust_registry_authority_key,
+        trust_registry_authority_key_id=trust_registry_authority_key_id,
+        direct_keys=verification_keys,
+        direct_key_ids=verification_key_ids,
+        schema_root=validation_root,
+    )
     schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
     qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
     host_schema_errors = _schema_error_messages(schema_errors, _HOST_EVIDENCE_FIELDS, "host")
@@ -650,10 +732,10 @@ def derive_verified_evidence_metrics(
     else:
         qualification_metrics, _ = _verified_qualification_metrics(
             evidence,
-            framework_version=framework_version or "",
+            framework_version=effective_framework_version,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             schema_root=validation_root,
         )
     if host_schema_errors:
@@ -662,8 +744,8 @@ def derive_verified_evidence_metrics(
         host_metrics, _ = _verified_host_metrics(
             evidence,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             schema_root=validation_root,
         )
     if supply_schema_errors:
@@ -672,8 +754,8 @@ def derive_verified_evidence_metrics(
         supply_metrics, _ = _verified_supply_chain_metrics(
             evidence,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             evaluated_at=evaluated_at,
             schema_root=validation_root,
         )
@@ -686,6 +768,9 @@ def evaluate_release_gates(
     *,
     evaluated_at: str | None = None,
     expected_bundle_root: str | None = None,
+    trusted_key_registry: Mapping[str, Any] | None = None,
+    trust_registry_authority_key: Ed25519PublicKey | None = None,
+    trust_registry_authority_key_id: str | None = None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None = None,
     verification_key_ids: Mapping[str, str] | None = None,
     schema_root: Path | None = None,
@@ -696,6 +781,18 @@ def evaluate_release_gates(
     # the evaluator entirely so a complete-looking JSON object cannot mint GA.
     validation_root = resolve_control_root(schema_root)
     timestamp = _release_timestamp(evaluated_at)
+    resolved_keys, resolved_key_ids, trust_errors = _resolve_release_verification_material(
+        evidence,
+        framework_version=framework_version,
+        expected_bundle_root=expected_bundle_root,
+        evaluated_at=timestamp,
+        trusted_key_registry=trusted_key_registry,
+        trust_registry_authority_key=trust_registry_authority_key,
+        trust_registry_authority_key_id=trust_registry_authority_key_id,
+        direct_keys=verification_keys,
+        direct_key_ids=verification_key_ids,
+        schema_root=validation_root,
+    )
     schema_errors = _typed_evidence_schema_errors(validation_root, evidence)
     qualification_schema_errors = _schema_error_messages(schema_errors, _QUALIFICATION_EVIDENCE_FIELDS, "qualification")
     host_schema_errors = _schema_error_messages(schema_errors, _HOST_EVIDENCE_FIELDS, "host")
@@ -707,8 +804,8 @@ def evaluate_release_gates(
             evidence,
             framework_version=framework_version,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             schema_root=validation_root,
         )
     if host_schema_errors:
@@ -717,8 +814,8 @@ def evaluate_release_gates(
         host_metrics, host_errors = _verified_host_metrics(
             evidence,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             schema_root=validation_root,
         )
     if supply_schema_errors:
@@ -727,13 +824,13 @@ def evaluate_release_gates(
         supply_metrics, supply_errors = _verified_supply_chain_metrics(
             evidence,
             expected_bundle_root=expected_bundle_root,
-            verification_keys=verification_keys,
-            verification_key_ids=verification_key_ids,
+            verification_keys=resolved_keys,
+            verification_key_ids=resolved_key_ids,
             evaluated_at=timestamp,
             schema_root=validation_root,
         )
     metrics = {**qualification_metrics, **host_metrics, **supply_metrics}
-    verification_errors = qualification_errors + host_errors + supply_errors
+    verification_errors = trust_errors + qualification_errors + host_errors + supply_errors
     gate_results = []
     for gate_id, rules in _RELEASE_RULES.items():
         missing = sorted(name for name in rules if name not in metrics)
@@ -751,7 +848,7 @@ def evaluate_release_gates(
             rationale = f"{rationale}; {'; '.join(verification_errors)}"
         gate_results.append({"gate_id": gate_id, "status": status, "missing_metrics": missing, "failed_metrics": failed, "rationale": rationale})
     summary = {"pass": sum(item["status"] == "pass" for item in gate_results), "fail": sum(item["status"] == "fail" for item in gate_results), "unknown": sum(item["status"] == "unknown" for item in gate_results), "ga_eligible": all(item["status"] == "pass" for item in gate_results)}
-    evidence_bindings = _evidence_bindings(evidence)
+    evidence_bindings = _evidence_bindings(evidence, trusted_key_registry=trusted_key_registry)
     identity = {
         "framework_version": framework_version,
         "evidence_digest": _digest({"metrics": metrics, "evidence_bindings": evidence_bindings}),
@@ -775,6 +872,9 @@ def main() -> int:
     parser.add_argument("--supply-chain-public-key", type=Path)
     parser.add_argument("--vulnerability-public-key", type=Path)
     parser.add_argument("--provenance-public-key", type=Path)
+    parser.add_argument("--trusted-key-registry", type=Path)
+    parser.add_argument("--trust-registry-authority-public-key", type=Path)
+    parser.add_argument("--trust-registry-authority-key-id")
     parser.add_argument("--qualification-key-id")
     parser.add_argument("--host-key-id")
     parser.add_argument("--judge-key-id")
@@ -798,26 +898,35 @@ def main() -> int:
         if args.qualification_manifest is not None:
             evidence = {**evidence, "qualification_manifest": load_json(args.qualification_manifest.read_text(encoding="utf-8"))}
         _validate_typed_evidence_documents(root, evidence)
-        verification_keys = {
-            "qualification": load_public_key(args.qualification_public_key),
-            "host": load_public_key(args.host_public_key),
-            "judge": load_public_key(args.judge_public_key),
-            "supply_chain": load_public_key(args.supply_chain_public_key),
-            "vulnerability": load_public_key(args.vulnerability_public_key),
-            "provenance": load_public_key(args.provenance_public_key),
-        }
-        verification_key_ids = {
-            "qualification": args.qualification_key_id,
-            "host": args.host_key_id,
-            "judge": args.judge_key_id,
-            "supply_chain": args.supply_chain_key_id,
-            "vulnerability": args.vulnerability_key_id,
-            "provenance": args.provenance_key_id,
-        }
+        trusted_key_registry = load_json(args.trusted_key_registry.read_text(encoding="utf-8")) if args.trusted_key_registry is not None else None
+        trust_registry_authority_key = load_public_key(args.trust_registry_authority_public_key)
+        if trusted_key_registry is not None:
+            verification_keys = None
+            verification_key_ids = None
+        else:
+            verification_keys = {
+                "qualification": load_public_key(args.qualification_public_key),
+                "host": load_public_key(args.host_public_key),
+                "judge": load_public_key(args.judge_public_key),
+                "supply_chain": load_public_key(args.supply_chain_public_key),
+                "vulnerability": load_public_key(args.vulnerability_public_key),
+                "provenance": load_public_key(args.provenance_public_key),
+            }
+            verification_key_ids = {
+                "qualification": args.qualification_key_id,
+                "host": args.host_key_id,
+                "judge": args.judge_key_id,
+                "supply_chain": args.supply_chain_key_id,
+                "vulnerability": args.vulnerability_key_id,
+                "provenance": args.provenance_key_id,
+            }
         report = evaluate_release_gates(
             str(manifest["framework"]["version"]),
             evidence,
             expected_bundle_root=build_bundle(root)["bundle_root"],
+            trusted_key_registry=trusted_key_registry,
+            trust_registry_authority_key=trust_registry_authority_key,
+            trust_registry_authority_key_id=args.trust_registry_authority_key_id,
             verification_keys=verification_keys,
             verification_key_ids=verification_key_ids,
             schema_root=root,

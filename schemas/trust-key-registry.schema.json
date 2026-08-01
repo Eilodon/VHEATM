@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vheatm.dev/schemas/trust-key-registry.schema.json",
+  "title": "VHEATM externally signed release trust-key registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry_id", "framework_version", "bundle_root", "authority_id", "authority_key_id", "authority_key_digest", "valid_from", "valid_until", "keys", "signature_algorithm", "signature_key_id", "signature_value", "generated_at"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "registry_id": {"type": "string", "pattern": "^KRG-[A-F0-9]{64}$"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "bundle_root": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "authority_id": {"type": "string", "minLength": 1},
+    "authority_key_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "authority_key_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "valid_from": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": "string", "format": "date-time"},
+    "keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "key_id", "public_key", "status", "valid_from", "valid_until"],
+        "properties": {
+          "role": {"enum": ["qualification", "judge", "host", "supply_chain", "vulnerability", "provenance"]},
+          "key_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+          "public_key": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}=$"},
+          "status": {"enum": ["active", "revoked"]},
+          "valid_from": {"type": "string", "format": "date-time"},
+          "valid_until": {"type": "string", "format": "date-time"},
+          "revoked_at": {"type": "string", "format": "date-time"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"const": "revoked"}}},
+            "then": {"required": ["revoked_at"]}
+          }
+        ]
+      }
+    },
+    "signature_algorithm": {"const": "ed25519"},
+    "signature_key_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "signature_value": {"type": "string", "minLength": 1},
+    "generated_at": {"type": "string", "format": "date-time"}
+  }
+}

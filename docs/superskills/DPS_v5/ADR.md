@@ -2261,3 +2261,81 @@ Start the next cycle when a signed private qualification package is supplied for
 - A signed time slice identifies the population, not the bytes that produced the current release.
 - The consumer must supply the current bundle root; a self-declared root in evidence is not a trust anchor.
 - Keep private payloads out of receipts while retaining enough immutable population and bundle identity to reject replay.
+
+---
+
+## ADR-32 — Require an externally signed trust-key registry at the release boundary
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `key-custody` `authority-registry` `release-boundary` `rotation` `revocation` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-02 — or earlier when release signer custody, authority rotation, or evidence roles change.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local registry verification and direct-key rejection; `NOT_PRODUCTION_QUALIFIED` because the authority root, signer/key custody, and operational rotation/revocation service remain external.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — key windows, revocation state, authority custody, and deployment trust roots are release-bound inputs.
+
+### Context
+
+The release evaluator cryptographically verified qualification, judge, host, supply-chain, vulnerability, and provenance records, but callers supplied the public key and key ID for each role directly. A valid signature therefore established document integrity without establishing that the signer was the authorized role for this release. Direct role-key injection also had no canonical framework/bundle scope, validity window, rotation, or revocation contract.
+
+### Decision
+
+Add the schema-bound `KRG-*` trusted key registry handoff. An authority-signed registry binds an authority ID/key digest, role-specific Ed25519 public keys and key IDs, active/revoked state, validity windows, framework version, current bundle root, generation time, and registry identity. The release evaluator and verified-metrics API require this registry whenever signed evidence is present, resolve only active in-window role keys from it, and reject direct caller-supplied role keys. The registry ID is included in release `evidence_bindings`, so authority rotation or registry substitution changes the report identity. Canary revalidation requires the same registry handoff; the CLI accepts the registry and its authority public key explicitly.
+
+The supplied authority public key is an external trust-root input, not a key embedded in this repository. This change creates the verification seam and lifecycle contract; it does not claim that a local test authority is a production authority or that external custody exists.
+
+### Options Considered
+
+- Continue accepting caller-supplied role keys: rejected because signature integrity is not role authority and key rotation/revocation remain invisible.
+- Put one release public key in the canonical bundle: rejected because bundle content is not an external custody/root-of-trust service and rotation would require a code/bundle mutation.
+- Use an unsigned local registry: rejected because a self-declared registry only moves the authority ambiguity from key fields to registry fields.
+- Require the externally signed registry while retaining direct-key lower-level verifiers for explicit offline inspection: accepted; release and canary boundaries must not use the lower-level bypass.
+
+### Impact
+
+Schemas changed: `schemas/trust-key-registry.schema.json`, `schemas/release-gate-report.schema.json`
+Components changed: trust-registry verifier, release evaluator, verified-metrics derivation, pilot canary revalidation, evaluator CLI, repository schema inventory, host/release tests
+Breaking change: **YES** for signed release evidence supplied without an externally signed trusted key registry; direct role-key maps now fail closed at release boundaries.
+
+IMPACT RADIUS: **HIGH**
+BLAST RADIUS: WIDE
+Cascades: `external authority registry → role-key resolution → evidence verification → RG-00…RG-15 report → canary revalidation`
+Cascade Review: ✅ Done — global authority scan, registry signature/bundle/time/revocation tests, direct-key rejection regression, report-binding schema update, pilot boundary checks, targeted tests, and full-suite verification cover the changed path.
+
+### Consequences
+
+- A release cannot promote a signed record using a caller-selected public key merely because the signature verifies.
+- Key rotation can be represented by a new signed registry and registry-bound report; revoked or out-of-window keys do not resolve to release roles.
+- Lower-level `verify_*` primitives still accept explicit keys for offline cryptographic inspection, but they do not mint release metrics or canary authority.
+- Missing or unverifiable external registry data remains `unknown`/blocking; no production key, qualification, host attestation, vulnerability feed, provider qualification, or GA evidence is fabricated.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression showed direct role keys could previously reach release verification without an authority registry; GREEN regression now leaves signed evidence unknown and records the trust-registry diagnostic.
+- [verified 2026-08-02] Registry tests pass for authority signature resolution, exact bundle binding, framework/time windows, revoked role exclusion, expired registry rejection, and role-key identity resolution.
+- [verified 2026-08-02] `.venv/bin/pytest -o addopts='' -q tests/test_trust_registry.py tests/test_host_attestation.py tests/test_release_evidence.py tests/test_pilot.py` passes with `30 passed`; `.venv/bin/vheatm-validate --root .` passes.
+- [verified 2026-08-02] `.venv/bin/pytest -o addopts='' -q` passes with `295 passed in 70.40s`; `uv lock --check --prerelease allow` and `uv build --wheel --sdist --prerelease allow` pass. External authority/key custody remains unavailable and no GA claim is derived from local fixtures.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External authority root/key custody, signer rotation/revocation operations, private qualification, fresh vulnerability evidence, provider qualification, host namespace qualification, UX-04, and shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when the deployment supplies a controlled authority root and signed registry, or when a role/key lifecycle changes; verify root custody, registry freshness, revocation propagation, deployment population binding, and all RG-00…RG-15 evidence before accepting a release or canary.
+
+### Cycle Retrospective
+
+- A public-key signature proves integrity, not role authority; authority must be a separately verified, content-addressed handoff.
+- Registry identity must be part of report identity, otherwise a release report can be replayed with a different signer set while retaining the same evidence IDs.
+- Keep the external root explicit and untrusted in local fixtures: a local signed registry is a contract test, not production custody.
