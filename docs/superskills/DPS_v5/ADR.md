@@ -151,3 +151,77 @@ Start the next ADR when the first reference-monitor action boundary, signing/key
 - The capability ledger makes incomplete migration measurable rather than rhetorical.
 - Release and pilot records now prevent local implementation status from being mistaken for GA qualification.
 - The next cycle should prioritize real enforcement and measured qualification evidence, not additional status labels.
+
+## ADR-3 — Pinned standards baseline and lock-bound supply-chain evidence
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `standards` `supply-chain` `release-evidence`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-01 — or earlier when a signing/key service, vulnerability evidence feed, or standards revision is introduced.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` — schema, canonical bundle, lock consistency, attestation, and packaging checks cover the changed boundary.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`
+**VOLATILITY:** `WATCHFUL` — NIST AI RMF is under revision and community/experimental guidance must not silently become normative.
+
+### Context
+
+RG-13 had a canonical SBOM shape but no repository lock binding, while the roadmap's standards baseline existed only as prose. A present-but-unvalidated lock or an evolving guidance document could create false release evidence. The repository also uses a pre-release MCP dependency, so the resolution policy must be explicit.
+
+### Decision
+
+Add `policies/standards-baseline.yaml` and its schema as canonical control-plane policy. Each reference records its namespace, status, authority, source, role, review trigger, and an invariant that no entry authorizes certification claims; normative entries must be pinned, while community/draft/experimental entries remain visibly non-normative. Generate `uv.lock` with pre-release resolution explicitly enabled, include it in the canonical bundle and sdist/wheel assets, require it in repository validation, and bind its SHA-256 digest into supply-chain attestation. CI runs `uv lock --check --prerelease=allow`. Signing, key custody, vulnerability scanning, and release eligibility remain separate gates.
+
+### Options Considered
+
+- Keep standards and dependency versions in prose: rejected because canonical validators and release evidence could not detect drift.
+- Use an unpinned `requirements.txt`: rejected because it does not bind the full resolved graph or package hashes.
+- Mark a local HMAC key or lock presence as a signed release: rejected because key custody and provenance verification require an external release trust boundary.
+
+### Impact
+
+Schemas changed: `standards-baseline.schema.json`, `supply-chain-attestation.schema.json`.
+Components changed: canonical bundle, setup packaging, validator, supply-chain attestation, release workflow, and release evidence tests.
+Breaking change: **YES** for repositories that omit the canonical standards policy or `uv.lock`.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `standards/lock → bundle root → validator → SBOM/attestation → RG-13`.
+Cascade Review: ✅ Done
+
+### Consequences
+
+- Standards drift and lock drift now alter the bundle root and are visible to validation/CI.
+- Supply-chain evidence can truthfully report a verified lock digest while remaining `partial` until signing and vulnerability evidence exist.
+- The lock includes the MCP pre-release resolution and therefore must be reviewed when that dependency moves to a stable release.
+
+Known limitations: no signing/key service, no verified provenance attestation, no vulnerability/CVE feed, and no private/time-sliced qualification corpus are introduced by this ADR.
+
+### Evidence
+
+- [verified 2026-08-01] `uv lock --prerelease=allow` resolved the graph and `uv lock --check --prerelease=allow` passed.
+- [verified 2026-08-01] `vheatm-validate --root .` passed with the standards policy and lock required.
+- [verified 2026-08-01] release evidence, bundle, validator, and blocker-focused tests passed; the full suite passed with 187 tests.
+- [verified 2026-08-01] `uv build --wheel --sdist` included `uv.lock`, the standards policy, and the standards schema in package assets.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered.
+
+### Next Cycle Trigger
+
+Start the next supply-chain ADR when a signing/key service or vulnerability evidence feed is added, or when `uv.lock` changes more than once between release-candidate builds.
+
+### Cycle Retrospective
+
+- The pre-release MCP extra made lock generation fail unless the resolution policy was explicit; this must remain visible in CI.
+- A canonical SBOM without a canonical lock is inventory, not reproducibility evidence.
+- Standards references need namespace and review semantics because current guidance can be voluntary, community, draft, or experimental.
+- Lock verification improves RG-13 evidence but does not reduce the independent signing/key or CVE blockers.
