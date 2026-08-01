@@ -569,3 +569,26 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Release qualification metrics require an externally supplied current bundle root; missing or mismatched roots remain unavailable, while lower-level offline verification may remain explicit and non-authoritative: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-32 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: signed-trust-registry-release-boundary
+
+### New Domain Terms Added to CONTEXT.md
+- Trusted key-registry handoff: added ✅
+- External authority root: added ✅
+
+### Bug Patterns
+- Release verification accepted caller-selected role public keys, so valid signatures lacked canonical signer authority and lifecycle scope: observed and fixed by requiring an authority-signed `KRG-*` registry; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Signature integrity is not signer authority: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Release and canary boundaries resolve role keys only from a bundle/framework/time-bound, revocation-aware external registry; direct role-key maps remain unavailable and the registry ID binds report identity: added to CONTEXT.md Architectural Decisions ✅
+
+---
