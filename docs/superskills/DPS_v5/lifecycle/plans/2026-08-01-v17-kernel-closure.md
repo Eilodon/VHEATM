@@ -32,6 +32,7 @@
 - Pilot completion now re-verifies the persisted redacted network request, receipt identity, request/action digests, broker semantics, response digest, and completed-response requirement before accepting shadow/canary observations.
 - Canary preparation now re-evaluates the supplied typed release evidence with verification keys and the current bundle root, then requires exact equality with the proposed 16-gate release report; self-declared all-pass reports remain blocked.
 - Release-report identity is now bound to schema version and evaluation time; evaluator and pilot boundaries enforce the canonical report schema, ordered RG-00…RG-15 inventory, derived summary, and deterministic unique evidence bindings.
+- Canonical semantic calculators now load schema-valid profile values bound to the manifest version; invalid/mismatched profiles fail closed, and FMEA/BRS/RPN/QBR thresholds are no longer duplicated in runtime code.
 - Legacy `policy.py` authority has been migrated out of the runtime path; the canonical `ToolBroker` is now the only policy implementation, with historical code retained as non-authoritative migration text.
 - Canonical executable semantic profiles for RPN, corrected FMEA→QBR mapping, QBR mode adjustments, and unknown-preserving BRS scoring.
 - Public seeded qualification corpus now executes through a static, deterministic runner into `QRL-*` typed replay evidence; it records observed case outcomes and measurements as `public_seeded`/`unverified` and cannot mint private qualification or GA status.
@@ -43,7 +44,7 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 240 passed.
+- `.venv/bin/pytest -o addopts=''` — 243 passed.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - `.venv/bin/vheatm-qualify-public --root . --observed-at 2026-08-01T00:00:00Z` — 17/17 seeded cases executed, `QRL-*` identity/schema valid, 14 observed measurements; determinism case executed 1,000 evaluation runs; visibility remains `public_seeded` and evidence state `unverified`.
 - Low-risk evaluate/route — exit 0; 15 active, 7 inactive, 0 unknown; 3374/4096 estimated tokens; context route equals plan route; current bundle root is regenerated after this canonical adapter/schema change and remains content-addressed.

@@ -235,3 +235,24 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - Canary preparation must reuse the canonical evaluator and compare the complete report before enabling tools: added to CONTEXT.md ✅
 
 ---
+date: 2026-08-01
+sprint: v17-kernel-closure
+adr: ADR-17 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-ARCHITECTURE-DECISIONS, MOD-TRANSFORMATION-VERIFICATION, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canonical-semantic-profile-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical semantic profile binding: added ✅
+
+### Bug Patterns
+- Runtime calculators duplicated canonical semantic thresholds and mappings: observed and fixed by loading the schema-valid profile at every calculation boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A policy YAML can be valid while its consumers silently ignore it: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- RPN, FMEA→QBR, QBR, and BRS calculations require a profile/schema/manifest binding and fail closed on invalid or mismatched policy: added to CONTEXT.md Architectural Decisions ✅
+
+---

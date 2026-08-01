@@ -1145,3 +1145,75 @@ Start the next cycle when the release-report schema adds an identity-bearing fie
 - A content-addressed ID is only as strong as the fields included in its identity projection.
 - Generated outputs need the same schema boundary as untrusted inputs; otherwise strict schemas can fail inside the producer.
 - Set-like evidence bindings preserve a valid report envelope, while the verifier still decides whether duplicate source records are acceptable.
+
+## ADR-17 — Bind semantic scoring to the validated canonical profile
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `semantic-profile` `rpn` `fmea` `qbr` `brs` `fail-closed`
+**Change Classification:** `IMPLEMENTATION BUG`
+**Review date:** 2026-09-01 — or earlier when the semantic-profile schema, formulas, or manifest version changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local canonical-profile binding; `NOT_PRODUCTION_QUALIFIED` for external qualification and operational rollout.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `REVIEW`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — semantic thresholds and mappings are policy-controlled, version-bound inputs.
+
+### Context
+
+ADR-4 required RPN, FMEA→QBR, QBR, and BRS calculations to load the canonical semantic profile. The runtime had the profile file and schema, but the calculators still carried duplicate thresholds, mappings, floors, and adjustments in Python. A policy edit could therefore validate successfully while having no effect on the authoritative calculation path.
+
+### Decision
+
+Centralize semantic-profile loading at the calculation boundary. Every RPN, FMEA→QBR, QBR, and BRS calculation loads the canonical YAML, validates it with the canonical JSON Schema and format checker, and requires its `framework_version` to match the canonical manifest. Thresholds, dimensions, mappings, adjustments, unknown floors, and escalation rules are read from that validated profile. Invalid, missing, or version-mismatched profiles raise a typed `SemanticProfileError` before a score is returned; BRS unknown inputs remain `unknown` with no fabricated score.
+
+### Options Considered
+
+- Keep formula constants in Python and validate the profile separately: rejected because policy edits would silently drift from runtime behavior.
+- Load only YAML without schema validation or manifest binding: rejected because malformed or cross-framework policy could influence release semantics.
+- Treat missing BRS inputs as zero: rejected because unknown is not false and would understate risk.
+- Derive a second profile from tests or generated output: rejected because tests and generated artifacts cannot become policy authority.
+
+### Impact
+
+Schemas changed: `schemas/semantic-profiles.schema.json` now declares the RPN thresholds and the complete QBR/FMEA/BRS fields consumed by runtime; `policies/semantic-profiles.yaml` is the canonical value source.
+Components changed: semantic profile loader and calculators, semantic-profile contract tests, lifecycle/knowledge records.
+Breaking change: **YES** for missing, malformed, or framework-mismatched semantic profiles, and for callers relying on the retired hard-coded thresholds.
+
+IMPACT RADIUS: **WIDE**
+Cascades: `manifest/profile version → schema validation → FMEA/RPN/QBR/BRS calculation → migration/release interpretation`.
+Cascade Review: ✅ Done — RED profile-override regression, GREEN invalid/mismatch/profile-consumption tests, schema validation, authority search, and full repository verification cover the changed path.
+
+### Consequences
+
+- A schema-valid policy change now changes the calculation path only when it is also bound to the active framework manifest.
+- Semantic formulas have one runtime policy source; consumers cannot silently retain stale thresholds or mappings.
+- Loading and validating the profile per calculation adds local I/O and schema-validation cost. This is accepted for correctness and fail-closed behavior; a future cache must remain invalidated by the canonical bundle root.
+- Local semantic correctness does not qualify private data, independent judging, external providers, vulnerability freshness, host enforcement, or a successful pilot.
+
+### Evidence
+
+- [verified 2026-08-01] RED regression monkeypatched a non-default profile; the old RPN calculator ignored its thresholds and returned the hard-coded priority.
+- [verified 2026-08-01] GREEN semantic-profile tests pass for profile consumption, invalid-profile blocking, manifest-version mismatch, corrected FMEA mapping, QBR adjustments, and unknown-preserving BRS.
+- [verified 2026-08-01] Canonical control-plane validation passes; full-suite, replay, bundle, lock, and build verification remains required before integration.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External key custody, fresh vulnerability evidence, private/time-sliced qualification, allowlisted provider qualification, host namespace capability, independent judging, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle whenever the semantic-profile schema or manifest version changes, or when a cache is introduced; rerun the profile mutation suite, bundle-root binding checks, and RG-00…RG-15 evaluation before accepting the change.
+
+### Cycle Retrospective
+
+- A canonical policy file is not authoritative if consumers duplicate its semantics in code.
+- A profile override test is a compact regression for policy/runtime drift: it must change every calculator that claims profile authority.
+- Version binding prevents a valid profile from one framework generation from silently controlling another.
