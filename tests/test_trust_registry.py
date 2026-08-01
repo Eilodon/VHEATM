@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -15,11 +16,32 @@ from vheatm_control.trust_registry import (
     resolve_trusted_verification_keys,
     sign_trust_registry,
 )
+from vheatm_control.signer_service import SignerClient
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ROOT = build_bundle(ROOT)["bundle_root"]
 EVALUATED_AT = "2026-08-02T12:00:00Z"
+
+
+def _signer_client(key: Ed25519PrivateKey) -> SignerClient:
+    def transport(request: dict[str, object]) -> dict[str, object]:
+        payload = base64.urlsafe_b64decode(str(request["payload"]))
+        return {
+            "schema_version": "1.0.0",
+            "request_id": request["request_id"],
+            "framework_version": request["framework_version"],
+            "bundle_root": request["bundle_root"],
+            "purpose": request["purpose"],
+            "key_id": request["key_id"],
+            "signature_algorithm": "ed25519",
+            "payload_digest": request["payload_digest"],
+            "signature_value": base64.urlsafe_b64encode(key.sign(payload)).decode("ascii"),
+            "signer_service_id": "test-kms",
+            "signed_at": "2026-08-02T00:00:01Z",
+        }
+
+    return SignerClient(transport, root=ROOT)
 
 
 def _signed_registry() -> tuple[dict, Ed25519PrivateKey, dict[str, Ed25519PrivateKey]]:
@@ -59,6 +81,52 @@ def test_trust_registry_verifies_authority_and_resolves_role_keys() -> None:
     assert all(keys[role].public_bytes_raw() == role_keys[role].public_key().public_bytes_raw() for role in role_keys)
     assert key_ids["judge"] == "judge-key"
     assert signed["registry_id"] == expected_trust_registry_id(signed)
+
+
+def test_trust_registry_can_delegate_authority_signature_to_external_signer() -> None:
+    signed_fixture, authority, _ = _signed_registry()
+    registry = dict(signed_fixture)
+    registry["signature_algorithm"] = None
+    registry["signature_key_id"] = None
+    registry["signature_value"] = None
+    registry["registry_id"] = expected_trust_registry_id(registry)
+
+    signed = sign_trust_registry(
+        registry,
+        signer=_signer_client(authority),
+        framework_version="17.0.0-dev.1",
+        public_key=authority.public_key(),
+        key_id="release-registry-key",
+    )
+
+    keys, _ = resolve_trusted_verification_keys(
+        signed,
+        authority_public_key=authority.public_key(),
+        authority_key_id="release-registry-key",
+        framework_version="17.0.0-dev.1",
+        expected_bundle_root=BUNDLE_ROOT,
+        evaluated_at=EVALUATED_AT,
+        root=ROOT,
+    )
+    assert set(keys) == {"qualification", "judge", "host", "supply_chain", "vulnerability", "provenance"}
+
+
+def test_trust_registry_external_signer_framework_binding_is_exact() -> None:
+    signed_fixture, authority, _ = _signed_registry()
+    registry = dict(signed_fixture)
+    registry["signature_algorithm"] = None
+    registry["signature_key_id"] = None
+    registry["signature_value"] = None
+    registry["registry_id"] = expected_trust_registry_id(registry)
+
+    with pytest.raises(TrustRegistryError, match="framework version"):
+        sign_trust_registry(
+            registry,
+            signer=_signer_client(authority),
+            framework_version="17.0.0-wrong",
+            public_key=authority.public_key(),
+            key_id="release-registry-key",
+        )
 
 
 def test_trust_registry_rejects_bundle_replay() -> None:

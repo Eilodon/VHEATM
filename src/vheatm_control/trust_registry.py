@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import resolve_control_root
 from .serialization import load_json
+from .signer_service import SignerClient, SignerServiceError
 
 
 TRUSTED_ROLES = frozenset({"qualification", "judge", "host", "supply_chain", "vulnerability", "provenance"})
@@ -242,17 +243,48 @@ def build_trust_registry(
     return registry
 
 
-def sign_trust_registry(registry: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
-    if not isinstance(private_key, Ed25519PrivateKey):
-        raise TrustRegistryError("trust registry signing key must be Ed25519")
+def sign_trust_registry(
+    registry: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
+) -> dict[str, Any]:
     _validate_common_identity({**dict(registry), "signature_algorithm": "ed25519", "signature_key_id": key_id, "signature_value": "placeholder"})
     if key_id != registry.get("authority_key_id"):
         raise TrustRegistryError("trust registry signing key does not match authority key")
-    if _bytes_digest(_public_key_bytes(private_key.public_key())) != registry.get("authority_key_digest"):
-        raise TrustRegistryError("trust registry signing key does not match authority key digest")
+    if signer is not None:
+        if private_key is not None:
+            raise TrustRegistryError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise TrustRegistryError("external signer requires the expected authority public key")
+        if _bytes_digest(_public_key_bytes(public_key)) != registry.get("authority_key_digest"):
+            raise TrustRegistryError("external signer public key does not match authority key digest")
+        if not isinstance(framework_version, str) or not framework_version.strip():
+            raise TrustRegistryError("external signer requires the canonical framework version")
+        if framework_version != registry.get("framework_version"):
+            raise TrustRegistryError("external signer framework version does not match trust registry")
+    elif not isinstance(private_key, Ed25519PrivateKey):
+        raise TrustRegistryError("trust registry signing key must be Ed25519")
+    else:
+        if _bytes_digest(_public_key_bytes(private_key.public_key())) != registry.get("authority_key_digest"):
+            raise TrustRegistryError("trust registry signing key does not match authority key digest")
     signed = dict(registry)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
-    signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical(_signed_subject(signed)))).decode("ascii")
+    if signer is not None:
+        try:
+            receipt = signer.sign(
+                _canonical(_signed_subject(signed)),
+                framework_version=framework_version,
+                bundle_root=str(signed.get("bundle_root", "")),
+                purpose="authority",
+                key_id=key_id,
+                public_key=public_key,
+                created_at=str(created_at or signed.get("generated_at", "")),
+            )
+        except SignerServiceError as exc:
+            raise TrustRegistryError(str(exc)) from exc
+        signed["signature_value"] = str(receipt["signature_value"])
+    else:
+        signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical(_signed_subject(signed)))).decode("ascii")
     _validate_schema(signed, root=None)
     return signed
 

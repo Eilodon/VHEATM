@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 from pathlib import Path
 
@@ -18,10 +19,31 @@ from vheatm_control.host_attestation import (
 from vheatm_control.host_qualification import expected_host_qualification_run_id
 from vheatm_control.qualification_methods import expected_method_digest
 from vheatm_control.serialization import load_yaml
+from vheatm_control.signer_service import SignerClient
 from vheatm_control.trust_registry import build_trust_registry, sign_trust_registry
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _signer_client(key: Ed25519PrivateKey) -> SignerClient:
+    def transport(request: dict[str, object]) -> dict[str, object]:
+        payload = base64.urlsafe_b64decode(str(request["payload"]))
+        return {
+            "schema_version": "1.0.0",
+            "request_id": request["request_id"],
+            "framework_version": request["framework_version"],
+            "bundle_root": request["bundle_root"],
+            "purpose": request["purpose"],
+            "key_id": request["key_id"],
+            "signature_algorithm": "ed25519",
+            "payload_digest": request["payload_digest"],
+            "signature_value": base64.urlsafe_b64encode(key.sign(payload)).decode("ascii"),
+            "signer_service_id": "test-kms",
+            "signed_at": "2026-08-02T00:00:01Z",
+        }
+
+    return SignerClient(transport, root=ROOT)
 
 
 def _complete_host_run() -> dict[str, object]:
@@ -93,6 +115,80 @@ def test_host_attestation_signs_and_verifies_exact_host_run() -> None:
     assert signed["attestation_id"] == expected_host_attestation_id(signed)
     assert verified["verification_state"] == "verified"
     assert verified["host_run_id"] == run["run_id"]
+
+
+def test_host_attestation_can_delegate_to_external_signer() -> None:
+    run = _complete_host_run()
+    key = Ed25519PrivateKey.generate()
+    attestation = build_host_attestation(
+        run,
+        authority_id="host-authority:v17",
+        deployment_id="sandbox-host-01",
+        generated_at="2026-08-02T00:00:00Z",
+        root=ROOT,
+    )
+
+    signed = sign_host_attestation(
+        attestation,
+        signer=_signer_client(key),
+        framework_version=str(run["framework_version"]),
+        public_key=key.public_key(),
+        key_id="host-key",
+    )
+
+    verified = verify_host_attestation(
+        signed,
+        host_run=run,
+        public_key=key.public_key(),
+        key_id="host-key",
+        expected_bundle_root=str(run["bundle_root"]),
+        root=ROOT,
+    )
+    assert verified["verification_state"] == "verified"
+
+
+def test_host_attestation_external_signer_framework_binding_is_exact() -> None:
+    run = _complete_host_run()
+    key = Ed25519PrivateKey.generate()
+    attestation = build_host_attestation(
+        run,
+        authority_id="host-authority:v17",
+        deployment_id="sandbox-host-01",
+        generated_at="2026-08-02T00:00:00Z",
+        root=ROOT,
+    )
+
+    with pytest.raises(HostAttestationError, match="framework version"):
+        sign_host_attestation(
+            attestation,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            public_key=key.public_key(),
+            key_id="host-key",
+        )
+
+
+def test_host_attestation_external_signer_outage_never_falls_back() -> None:
+    run = _complete_host_run()
+    key = Ed25519PrivateKey.generate()
+    attestation = build_host_attestation(
+        run,
+        authority_id="host-authority:v17",
+        deployment_id="sandbox-host-01",
+        generated_at="2026-08-02T00:00:00Z",
+        root=ROOT,
+    )
+    unavailable = SignerClient(lambda _: (_ for _ in ()).throw(OSError("kms unavailable")), root=ROOT)
+
+    with pytest.raises(HostAttestationError, match="cannot be combined"):
+        sign_host_attestation(
+            attestation,
+            signer=unavailable,
+            private_key=key,
+            framework_version=str(run["framework_version"]),
+            public_key=key.public_key(),
+            key_id="host-key",
+        )
 
 
 def test_host_attestation_rejects_host_run_mutation_after_signing() -> None:

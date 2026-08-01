@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from .bundle import resolve_control_root
 from .host_qualification import validate_host_qualification_run
 from .serialization import load_json
+from .signer_service import SignerClient, SignerServiceError
 
 
 class HostAttestationError(ValueError):
@@ -138,7 +139,9 @@ def build_host_attestation(
 
 
 def sign_host_attestation(
-    attestation: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str
+    attestation: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
 ) -> dict[str, Any]:
     if attestation.get("attestation_id") != expected_host_attestation_id(attestation):
         raise HostAttestationError("host attestation identity does not match content")
@@ -146,7 +149,32 @@ def sign_host_attestation(
         raise HostAttestationError("host attestation signing key ID is required")
     signed = dict(attestation)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
-    signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical(_signing_subject(signed)))).decode("ascii")
+    if signer is not None:
+        if private_key is not None:
+            raise HostAttestationError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise HostAttestationError("external signer requires the expected Ed25519 public key")
+        if not isinstance(framework_version, str) or not framework_version.strip():
+            raise HostAttestationError("external signer requires the canonical framework version")
+        if framework_version != signed.get("framework_version"):
+            raise HostAttestationError("external signer framework version does not match host attestation")
+        try:
+            receipt = signer.sign(
+                _canonical(_signing_subject(signed)),
+                framework_version=framework_version,
+                bundle_root=str(signed.get("bundle_root", "")),
+                purpose="host",
+                key_id=key_id,
+                public_key=public_key,
+                created_at=str(created_at or signed.get("generated_at", "")),
+            )
+        except SignerServiceError as exc:
+            raise HostAttestationError(str(exc)) from exc
+        signed["signature_value"] = str(receipt["signature_value"])
+    else:
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise HostAttestationError("a local fixture key or external signer is required")
+        signed["signature_value"] = base64.urlsafe_b64encode(private_key.sign(_canonical(_signing_subject(signed)))).decode("ascii")
     return signed
 
 
