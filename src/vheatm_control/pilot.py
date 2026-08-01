@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Mapping, Sequence
 
 from .evaluation import expected_release_report_id
-from .providers import expected_provider_run_id
+from .providers import ProviderAdapterError, verify_provider_run
 
 
 class PilotError(ValueError):
@@ -115,8 +115,12 @@ def complete_pilot(
         if not isinstance(run, Mapping) or not isinstance(run.get("run_id"), str):
             raise PilotError("pilot completion requires typed provider runs")
         run_id = str(run["run_id"])
-        if run_id in runs_by_id or expected_provider_run_id(run) != run_id:
+        if run_id in runs_by_id:
             raise PilotError("pilot provider run identity is invalid or duplicated")
+        try:
+            verify_provider_run(run)
+        except ProviderAdapterError as exc:
+            raise PilotError(f"pilot receipt authorization chain is invalid: {exc}") from exc
         if run.get("status") != "completed":
             raise PilotError("pilot completion cannot use blocked or unknown provider runs")
         receipt = run.get("network_receipt")

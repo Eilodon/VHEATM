@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator
 
 from vheatm_control.evaluation import evaluate_release_gates, expected_release_report_id
 from vheatm_control.pilot import PilotError, complete_pilot, prepare_pilot, rollback_pilot
-from vheatm_control.providers import build_provider_run
+from vheatm_control.providers import build_provider_run, expected_provider_run_id
 from vheatm_control.serialization import load_json
 from vheatm_control.tool_broker import build_tool_receipt
 
@@ -74,5 +74,10 @@ def test_shadow_completion_requires_real_read_only_observation() -> None:
     assert complete["pilot_id"] != pilot["pilot_id"]
     schema = load_json((Path("schemas") / "pilot-run.schema.json").read_text())
     Draft202012Validator(schema).validate(complete)
+    tampered_run = {**provider_run, "network_receipt": {**provider_run["network_receipt"], "action_digest": "0" * 64}}
+    tampered_run["run_id"] = expected_provider_run_id(tampered_run)
+    tampered_observation = {**observation, "provider_run_refs": [tampered_run["run_id"]]}
+    with pytest.raises(PilotError, match="receipt authorization chain"):
+        complete_pilot(pilot, observations=[tampered_observation], provider_runs=[tampered_run])
     with pytest.raises(PilotError, match="unknown"):
         complete_pilot(pilot, observations=[{**observation, "status": "unknown"}], provider_runs=[provider_run])

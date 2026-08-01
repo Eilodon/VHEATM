@@ -95,6 +95,60 @@ def _timestamp(value: str) -> str:
     return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _validate_network_request(network_request: Mapping[str, Any]) -> None:
+    required = {"schema_version", "request_id", "requester", "tool_class", "scope", "destination", "data_classes", "redacted"}
+    if not isinstance(network_request, Mapping) or network_request.get("schema_version") != "1.0.0" or not required.issubset(network_request):
+        raise ProviderAdapterError("provider network request is incomplete")
+    if not isinstance(network_request.get("request_id"), str) or not network_request["request_id"]:
+        raise ProviderAdapterError("provider network request_id is invalid")
+    if not isinstance(network_request.get("requester"), str) or not network_request["requester"].strip():
+        raise ProviderAdapterError("provider network requester is invalid")
+    if network_request.get("tool_class") != "network":
+        raise ProviderAdapterError("provider network request tool class is invalid")
+    if not isinstance(network_request.get("scope"), str) or not network_request["scope"].startswith("workspace:"):
+        raise ProviderAdapterError("provider network request scope is invalid")
+    destination = network_request.get("destination")
+    if not isinstance(destination, str) or urlparse(destination).scheme != "https" or not urlparse(destination).hostname:
+        raise ProviderAdapterError("provider network request destination must be HTTPS")
+    data_classes = network_request.get("data_classes")
+    if not isinstance(data_classes, list) or not data_classes or any(not isinstance(item, str) or not item for item in data_classes) or len(data_classes) != len(set(data_classes)):
+        raise ProviderAdapterError("provider network request data_classes are invalid")
+    if network_request.get("redacted") is not True:
+        raise ProviderAdapterError("provider network request must be redacted")
+
+
+def _validate_network_receipt(network_request: Mapping[str, Any], receipt: Mapping[str, Any] | None, *, status: str) -> None:
+    if receipt is None:
+        if status == "completed":
+            raise ProviderAdapterError("completed provider run requires an authorization receipt")
+        return
+    if receipt.get("request_id") != network_request.get("request_id"):
+        raise ProviderAdapterError("provider network receipt is not bound to the network request")
+    if receipt.get("tool_class") != "network" or receipt.get("decision") not in {"allow", "deny"}:
+        raise ProviderAdapterError("provider network receipt has an invalid tool binding")
+    if receipt.get("id") != expected_tool_receipt_id(receipt):
+        raise ProviderAdapterError("provider network receipt identity is invalid")
+    try:
+        validate_policy_decision(
+            {
+                "schema_version": "1.0.0",
+                "request_id": receipt.get("request_id"),
+                "decision": receipt.get("decision"),
+                "reason": "receipt-bound decision",
+                "controls": ["receipt:validated"],
+                "evaluated_at": receipt.get("recorded_at"),
+                "approval_token_id": receipt.get("approval_token_id"),
+            },
+            network_request,
+        )
+    except Exception as exc:
+        raise ProviderAdapterError(f"provider network receipt decision binding is invalid: {exc}") from exc
+    if receipt.get("request_digest") != request_digest(network_request) or receipt.get("action_digest") != action_digest(network_request):
+        raise ProviderAdapterError("provider network receipt digest binding is invalid")
+    if status == "completed" and receipt.get("decision") != "allow":
+        raise ProviderAdapterError("completed provider run requires an allowed network receipt")
+
+
 def expected_provider_run_id(run: Mapping[str, Any]) -> str:
     return "PRV-" + _digest({key: value for key, value in run.items() if key != "run_id"}).upper()
 
@@ -115,38 +169,11 @@ def build_provider_run(
         raise ProviderAdapterError("provider status is invalid")
     if len(config_digest) != 64 or any(char not in "0123456789abcdef" for char in config_digest):
         raise ProviderAdapterError("provider config_digest must be lowercase SHA-256")
-    if network_receipt is None:
-        if status == "completed":
-            raise ProviderAdapterError("completed provider run requires an authorization receipt")
-    else:
-        if network_receipt.get("request_id") != request.get("network_request_id"):
-            raise ProviderAdapterError("provider network receipt is not bound to the request")
-        if network_receipt.get("tool_class") != "network" or network_receipt.get("decision") not in {"allow", "deny"}:
-            raise ProviderAdapterError("provider network receipt has an invalid tool binding")
-        if network_receipt.get("id") != expected_tool_receipt_id(network_receipt):
-            raise ProviderAdapterError("provider network receipt identity is invalid")
-        network_request = request.get("network_request")
-        if not isinstance(network_request, Mapping):
-            raise ProviderAdapterError("provider network receipt requires the original network request")
-        try:
-            validate_policy_decision(
-                {
-                    "schema_version": "1.0.0",
-                    "request_id": network_receipt.get("request_id"),
-                    "decision": network_receipt.get("decision"),
-                    "reason": "receipt-bound decision",
-                    "controls": ["receipt:validated"],
-                    "evaluated_at": network_receipt.get("recorded_at"),
-                    "approval_token_id": network_receipt.get("approval_token_id"),
-                },
-                network_request,
-            )
-        except Exception as exc:
-            raise ProviderAdapterError(f"provider network receipt decision binding is invalid: {exc}") from exc
-        if network_receipt.get("request_digest") != request_digest(network_request) or network_receipt.get("action_digest") != action_digest(network_request):
-            raise ProviderAdapterError("provider network receipt digest binding is invalid")
-        if status == "completed" and network_receipt.get("decision") != "allow":
-            raise ProviderAdapterError("completed provider run requires an allowed network receipt")
+    network_request = request.get("network_request")
+    _validate_network_request(network_request)
+    if request.get("network_request_id") != network_request.get("request_id"):
+        raise ProviderAdapterError("provider network_request_id is not bound to the network request")
+    _validate_network_receipt(network_request, network_receipt, status=status)
     response_copy = deepcopy(dict(response)) if isinstance(response, Mapping) else None
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
@@ -155,6 +182,7 @@ def build_provider_run(
         "provider_version": provider_version,
         "config_digest": config_digest,
         "request_digest": request_digest(request),
+        "network_request": deepcopy(dict(network_request)),
         "network_receipt": deepcopy(dict(network_receipt)) if isinstance(network_receipt, Mapping) else None,
         "status": status,
         "epistemic_status": "candidate" if status == "completed" else "unknown",
@@ -165,6 +193,31 @@ def build_provider_run(
     if error:
         identity["error"] = error
     return {"run_id": expected_provider_run_id(identity), **identity}
+
+
+def verify_provider_run(run: Mapping[str, Any]) -> None:
+    """Re-verify a persisted provider run before it can become pilot evidence."""
+
+    required = {"schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"}
+    if not isinstance(run, Mapping) or run.get("schema_version") != "1.0.0" or not required.issubset(run):
+        raise ProviderAdapterError("provider run is incomplete")
+    if run.get("run_id") != expected_provider_run_id(run):
+        raise ProviderAdapterError("provider run identity is invalid")
+    if run.get("status") not in {"completed", "blocked", "unknown"}:
+        raise ProviderAdapterError("provider run status is invalid")
+    if run.get("epistemic_status") != ("candidate" if run.get("status") == "completed" else "unknown"):
+        raise ProviderAdapterError("provider run epistemic status is invalid")
+    network_request = run.get("network_request")
+    _validate_network_request(network_request)
+    _validate_network_receipt(network_request, run.get("network_receipt"), status=str(run.get("status")))
+    response = run.get("response")
+    if response is not None and not isinstance(response, Mapping):
+        raise ProviderAdapterError("provider run response must be an object or null")
+    if run.get("response_digest") != _digest(deepcopy(dict(response)) if isinstance(response, Mapping) else None):
+        raise ProviderAdapterError("provider run response digest is invalid")
+    if run.get("status") == "completed" and not isinstance(response, Mapping):
+        raise ProviderAdapterError("completed provider run requires a provider response")
+    _timestamp(str(run.get("generated_at")))
 
 
 @dataclass(frozen=True)

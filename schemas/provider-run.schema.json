@@ -4,7 +4,7 @@
   "title": "VHEATM external provider execution record",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "request_digest", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"],
+  "required": ["schema_version", "run_id", "request_id", "provider_id", "provider_version", "config_digest", "request_digest", "network_request", "network_receipt", "status", "epistemic_status", "response_digest", "response", "generated_at"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "run_id": {"type": "string", "pattern": "^PRV-[A-F0-9]{64}$"},
@@ -13,6 +13,7 @@
     "provider_version": {"type": "string", "minLength": 1},
     "config_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "network_request": {"type": "object", "additionalProperties": false, "required": ["schema_version", "request_id", "requester", "tool_class", "scope", "destination", "data_classes", "redacted"], "properties": {"schema_version": {"const": "1.0.0"}, "request_id": {"type": "string", "minLength": 1}, "requester": {"type": "string", "minLength": 1}, "tool_class": {"const": "network"}, "scope": {"type": "string", "pattern": "^workspace:"}, "destination": {"type": "string", "pattern": "^https://[^\\s]+$"}, "data_classes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}, "redacted": {"const": true}}},
     "network_receipt": {"type": ["object", "null"], "additionalProperties": false, "required": ["id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"], "properties": {"id": {"type": "string", "minLength": 1}, "request_id": {"type": "string", "minLength": 1}, "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "tool_class": {"const": "network"}, "decision": {"enum": ["allow", "deny"]}, "action_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "recorded_at": {"type": "string", "format": "date-time"}, "approval_token_id": {"type": ["string", "null"]}}},
     "status": {"enum": ["completed", "blocked", "unknown"]},
     "epistemic_status": {"enum": ["candidate", "unknown"]},
