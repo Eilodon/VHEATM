@@ -13,6 +13,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .bundle import build_bundle
+from .signer_service import SignerClient, SignerServiceError
 from .supply_chain_policy import SupplyChainPolicyError, vulnerability_scan_max_age_seconds
 
 
@@ -80,6 +81,43 @@ def _signed_subject(document: Mapping[str, Any]) -> dict[str, Any]:
 
 def _sign(subject: Mapping[str, Any], private_key: Ed25519PrivateKey) -> str:
     return _b64(private_key.sign(_canonical(subject)))
+
+
+def _sign_with_configured_authority(
+    subject: Mapping[str, Any],
+    *,
+    private_key: Ed25519PrivateKey | None,
+    signer: SignerClient | None,
+    framework_version: str | None,
+    bundle_root: str,
+    purpose: str,
+    key_id: str,
+    public_key: Ed25519PublicKey | None,
+    created_at: str,
+) -> str:
+    if signer is not None:
+        if private_key is not None:
+            raise SupplyChainError("external signer and local private key cannot be combined")
+        if not isinstance(public_key, Ed25519PublicKey):
+            raise SupplyChainError("external signer requires the expected Ed25519 public key")
+        if not isinstance(framework_version, str) or not framework_version.strip():
+            raise SupplyChainError("external signer requires the canonical framework version")
+        try:
+            receipt = signer.sign(
+                _canonical(subject),
+                framework_version=framework_version,
+                bundle_root=bundle_root,
+                purpose=purpose,
+                key_id=key_id,
+                public_key=public_key,
+                created_at=created_at,
+            )
+        except SignerServiceError as exc:
+            raise SupplyChainError(str(exc)) from exc
+        return str(receipt["signature_value"])
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise SupplyChainError("a local fixture key or external signer is required")
+    return _sign(subject, private_key)
 
 
 def _verify(document: Mapping[str, Any], public_key: Ed25519PublicKey, *, key_id: str | None = None) -> None:
@@ -175,7 +213,9 @@ def build_supply_chain_attestation(
 
 
 def sign_supply_chain_attestation(
-    attestation: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str
+    attestation: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
 ) -> dict[str, Any]:
     if not key_id.strip():
         raise SupplyChainError("supply-chain signing key_id is required")
@@ -183,7 +223,11 @@ def sign_supply_chain_attestation(
         raise SupplyChainError("attestation_id does not match immutable attestation content")
     signed = dict(attestation)
     signed.update({"signed_release": True, "signature_algorithm": "ed25519", "signature_key_id": key_id, "verification_state": "partial"})
-    signed["signature_value"] = _sign(_signed_subject(signed), private_key)
+    signed["signature_value"] = _sign_with_configured_authority(
+        _signed_subject(signed), private_key=private_key, signer=signer, framework_version=framework_version,
+        bundle_root=str(signed.get("bundle_root", "")), purpose="supply_chain", key_id=key_id,
+        public_key=public_key, created_at=str(created_at or signed.get("generated_at", "")),
+    )
     return signed
 
 
@@ -270,12 +314,20 @@ def build_vulnerability_scan(
     return scan
 
 
-def sign_vulnerability_scan(scan: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str) -> dict[str, Any]:
+def sign_vulnerability_scan(
+    scan: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
+) -> dict[str, Any]:
     if scan.get("scan_id") != expected_vulnerability_scan_id(scan):
         raise SupplyChainError("scan_id does not match immutable scan content")
     signed = dict(scan)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
-    signed["signature_value"] = _sign(_signed_subject(signed), private_key)
+    signed["signature_value"] = _sign_with_configured_authority(
+        _signed_subject(signed), private_key=private_key, signer=signer, framework_version=framework_version,
+        bundle_root=str(signed.get("target_bundle_root", "")), purpose="vulnerability", key_id=key_id,
+        public_key=public_key, created_at=str(created_at or signed.get("generated_at", "")),
+    )
     return signed
 
 
@@ -345,7 +397,9 @@ def expected_provenance_statement_id(statement: Mapping[str, Any]) -> str:
 
 
 def sign_provenance_statement(
-    statement: Mapping[str, Any], *, private_key: Ed25519PrivateKey, key_id: str
+    statement: Mapping[str, Any], *, private_key: Ed25519PrivateKey | None = None, key_id: str,
+    signer: SignerClient | None = None, framework_version: str | None = None,
+    public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
 ) -> dict[str, Any]:
     if statement.get("schema_version") != "1.0.0" or not isinstance(statement.get("builder_id"), str) or not statement["builder_id"].strip() or not isinstance(statement.get("build_type"), str) or not statement["build_type"].strip():
         raise SupplyChainError("provenance statement identity is malformed")
@@ -353,7 +407,11 @@ def sign_provenance_statement(
         raise SupplyChainError("provenance statement identity is invalid")
     signed = dict(statement)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
-    signed["signature_value"] = _sign(_signed_subject(signed), private_key)
+    signed["signature_value"] = _sign_with_configured_authority(
+        _signed_subject(signed), private_key=private_key, signer=signer, framework_version=framework_version,
+        bundle_root=str(signed.get("bundle_root", "")), purpose="provenance", key_id=key_id,
+        public_key=public_key, created_at=str(created_at or signed.get("generated_at", "")),
+    )
     return signed
 
 
