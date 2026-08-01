@@ -2859,3 +2859,77 @@ Start the next qualification/judge cycle when a real private corpus or independe
 - If signer metadata is not persisted in the signed record, downstream verification cannot prove the scope the signer actually authorized.
 - Optional scope is a practical migration path only when the release boundary makes absence non-qualifying; do not treat schema compatibility as release eligibility.
 - Content-addressed scope must be included in packet/verdict identities so a scope edit creates a new record instead of relabeling old evidence.
+
+## ADR-40 — Persist framework scope across supply-chain evidence
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-02
+**Deciders:** VHEATM maintainers
+**Tags:** `supply-chain` `signer-service` `release-gates` `provenance`
+**Change Classification:** `DESIGN CHANGE`
+**Review date:** 2026-09-02 — or earlier when scanner/provenance authority, artifact schemas, or RG-13 policy changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local identity/schema/evaluator enforcement; `NOT_PRODUCTION_QUALIFIED` because no trusted scanner, provenance authority, operational signer, or external key registry is available.
+**LAST CONFIRMED:** 2026-08-02 — `IMPLEMENTATION`, `TESTS`, `SCHEMA`
+**VOLATILITY:** `WATCHFUL` — framework release identity, scanner provenance, signer custody, and trust-registry authority are external inputs.
+
+### Context
+
+Supply-chain producers already sent framework scope to the external signer, but attestation, vulnerability-scan, and provenance records did not persist that scope. Downstream verification therefore could not recover the scope that was authorized. A verified scan from another framework could also be attached to a current attestation unless the producer and RG-13 boundary compared both records.
+
+### Decision
+
+Persist `framework_version` in all three RG-13 artifact schemas and content identities. Derive attestation scope from the canonical manifest, require scan scope at construction, require producer signer scope to equal the persisted record, reject a verified scan whose scope differs from the canonical bundle, and require release evaluation to compare scan and attestation scope with the current release framework. Provenance verification now requires exact framework agreement with the attestation.
+
+### Options Considered
+
+- Keep framework scope only in signer requests: rejected because request metadata is not durable release evidence.
+- Derive scan scope only during evaluation: rejected because the scanner result's identity and signature would remain ambiguous before attachment.
+- Allow a verified foreign scan to be attached and rely on the final report: rejected because content-addressed builders must reject invalid composition at the earliest boundary.
+- Leave local fixture signing permissive: rejected because a local path could mint a malformed record that bypasses direct verifier callers; fixture keys remain available, but the record must still carry scope.
+
+### Impact
+
+Schemas changed: `schemas/supply-chain-attestation.schema.json`, `schemas/vulnerability-scan.schema.json`, `schemas/provenance-statement.schema.json`
+Components changed: supply-chain builders/signers/verifiers, RG-13 evaluator, release fixtures/tests
+Breaking change: **YES** for supply-chain records without persisted framework scope; **NO** for valid fixture records migrated with the canonical field.
+
+IMPACT RADIUS: **CRITICAL**
+BLAST RADIUS: WIDE
+Cascades: `canonical manifest → supply-chain record identity → signer request → scan/provenance composition → RG-13`
+Cascade Review: ✅ Done — RED/GREEN scope mismatch, foreign-scan composition, schema, canonical bundle, and release-evaluator regressions cover the changed boundary.
+
+### Consequences
+
+- A signed RG-13 artifact now carries the framework scope needed for independent downstream verification.
+- Canonical bundle binding and release evaluation reject scope drift before supply-chain metrics become available.
+- Existing local private-key paths remain deterministic test fixtures, not trusted scanner/provenance authority.
+- No scanner key, provenance authority, external signer service, trusted registry, or GA evidence is created by this change.
+
+### Evidence
+
+- [verified 2026-08-02] RED regression initially passed incorrectly because an external attestation signer accepted `17.0.0-wrong` while the record had no persisted framework field.
+- [verified 2026-08-02] Supply-chain/release targeted suite passes with `22 passed`; regressions cover all three external producer paths, foreign verified-scan composition, and schema migration.
+- [verified 2026-08-02] Full `.venv/bin/pytest -o addopts='' -q` passes with `315 passed in 65.82s`; `.venv/bin/vheatm-validate --root .`, `.venv/bin/vheatm-doctor --root .`, `uv build --wheel --sdist`, and low-risk evaluate/route all pass.
+- [verified 2026-08-02] No trusted scanner/provenance authority, operational signer, or externally signed key registry was available; RG-13 and GA remain fail-closed.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Trusted scanner provenance, external signer/key custody, authority root/rotation, private qualification, independently qualified provider/judge, trusted host deployment, UX-04, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the external evidence handoff when a trusted scanner/provenance producer and signed key registry are supplied; verify the complete scoped RG-13 chain against the current bundle before allowing any release metric to change from `unknown`.
+
+### Cycle Retrospective
+
+- Signer metadata is not evidence until it is persisted in the signed record and included in its immutable identity.
+- Supply-chain composition should reject scope drift before the release evaluator so invalid evidence cannot circulate as a plausible candidate.
+- A zero-finding scan is still only an observation until scanner provenance, role-key custody, and trust-registry authority are independently verified.

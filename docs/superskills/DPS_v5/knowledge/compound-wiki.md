@@ -748,3 +748,26 @@ modules: [MOD-CLOSURE-METRICS, MOD-INDEPENDENT-JUDGE, MOD-AGENT-SECURITY]
 - Framework and bundle scope must persist in qualification/judge identities and be verified against the current release before signatures contribute metrics: added to CONTEXT.md Architectural Decisions ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-40 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-CLOSURE-METRICS, MOD-AGENT-SECURITY]
+
+---
+
+## Cycle: persisted-supply-chain-framework-scope
+
+### New Domain Terms Added to CONTEXT.md
+- Persisted supply-chain scope: added ✅
+
+### Bug Patterns
+- Supply-chain signer requests carried framework scope that was absent from attestation/scan/provenance identities, allowing caller-only scope to disappear downstream: observed and fixed by persisted fields, immutable IDs, and exact composition/evaluator checks; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A zero-finding scan or valid signature remains non-authoritative when scanner/provenance scope and trust are not persisted and independently verified: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- All RG-13 artifacts persist canonical framework scope, and verified scan composition plus release evaluation reject scope drift before metrics contribute: added to CONTEXT.md Architectural Decisions ✅
+
+---
