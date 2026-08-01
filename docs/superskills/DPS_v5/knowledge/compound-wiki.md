@@ -451,3 +451,25 @@ modules: [MOD-CONTEXT-CONTRACT, MOD-EXECUTION-FIDELITY, MOD-CLOSURE-METRICS]
 - Legacy provenance must distinguish original-archive verification from extracted-corpus re-baselining, and both registry and capability-ledger validators must enforce the corpus boundary: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-27 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: canonical-supply-chain-source-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Canonical supply-chain binding: added ✅
+
+### Bug Patterns
+- A signed but source-detached SBOM could satisfy RG-13 through self-consistency: observed and fixed at the canonical bundle trust boundary; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Signature authenticity does not establish that the signed SBOM describes the current bytes: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Supply-chain evidence must be recomputed from the current bundle at the consuming release gate, including dependencies and lock metadata: added to CONTEXT.md ✅
+
+---

@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 18 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 19 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -28,6 +28,7 @@
 - **Claim gate binding:** the content-addressed `gate_trace` on a claim that identifies the gate(s) for which verified evidence is valid; report validation rejects cross-gate reuse. <!-- from ADR: ADR-24 -->
 - **Unauthorized tool-class matrix:** the deterministic seeded qualification exercise that submits schema-valid, policy-invalid requests for read, write, execute, network, and secrets and records broker denials without invoking an action backend. <!-- from ADR: ADR-25 -->
 - **Extracted-corpus re-baseline:** the explicit provenance state used when the original legacy archive is unavailable; the extracted corpus digest is verified, while archive verification remains false. <!-- from ADR: ADR-26 -->
+- **Canonical supply-chain binding:** the release-bound verification that recomputes SBOM, dependency, and lock metadata from the current control bundle before signed RG-13 evidence can contribute metrics. <!-- from ADR: ADR-27 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -54,6 +55,7 @@
 - Verified gate evidence must bind its claim to every consuming gate; a generic verified claim cannot be reused across unrelated gates without a new content address. <!-- from ADR: ADR-24 -->
 - Passing gates cannot use `SRC-*` records as direct evidence; a source must remain lineage for a gate-bound claim or typed artifact. <!-- from ADR: ADR-24 -->
 - Legacy archive provenance must declare either a verifiable original archive or an unavailable archive with a content-addressed extracted-corpus root; an absent archive cannot retain a verified archive digest. <!-- from ADR: ADR-26 -->
+- A signed supply-chain record must bind to the source-derived current bundle inventory, not only to a self-consistent SBOM digest or declared bundle-root string. <!-- from ADR: ADR-27 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -81,3 +83,4 @@
 - [2026-08] A trusted source can still be raw, gate-irrelevant material | Reject direct source evidence at the passing-gate boundary and require a typed claim/artifact. <!-- from ADR: ADR-24 -->
 - [2026-08] Five broker denials do not prove host hard-stop latency | Keep `unauthorized_block_rate` evidence separate from `hard_stop_p99_seconds`, which remains unknown without a real host-level timing probe. <!-- from ADR: ADR-25 -->
 - [2026-08] A registry can carry a plausible legacy archive hash even when the archive is absent | Encode `archive_status` and `source_basis`, bind the extracted corpus digest, and reject an unavailable archive marked verified. <!-- from ADR: ADR-26 -->
+- [2026-08] A signed attestation can describe the wrong bytes while remaining internally consistent | Rebuild the canonical bundle at the consuming RG-13 boundary and compare every SBOM/dependency-lock field before deriving supply-chain metrics. <!-- from ADR: ADR-27 -->
