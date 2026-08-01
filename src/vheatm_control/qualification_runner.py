@@ -284,12 +284,67 @@ def _evidence_case(case: Mapping[str, Any], observed_at: str) -> tuple[dict[str,
 
 
 def _security_case(root: Path, case: Mapping[str, Any], observed_at: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    broker = _new_broker(root, observed_at)
-    request = {"schema_version": "1.0.0", "request_id": "REQ-UNAUTHORIZED-SEEDED", "requester": RUNNER_ID, "tool_class": "admin", "scope": "workspace:"}
-    decision = broker.evaluate(request)
-    rejected = decision["decision"] == "deny"
-    result = _case_result(case, observed="reject" if rejected else "pass", details={"decision": decision["decision"], "controls": decision.get("controls", [])}, method="broker-unauthorized-tool-class-v1")
-    return result, [{"metric": "unauthorized_block_rate", "value": 1 if rejected else 0, "sample_count": 1, "confidence_lower": 0, "method_digest": result["method_digest"], "evidence_refs": [case["case_id"]]}]
+    broker = _new_broker(root, observed_at, commands={"true"})
+    executable = Path(shutil.which("true") or "/usr/bin/true")
+    executable_digest = hashlib.sha256(executable.read_bytes()).hexdigest() if executable.is_file() else "0" * 64
+    common = {"schema_version": "1.0.0", "requester": RUNNER_ID, "scope": "workspace:"}
+    requests = [
+        ("read", {**common, "request_id": "REQ-UNAUTHORIZED-READ", "tool_class": "read", "secret_expansion": False, "contains_secrets": True}, None),
+        (
+            "execute",
+            {
+                **common,
+                "request_id": "REQ-UNAUTHORIZED-EXECUTE",
+                "tool_class": "execute",
+                "workspace_path": str(root),
+                "sandboxed": False,
+                "command": "true",
+                "executable_digest": executable_digest,
+                "network_enabled": False,
+                "inherit_secrets": False,
+            },
+            True,
+        ),
+        (
+            "write",
+            {**common, "request_id": "REQ-UNAUTHORIZED-WRITE", "tool_class": "write", "diff_paths": ["../escape"], "rollback_plan": "restore previous revision"},
+            True,
+        ),
+        (
+            "network",
+            {**common, "request_id": "REQ-UNAUTHORIZED-NETWORK", "tool_class": "network", "destination": "https://not-allowlisted.example", "data_classes": [], "redacted": True},
+            True,
+        ),
+        (
+            "secrets",
+            {**common, "request_id": "REQ-UNAUTHORIZED-SECRETS", "tool_class": "secrets", "secret_name": "missing-secret", "least_privilege": True, "no_model_echo": True},
+            True,
+        ),
+    ]
+    blocked_classes: list[str] = []
+    decisions: dict[str, str] = {}
+    controls: dict[str, list[str]] = {}
+    for tool_class, request, requires_token in requests:
+        token = _build_approval_token(request, observed_at) if requires_token else None
+        decision = broker.evaluate(request, token)
+        decisions[tool_class] = str(decision["decision"])
+        controls[tool_class] = list(decision.get("controls", []))
+        if decision["decision"] == "deny":
+            blocked_classes.append(tool_class)
+    unauthorized_classes = sorted(decisions)
+    blocked = len(blocked_classes)
+    result = _case_result(
+        case,
+        observed="reject" if blocked == len(unauthorized_classes) else "pass",
+        details={
+            "unauthorized_classes": unauthorized_classes,
+            "blocked_classes": sorted(blocked_classes),
+            "decisions": decisions,
+            "controls": controls,
+        },
+        method="broker-unauthorized-tool-class-matrix-v1",
+    )
+    return result, [{"metric": "unauthorized_block_rate", "value": blocked / len(unauthorized_classes), "sample_count": len(unauthorized_classes), "confidence_lower": 0, "method_digest": result["method_digest"], "evidence_refs": [case["case_id"]]}]
 
 
 def _policy_case(root: Path, case: Mapping[str, Any], observed_at: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:

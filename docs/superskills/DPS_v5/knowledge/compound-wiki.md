@@ -7,6 +7,27 @@ Auto-populated by: knowledge-compound skill (run after every adr-commit)
 ---
 date: 2026-08-01
 sprint: v17-kernel-closure
+adr: ADR-25 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: rg09-unauthorized-tool-class-matrix
+
+### New Domain Terms Added to CONTEXT.md
+- Unauthorized tool-class matrix: added ✅
+
+### Bug Patterns
+- The seeded RG-09 case exercised only an unsupported `admin` class and reported one observation: observed and fixed by five schema/approval-bound requests covering every canonical tool class; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- Broker denial coverage is not host hard-stop timing: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Keep local authorization coverage and host-level latency evidence as separate measurements; never turn deterministic seeded replay into private/GA proof: added to CONTEXT.md ✅
+
+---
+date: 2026-08-01
+sprint: v17-kernel-closure
 adr: ADR-24 in docs/superskills/DPS_v5/ADR.md
 modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
 ---

@@ -26,6 +26,7 @@
 - **Provider qualification state:** the canonical allowlist state separating a provider that may participate in shadow contract observation from one qualified for canary. <!-- from ADR: ADR-22 -->
 - **Verified sandbox backend:** the executable whose bytes match the execute request's digest and whose open file descriptor is reused for reference-monitor preflight and action launch. <!-- from ADR: ADR-23 -->
 - **Claim gate binding:** the content-addressed `gate_trace` on a claim that identifies the gate(s) for which verified evidence is valid; report validation rejects cross-gate reuse. <!-- from ADR: ADR-24 -->
+- **Unauthorized tool-class matrix:** the deterministic seeded qualification exercise that submits schema-valid, policy-invalid requests for read, write, execute, network, and secrets and records broker denials without invoking an action backend. <!-- from ADR: ADR-25 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -76,3 +77,4 @@
 - [2026-08] A backend can change after executor construction or between hash and launch | Include its digest in the execute request, revalidate every run, and launch the verified FD; host provenance remains external. <!-- from ADR: ADR-23 -->
 - [2026-08] A verified claim can be semantically valid yet unrelated to the gate consuming it | Include `gate_trace` in claim identity and require report evidence to cover the consuming gate. <!-- from ADR: ADR-24 -->
 - [2026-08] A trusted source can still be raw, gate-irrelevant material | Reject direct source evidence at the passing-gate boundary and require a typed claim/artifact. <!-- from ADR: ADR-24 -->
+- [2026-08] Five broker denials do not prove host hard-stop latency | Keep `unauthorized_block_rate` evidence separate from `hard_stop_p99_seconds`, which remains unknown without a real host-level timing probe. <!-- from ADR: ADR-25 -->

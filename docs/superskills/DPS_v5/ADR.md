@@ -1731,3 +1731,76 @@ Start the next cycle when a new gate taxonomy or multi-gate evidence aggregator 
 - Content-addressing protects integrity only for fields included in the identity projection.
 - Module ownership traces and claim relevance traces are complementary boundaries, not substitutes.
 - Keeping generic claims non-gate-bound preserves provenance reuse without allowing them to mint release gate passes.
+
+## ADR-25 — Qualify RG-09 authorization coverage across all tool classes
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `qualification` `RG-09` `tool-broker` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when runtime tool classes, approval semantics, or host hard-stop instrumentation changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local broker authorization coverage; `NOT_PRODUCTION_QUALIFIED` for host-level hard-stop timing and private release evidence.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — tool classes and enforcement points are canonical policy inputs.
+
+### Context
+
+The public seeded RG-09 case submitted an unsupported `admin` class and measured one denial. That did not exercise the five canonical runtime classes (`read`, `write`, `execute`, `network`, `secrets`), nor did it prove that approval-bound requests reached the correct class-specific guard. The release method also declares `hard_stop_p99_seconds`; no trustworthy host-level timing source exists in the public deterministic runner.
+
+### Decision
+
+Replace the single unsupported-class probe with five schema-valid, policy-invalid requests. Read fails its secret-content guard; execute fails sandbox enforcement after a valid single-use approval; write fails workspace scope; network fails destination allowlisting after approval; secrets fails named-secret registration after approval. The case records each decision and control list, emits `unauthorized_block_rate=1.0` over five observations, and remains `public_seeded`/`unverified`. It does not emit `hard_stop_p99_seconds`; host sandbox latency remains unknown until a real deployment-level timing probe can measure the enforcement point.
+
+### Options Considered
+
+- Keep the `admin` request and call it representative: rejected because an unsupported class tests only default-deny routing, not each canonical class guard.
+- Add a deterministic constant for `hard_stop_p99_seconds`: rejected because a constant would fabricate a timing observation and could be mistaken for host qualification.
+- Time only Python broker calls and label them host hard-stop latency: rejected because broker decision latency is not proof of subprocess/namespace enforcement latency.
+- Use an approval token for every request including read: rejected because read is intentionally allowed without approval and the test must preserve the canonical policy semantics.
+
+### Impact
+
+Schemas changed: none.
+Components changed: seeded qualification security handler, qualification regression tests, lifecycle/knowledge documentation.
+Breaking change: **NO** for runtime behavior; **YES** for the seeded case's sample population and detail shape.
+
+IMPACT RADIUS: **MODERATE**
+Cascades: `runtime policy/tool schemas → broker class guards → seeded qualification case → RG-09 candidate measurement`.
+Cascade Review: ✅ Done — five-class replay, approval-bound execute/write/network/secrets paths, deterministic repeated-run test, method binding, and public-unverified labeling cover the changed boundary.
+
+### Consequences
+
+- Local seeded evidence now tests every canonical unauthorized tool class at the broker enforcement point.
+- A passing matrix means only that these deterministic policy requests were denied; it does not prove private attack-family coverage, host namespace capability, or p99 hard-stop latency.
+- Public replay remains deterministic because no wall-clock measurement is inserted into the seeded run identity.
+- RG-09 stays incomplete when `hard_stop_p99_seconds` is absent; the evaluator remains fail-closed instead of inferring it from `unauthorized_block_rate`.
+
+### Evidence
+
+- [verified 2026-08-01] The previous single-class case was replaced with five schema/approval-bound requests and all five return `deny` without backend execution.
+- [verified 2026-08-01] Seeded replay remains deterministic and emits `unauthorized_block_rate=1.0` with `sample_count=5`, method-bound to the canonical qualification policy.
+- [verified 2026-08-01] No `hard_stop_p99_seconds`, private qualification, host namespace, or GA evidence was fabricated.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. Host-level hard-stop instrumentation, private attack-family trials, trusted external keys, provider qualification, vulnerability feed, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a qualified host exposes an enforcement-point timing probe or when a sixth tool class is added; bind the probe's population, clock source, and deployment identity before adding `hard_stop_p99_seconds`.
+
+### Cycle Retrospective
+
+- Default-deny on an unsupported class is not coverage of the canonical class guards.
+- Approval-bound negative requests must test the post-approval guard, not only missing-token rejection.
+- Determinism and timing are different evidence contracts; keep wall-clock measurements out of replay identities.
+- Missing host timing must remain unknown even when every local broker denial succeeds.

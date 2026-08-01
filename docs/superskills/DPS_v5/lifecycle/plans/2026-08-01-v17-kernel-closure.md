@@ -45,6 +45,7 @@
 - Execute approvals now bind the backend executable digest; the sandbox revalidates bytes per run and passes the verified backend FD to preflight/action launch to narrow TOCTOU exposure.
 - Verified claims used by gates/findings now carry content-addressed gate traces; report validation rejects a claim whose trace does not cover the consuming gate, closing generic-claim cross-gate reuse.
 - Passing gates now reject direct `SRC-*` evidence, including trusted sources; source records must remain lineage for a gate-bound claim or typed artifact.
+- Seeded security qualification now exercises read, write, execute, network, and secrets denial paths with real schema/approval-bound broker requests; all five are blocked and the public run remains `unverified`.
 - Semantic migration now has schema-bound, non-authoritative records for signal/noise decisions, FAST/Standard/Full legacy-output mapping, enterprise stakeholder ownership, cross-cutting L7 obligations, ordered temporal/L4 scans, AI-RMF governance, and assurance maturity deltas; unknown and tainted states remain explicit.
 
 ## Verification gates
@@ -52,7 +53,7 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 263 passed.
+- `.venv/bin/pytest -o addopts=''` — 264 passed.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
@@ -66,7 +67,8 @@ Fresh evidence for this cycle:
 - Backend-integrity regression — backend replacement after executor construction is blocked, and execute request/approval identity includes `executable_digest`; verified backend FD is reused for preflight and action launch.
 - Provenance/report regressions — a claim bound to `HG-B` cannot support passing `HG-A`; gate binding is part of the claim identity and schema-valid claims remain immutable.
 - Direct-source regression — a trusted `SRC-*` record cannot be promoted to passing gate evidence without a typed gate-bound claim/artifact.
+- Security-matrix regression — the seeded RG-09 authorization case covers all five tool classes with `unauthorized_block_rate=1.0` over five observations; no host hard-stop latency is synthesized.
 
 ## Explicitly not complete
 
-Open release work is intentionally evidence-dependent: external key custody/signing service, fresh vulnerability scan feed, private/time-sliced gold data, allowlisted external provider qualification, host-level namespace capability, and a successful shadow/canary observation run are not fabricated here. The seeded runner is a replayable local test artifact, not a private or independently judged qualification source. The implementation now has enforcing/verifying seams and typed records for each; no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.
+Open release work is intentionally evidence-dependent: external key custody/signing service, fresh vulnerability scan feed, private/time-sliced gold data, allowlisted external provider qualification, host-level namespace capability and hard-stop latency, and a successful shadow/canary observation run are not fabricated here. The seeded runner is a replayable local test artifact, not a private or independently judged qualification source; its five-class authorization matrix does not establish host-level p99 hard-stop evidence. The implementation now has enforcing/verifying seams and typed records for each; no production `complete`, `attested`, canary, or GA claim is authorized until RG-00…RG-15 are independently evidenced.

@@ -37,6 +37,18 @@ def test_seeded_runner_executes_every_canonical_case_and_is_replayable() -> None
     assert validate_qualification_run(first, SCHEMA) == []
 
 
+def test_security_case_covers_every_unauthorized_tool_class() -> None:
+    run = run_seeded_corpus(ROOT, observed_at="2026-08-01T00:00:00Z")
+    security_case = next(item for item in run["case_results"] if item["case_id"] == "EVC-SECURITY-001")
+    security_metric = next(item for item in run["measurements"] if item["metric"] == "unauthorized_block_rate")
+
+    assert security_case["outcome"] == "pass"
+    assert security_metric["value"] == 1
+    assert security_metric["sample_count"] == 5
+    assert security_case["details"]["unauthorized_classes"] == ["execute", "network", "read", "secrets", "write"]
+    assert security_case["details"]["blocked_classes"] == security_case["details"]["unauthorized_classes"]
+
+
 def test_seeded_runner_rejects_content_tampering() -> None:
     run = run_seeded_corpus(ROOT, observed_at="2026-08-01T00:00:00Z")
     tampered = copy.deepcopy(run)
