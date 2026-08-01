@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import resource
 import selectors
 import shlex
@@ -15,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
-from .tool_broker import ToolBroker, request_digest
+from .tool_broker import ToolBroker, action_digest, build_tool_receipt, expected_tool_receipt_id, request_digest
 
 
 class SandboxConfigurationError(ValueError):
@@ -44,6 +45,27 @@ def _timestamp(value: str) -> str:
     return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _validate_policy_decision(decision: Mapping[str, Any], request: Mapping[str, Any]) -> None:
+    if decision.get("schema_version") != "1.0.0":
+        raise SandboxExecutionError("sandbox policy decision schema version is invalid")
+    if decision.get("request_id") != request.get("request_id"):
+        raise SandboxExecutionError("sandbox policy decision is not bound to the request")
+    if decision.get("decision") not in {"allow", "deny"}:
+        raise SandboxExecutionError("sandbox policy decision value is invalid")
+    if not isinstance(decision.get("reason"), str) or not decision["reason"].strip():
+        raise SandboxExecutionError("sandbox policy decision reason is invalid")
+    controls = decision.get("controls")
+    if not isinstance(controls, list) or not controls or len(controls) != len(set(controls)) or any(not isinstance(item, str) or not item for item in controls):
+        raise SandboxExecutionError("sandbox policy decision controls are invalid")
+    try:
+        _timestamp(decision.get("evaluated_at"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise SandboxExecutionError("sandbox policy decision timestamp is invalid") from exc
+    approval_token_id = decision.get("approval_token_id")
+    if approval_token_id is not None and (not isinstance(approval_token_id, str) or not re.fullmatch(r"APR-[A-F0-9]{64}", approval_token_id)):
+        raise SandboxExecutionError("sandbox policy decision approval token is invalid")
+
+
 def expected_sandbox_run_id(run: Mapping[str, Any]) -> str:
     identity = {key: value for key, value in run.items() if key != "run_id"}
     return "SBR-" + _digest(identity).upper()
@@ -61,6 +83,8 @@ def build_sandbox_run(
     started_at: str,
     finished_at: str,
     sandbox_controls: Sequence[str] = (),
+    policy_decision: Mapping[str, Any] | None = None,
+    tool_receipt: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if status not in {"completed", "failed", "blocked"}:
         raise SandboxExecutionError("sandbox status must be completed, failed, or blocked")
@@ -72,6 +96,24 @@ def build_sandbox_run(
     finished = _timestamp(finished_at)
     if datetime.fromisoformat(finished.replace("Z", "+00:00")) < datetime.fromisoformat(started.replace("Z", "+00:00")):
         raise SandboxExecutionError("sandbox finished_at cannot precede started_at")
+    authorization: dict[str, Any] = {}
+    if policy_decision is not None or tool_receipt is not None:
+        if not isinstance(policy_decision, Mapping) or not isinstance(tool_receipt, Mapping):
+            raise SandboxExecutionError("sandbox authorization evidence must include a policy decision and tool receipt")
+        _validate_policy_decision(policy_decision, request)
+        if tool_receipt.get("request_id") != request.get("request_id") or tool_receipt.get("request_digest") != request_digest(request):
+            raise SandboxExecutionError("sandbox tool receipt is not bound to the request")
+        if tool_receipt.get("tool_class") != request.get("tool_class") or tool_receipt.get("decision") != policy_decision.get("decision"):
+            raise SandboxExecutionError("sandbox tool receipt is not bound to the policy decision")
+        if tool_receipt.get("action_digest") != action_digest(request) or tool_receipt.get("id") != expected_tool_receipt_id(tool_receipt):
+            raise SandboxExecutionError("sandbox tool receipt action binding is invalid")
+        authorization = {
+            "policy_decision_digest": request_digest(policy_decision),
+            "action_digest": action_digest(request),
+            "tool_receipt": dict(tool_receipt),
+        }
+    if status in {"completed", "failed"} and (not authorization or policy_decision.get("decision") != "allow"):
+        raise SandboxExecutionError("sandbox execution requires allow decision authorization evidence")
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
         "request_id": str(request.get("request_id", "")),
@@ -88,6 +130,9 @@ def build_sandbox_run(
         "sandbox_controls": list(dict.fromkeys(sandbox_controls)) or ["reference-monitor:bubblewrap"],
         "started_at": started,
         "finished_at": finished,
+        "policy_decision_digest": authorization.get("policy_decision_digest"),
+        "action_digest": authorization.get("action_digest"),
+        "tool_receipt": authorization.get("tool_receipt"),
     }
     return {"run_id": expected_sandbox_run_id(identity), **identity}
 
@@ -297,6 +342,11 @@ class SandboxExecutor:
             decision = self.broker.evaluate(request, approval_token)
         except Exception as exc:  # a failed policy boundary must not become host execution
             return self._blocked(request, argv, f"policy broker unavailable: {exc}", started, controls=("broker:error",))
+        try:
+            _validate_policy_decision(decision, request)
+            authorization_receipt = build_tool_receipt(request, decision, recorded_at=started)
+        except Exception as exc:  # a malformed authorization boundary must not become host execution
+            return self._blocked(request, argv, f"authorization receipt unavailable: {exc}", started, controls=("authorization:receipt-failed",))
         if decision.get("decision") != "allow":
             return self._blocked(
                 request,
@@ -304,6 +354,8 @@ class SandboxExecutor:
                 str(decision.get("reason", "policy denied execute request")),
                 started,
                 controls=("policy:deny", "approval:verified-or-denied"),
+                policy_decision=decision,
+                tool_receipt=authorization_receipt,
             )
 
         # Probe the exact reference-monitor mode before accepting the action.
@@ -312,7 +364,7 @@ class SandboxExecutor:
         # monitor, not a command failure and must remain blocked.
         probe = self._probe(workspace, cwd)
         if probe is not None:
-            return self._blocked(request, argv, probe, started, controls=("backend:preflight-failed",))
+            return self._blocked(request, argv, probe, started, controls=("backend:preflight-failed",), policy_decision=decision, tool_receipt=authorization_receipt)
 
         command = self._command(workspace, cwd, argv)
         try:
@@ -321,13 +373,15 @@ class SandboxExecutor:
                 cpu_seconds=self.cpu_seconds, memory_bytes=self.memory_bytes,
             )
         except OSError as exc:
-            return self._blocked(request, argv, f"reference monitor unavailable: {exc}", started, controls=("backend:unavailable",))
+            return self._blocked(request, argv, f"reference monitor unavailable: {exc}", started, controls=("backend:unavailable",), policy_decision=decision, tool_receipt=authorization_receipt)
         if completed.timed_out:
             return build_sandbox_run(
                 request=request, backend_digest=self.backend_sha256 or "", argv=argv,
                 status="blocked", exit_code=None, stdout=completed.stdout, stderr=completed.stderr + b"sandbox timeout",
                 started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 sandbox_controls=self._controls() + ("timeout:enforced",),
+                policy_decision=decision,
+                tool_receipt=authorization_receipt,
             )
         stdout = completed.stdout
         stderr = completed.stderr
@@ -338,6 +392,8 @@ class SandboxExecutor:
                 stderr=stderr[: self.output_bytes] + b"output limit exceeded",
                 started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 sandbox_controls=self._controls() + ("output:bounded",),
+                policy_decision=decision,
+                tool_receipt=authorization_receipt,
             )
         return build_sandbox_run(
             request=request, backend_digest=self.backend_sha256 or "", argv=argv,
@@ -345,6 +401,8 @@ class SandboxExecutor:
             stdout=stdout, stderr=stderr, started_at=started,
             finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             sandbox_controls=self._controls(),
+            policy_decision=decision,
+            tool_receipt=authorization_receipt,
         )
 
     def _probe(self, workspace: Path, cwd: Path) -> str | None:
@@ -411,10 +469,14 @@ class SandboxExecutor:
         started: str,
         *,
         controls: Sequence[str] = (),
+        policy_decision: Mapping[str, Any] | None = None,
+        tool_receipt: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         return build_sandbox_run(
             request=request, backend_digest=self.backend_sha256 or "0" * 64, argv=argv,
             status="blocked", exit_code=None, stdout=b"", stderr=reason.encode("utf-8", errors="replace"),
             started_at=started, finished_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             sandbox_controls=tuple(self._controls()) + tuple(controls) + ("fail-closed",),
+            policy_decision=policy_decision,
+            tool_receipt=tool_receipt,
         )

@@ -4,7 +4,7 @@
   "title": "VHEATM reference-monitor sandbox run",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "run_id", "request_id", "request_digest", "backend", "backend_digest", "workspace_root", "scope", "argv", "status", "exit_code", "stdout_digest", "stderr_digest", "sandbox_controls", "started_at", "finished_at"],
+  "required": ["schema_version", "run_id", "request_id", "request_digest", "backend", "backend_digest", "workspace_root", "scope", "argv", "status", "exit_code", "stdout_digest", "stderr_digest", "sandbox_controls", "started_at", "finished_at", "policy_decision_digest", "action_digest", "tool_receipt"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "run_id": {"type": "string", "pattern": "^SBR-[A-F0-9]{64}$"},
@@ -21,6 +21,19 @@
     "stderr_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "sandbox_controls": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "started_at": {"type": "string", "format": "date-time"},
-    "finished_at": {"type": "string", "format": "date-time"}
-  }
+    "finished_at": {"type": "string", "format": "date-time"},
+    "policy_decision_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "action_digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "tool_receipt": {"type": ["object", "null"], "additionalProperties": false, "required": ["id", "request_id", "request_digest", "tool_class", "decision", "action_digest", "recorded_at", "approval_token_id"], "properties": {
+      "id": {"type": "string", "pattern": "^TRC-[A-F0-9]{64}$"},
+      "request_id": {"type": "string", "minLength": 1},
+      "request_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+      "tool_class": {"enum": ["read", "execute", "write", "network", "secrets"]},
+      "decision": {"enum": ["allow", "deny", "unknown"]},
+      "action_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+      "recorded_at": {"type": "string", "format": "date-time"},
+      "approval_token_id": {"type": ["string", "null"], "pattern": "^APR-[A-F0-9]{64}$"}
+    }}
+  },
+  "allOf": [{"if": {"properties": {"status": {"enum": ["completed", "failed"]}}, "required": ["status"]}, "then": {"required": ["policy_decision_digest", "action_digest", "tool_receipt"], "properties": {"policy_decision_digest": {"type": "string"}, "action_digest": {"type": "string"}, "tool_receipt": {"type": "object"}}}}]
 }

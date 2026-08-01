@@ -19,6 +19,8 @@ from pathlib import Path
 
 import yaml
 
+from .bundle import resolve_control_root
+
 
 @dataclass(frozen=True)
 class DigestIssue:
@@ -112,11 +114,11 @@ def check_repository(root: Path, *, fix: bool = False) -> list[DigestIssue]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check (and optionally fix) VHEATM module digest hygiene")
-    parser.add_argument("--root", default=".", help="Repository root")
+    parser.add_argument("--root", type=Path, default=None, help="Control-plane root (defaults to the current checkout or bundled package data)")
     parser.add_argument("--fix", action="store_true", help="Rewrite mismatched digests in place")
     args = parser.parse_args(argv)
 
-    root = Path(args.root).resolve()
+    root = resolve_control_root(args.root)
     issues = check_repository(root, fix=args.fix)
 
     if not issues:

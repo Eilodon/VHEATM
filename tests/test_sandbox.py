@@ -10,10 +10,12 @@ from jsonschema import Draft202012Validator
 
 from vheatm_control.sandbox import (
     SandboxConfigurationError,
+    SandboxExecutionError,
     SandboxExecutor,
     build_sandbox_run,
     expected_sandbox_run_id,
 )
+from vheatm_control.tool_broker import build_tool_receipt, action_digest, request_digest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +53,80 @@ def test_sandbox_run_is_content_addressed_and_schema_valid() -> None:
     Draft202012Validator(schema).validate(run)
 
 
+def test_completed_sandbox_run_binds_policy_decision_and_tool_receipt() -> None:
+    decision = {
+        "schema_version": "1.0.0",
+        "request_id": "REQ-sandbox",
+        "decision": "allow",
+        "reason": "approved",
+        "controls": ["approval:verified", "execute:sandbox"],
+        "evaluated_at": "2026-08-01T00:00:00Z",
+        "approval_token_id": None,
+    }
+    receipt = build_tool_receipt(_request(), decision, recorded_at="2026-08-01T00:00:00Z")
+    run = build_sandbox_run(
+        request=_request(),
+        backend_digest="a" * 64,
+        argv=["true"],
+        status="completed",
+        exit_code=0,
+        stdout=b"",
+        stderr=b"",
+        started_at="2026-08-01T00:00:00Z",
+        finished_at="2026-08-01T00:00:01Z",
+        policy_decision=decision,
+        tool_receipt=receipt,
+    )
+
+    assert run["policy_decision_digest"] == request_digest(decision)
+    assert run["action_digest"] == action_digest(_request())
+    assert run["tool_receipt"]["id"] == receipt["id"]
+    schema = json.loads((ROOT / "schemas" / "sandbox-run.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(run)
+
+
+def test_completed_sandbox_run_cannot_claim_execution_without_authorization() -> None:
+    with pytest.raises(SandboxExecutionError, match="authorization"):
+        build_sandbox_run(
+            request=_request(),
+            backend_digest="a" * 64,
+            argv=["true"],
+            status="completed",
+            exit_code=0,
+            stdout=b"",
+            stderr=b"",
+            started_at="2026-08-01T00:00:00Z",
+            finished_at="2026-08-01T00:00:01Z",
+        )
+
+
+def test_sandbox_rejects_schema_invalid_policy_decision_before_action() -> None:
+    decision = {
+        "schema_version": "1.0.0",
+        "request_id": "REQ-sandbox",
+        "decision": "allow",
+        "reason": "approved",
+        "controls": [],
+        "evaluated_at": "2026-08-01T00:00:00Z",
+        "approval_token_id": None,
+    }
+    receipt = build_tool_receipt(_request(), decision, recorded_at="2026-08-01T00:00:00Z")
+    with pytest.raises(SandboxExecutionError, match="policy decision"):
+        build_sandbox_run(
+            request=_request(),
+            backend_digest="a" * 64,
+            argv=["true"],
+            status="blocked",
+            exit_code=None,
+            stdout=b"",
+            stderr=b"blocked",
+            started_at="2026-08-01T00:00:00Z",
+            finished_at="2026-08-01T00:00:01Z",
+            policy_decision=decision,
+            tool_receipt=receipt,
+        )
+
+
 def test_executor_requires_digest_bound_backend(tmp_path: Path) -> None:
     with pytest.raises(SandboxConfigurationError, match="digest"):
         SandboxExecutor(backend_path=Path("/usr/bin/bwrap"), backend_sha256=None)
@@ -83,14 +159,26 @@ def test_executor_blocks_when_host_cannot_provide_required_namespace() -> None:
 
     class AllowBroker:
         def evaluate(self, request, approval_token=None):  # noqa: ANN001
-            del request, approval_token
-            return {"decision": "allow", "reason": "test policy"}
+            del approval_token
+            return {
+                "schema_version": "1.0.0",
+                "request_id": request["request_id"],
+                "decision": "allow",
+                "reason": "test policy",
+                "controls": ["test:allow"],
+                "evaluated_at": "2026-08-01T00:00:00Z",
+                "approval_token_id": None,
+            }
 
     digest = hashlib.sha256(backend.read_bytes()).hexdigest()
     result = SandboxExecutor(backend_path=backend, backend_sha256=digest, broker=AllowBroker()).run(_request())
     assert result["status"] in {"completed", "blocked"}
     if result["status"] == "blocked":
-        assert "backend:preflight-failed" in result["sandbox_controls"]
+        assert "backend:preflight-failed" in result["sandbox_controls"] or "authorization:receipt-failed" in result["sandbox_controls"]
+        if "backend:preflight-failed" in result["sandbox_controls"]:
+            assert result["policy_decision_digest"]
+            assert result["action_digest"]
+            assert result["tool_receipt"]["decision"] == "allow"
 
 
 def test_executor_blocks_when_policy_broker_errors() -> None:

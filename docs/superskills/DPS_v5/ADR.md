@@ -504,3 +504,72 @@ Start the next cycle when UX research or any external qualification prerequisite
 - A migration capability is only closed when its input, output, failure semantics, and authority boundary are executable and testable.
 - Overlay completeness is useful for planning, but candidate overlays must stay outside release authority until independently validated.
 - The final missing capability is a data-availability blocker, not a reason to weaken the policy.
+
+## ADR-8 — Sandbox outcomes must bind reference-monitor authorization to the executed action
+
+**Status:** ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `reference-monitor` `sandbox` `tool-receipt` `fail-closed` `taint`
+**Change Classification:** `SECURITY CHANGE`
+**Review date:** 2026-09-01 — or earlier when host-level namespace qualification is available.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local authorization binding; `NOT_PRODUCTION_QUALIFIED` for host capability and external operational claims.
+**LAST CONFIRMED:** 2026-08-01 — `TESTS`, `VALIDATION`, `SPECIALIST REVIEW`
+**VOLATILITY:** `WATCHFUL` — the host reference-monitor backend and external qualification evidence remain deployment-specific.
+
+### Context
+
+The sandbox record already committed the request, backend digest, controls, and outcome, but a successful or failed outcome did not prove that the reference monitor authorized that exact action. A broker callback with an incomplete or mismatched decision could therefore weaken the evidence boundary even when execution was blocked locally. This is a security-relevant gap under RG-08/RG-09 and violates the rule that tainted execution claims remain non-authoritative until explicitly bound.
+
+### Decision
+
+Make the sandbox boundary validate a schema-conforming policy decision before any backend action and emit a content-addressed tool receipt bound to the request, tool class, decision, and action digest. The `sandbox-run` record now carries the policy-decision digest, action digest, and receipt. `completed` and `failed` outcomes require an `allow` decision with all three bindings; `blocked` outcomes may preserve a valid deny or allow/preflight receipt, while broker failures and malformed authorization remain fail-closed with no execution claim. The receipt and decision are validated at the reference-monitor boundary rather than inferred after execution.
+
+### Options Considered
+
+- Trust the broker's boolean decision and reconstruct evidence later: rejected because it does not prove request/decision/action identity at the execution boundary.
+- Accept any mapping returned by a test or provider broker: rejected because malformed decisions would enter the receipt path and blur `unknown` with `allow`.
+- Require a receipt even when the broker itself is unavailable: rejected because pre-broker failures have no authorization event; they must remain blocked with an explicit fail-closed control.
+
+### Impact
+
+Schemas changed: `sandbox-run.schema.json` now requires nullable authorization fields and requires non-null authorization for completed/failed outcomes.
+Components changed: `sandbox.py` reference-monitor executor and sandbox record builder; sandbox regression tests.
+Breaking change: YES — direct callers that claim execution must provide a schema-valid allow decision and matching tool receipt.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `policy decision → tool receipt → action digest → sandbox outcome`; no completed/failed sandbox result can enter release evidence without this binding. The host namespace capability itself is still an external qualification prerequisite and is not manufactured by this change.
+Cascade Review: ✅ Done — direct builder tests, executor preflight behavior, schema validation, and global action-boundary inspection cover the changed path.
+
+### Consequences
+
+- Local sandbox records can distinguish an authorized action from a blocked or unavailable reference monitor without exporting command output as authority.
+- Malformed broker decisions fail closed before backend launch, preserving `unknown`/`blocked` semantics.
+- The change does not prove host-level namespace isolation, external key custody, provider qualification, private-corpus correctness, fresh vulnerability evidence, or shadow/canary success; those remain open blockers.
+
+### Evidence
+
+- [verified 2026-08-01] RED tests failed before the authorization fields/guard existed; targeted sandbox and broker verification is green at 20 passed.
+- [verified 2026-08-01] Full repository verification is green at 234 passed, with repository validation and `git diff --check` clean.
+- [verified 2026-08-01] Specialist STRIDE review and pattern-globalization scan found no remaining sandbox action boundary that can claim completed/failed execution without authorization binding.
+- [verified 2026-08-01] Public seeded qualification remains 17/17 deterministic and `public_seeded`/`unverified`; this slice does not promote it to private or independent evidence.
+
+### Owner and Known Debts (PATTERN-DEBT)
+
+**Owner:** VHEATM maintainers
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External release qualification debt remains intentionally open: host namespace capability, private vault/gold corpus, independent judge, key custody, provider qualification, fresh vulnerability evidence, shadow/canary observations, and UX research.
+
+### Next Cycle Trigger
+
+Start the next cycle when a qualified host reference monitor and the remaining external evidence providers are available. Bind their immutable identities and receipts, rerun RG-00…RG-15, and retain `unknown`/`blocked` for every prerequisite that is still unavailable.
+
+### Cycle Retrospective
+
+- A sandbox status is not execution evidence until the authorization decision and exact action are content-addressed together.
+- Schema validity and semantic binding are separate controls; both are required at the reference-monitor boundary.
+- Fail-closed local behavior can close a proof gap without pretending that unavailable host or external qualification exists.
