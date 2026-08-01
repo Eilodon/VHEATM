@@ -3133,7 +3133,7 @@ Cascade Review: ✅ Done — RED replay regression, provider schema coverage, se
 
 - [verified 2026-08-02] RED regression demonstrated that a run built from a different request session was accepted by `complete_pilot()` because the persisted record had no session binding.
 - [verified 2026-08-02] Provider/pilot focused suite passes with `21 passed`; the mismatch run is rejected before observation completion and non-string drill/observation references are rejected.
-- [verified 2026-08-02] Full repository validation, package builds, and the remaining external-prerequisite audit are required before integration; no local fixture is promoted to provider qualification or GA.
+- [verified 2026-08-02] Post-change repository validation and package builds pass; the external-prerequisite audit remains explicit and no local fixture is promoted to provider qualification or GA.
 
 ### Owner
 
