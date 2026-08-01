@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from jsonschema import Draft202012Validator
 
 from vheatm_control.bundle import build_bundle
-from vheatm_control.evaluation import EvaluationError, evaluate_release_gates
+from vheatm_control.evaluation import EvaluationError, evaluate_release_gates, expected_release_report_id, validate_release_report
 from vheatm_control.host_attestation import build_host_attestation, sign_host_attestation
 from vheatm_control.host_qualification import expected_host_qualification_run_id
 from vheatm_control.judge import build_blind_packet, expected_verdict_id, sign_verdict
@@ -73,6 +73,19 @@ def _trusted_registry_kwargs(
 def test_release_evaluator_rejects_non_rfc3339_evaluated_at() -> None:
     with pytest.raises(EvaluationError, match="evaluated_at"):
         evaluate_release_gates("17.0.0-dev.1", {"metrics": {}}, evaluated_at="not-a-timestamp")
+
+
+def test_release_evaluator_rejects_noncanonical_framework_version() -> None:
+    with pytest.raises(EvaluationError, match="canonical manifest"):
+        evaluate_release_gates("17.0.0-wrong", {"metrics": {}}, evaluated_at="2026-08-01T00:00:00Z")
+
+
+def test_release_report_validator_rejects_noncanonical_framework_version() -> None:
+    report = evaluate_release_gates("17.0.0-dev.1", {"metrics": {}}, evaluated_at="2026-08-01T00:00:00Z")
+    tampered = {**report, "framework_version": "17.0.0-wrong"}
+    tampered["report_id"] = expected_release_report_id(tampered)
+    with pytest.raises(EvaluationError, match="canonical manifest"):
+        validate_release_report(tampered)
 
 
 def test_release_report_id_binds_evaluation_timestamp() -> None:

@@ -94,7 +94,7 @@ def test_unverified_host_record_cannot_mint_release_gate_status() -> None:
     )
 
     report = evaluate_release_gates(
-        "17.0.0",
+        "17.0.0-dev.1",
         {"host_qualification_run": run},
         evaluated_at="2026-08-02T00:00:00Z",
     )

@@ -91,6 +91,6 @@ def test_seeded_runner_rejects_invalid_corpus_before_dispatch(tmp_path: Path) ->
 def test_seeded_measurements_cannot_mint_release_gate_status() -> None:
     run = run_seeded_corpus(ROOT, observed_at="2026-08-01T00:00:00Z")
     raw_metrics = {item["metric"]: item["value"] for item in run["measurements"]}
-    report = evaluate_release_gates("17.0.0", {"metrics": raw_metrics}, evaluated_at="2026-08-01T00:00:00Z")
+    report = evaluate_release_gates("17.0.0-dev.1", {"metrics": raw_metrics}, evaluated_at="2026-08-01T00:00:00Z")
     assert report["summary"]["ga_eligible"] is False
     assert all(gate["status"] == "unknown" for gate in report["gates"])

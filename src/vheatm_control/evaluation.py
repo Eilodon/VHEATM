@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
+import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .bundle import build_bundle, resolve_control_root
@@ -32,6 +33,24 @@ from .trust_registry import TrustRegistryError, resolve_trusted_verification_key
 
 class EvaluationError(ValueError):
     """Raised when evaluation corpus or release evidence is malformed."""
+
+
+def _canonical_framework_version(root: Path) -> str:
+    try:
+        manifest = load_yaml((root / "manifests" / "vheatm-v17.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise EvaluationError(f"canonical framework manifest is unavailable: {exc}") from exc
+    version = manifest.get("framework", {}).get("version") if isinstance(manifest, Mapping) else None
+    if not isinstance(version, str) or not version.strip():
+        raise EvaluationError("canonical framework manifest has no framework version")
+    return version
+
+
+def _require_canonical_framework_version(framework_version: str, root: Path) -> None:
+    if not isinstance(framework_version, str) or not framework_version.strip():
+        raise EvaluationError("framework version is required")
+    if framework_version != _canonical_framework_version(root):
+        raise EvaluationError("framework version must match the canonical manifest")
 
 
 def _canonical(value: Any) -> bytes:
@@ -255,6 +274,7 @@ def validate_release_report(report: Mapping[str, Any], *, schema_root: Path | No
     if not isinstance(report, Mapping):
         raise EvaluationError("release report must be an object")
     root = resolve_control_root(schema_root)
+    _require_canonical_framework_version(str(report.get("framework_version", "")), root)
     try:
         schema = load_json((root / "schemas" / "release-gate-report.schema.json").read_text(encoding="utf-8"))
     except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -725,6 +745,7 @@ def derive_verified_evidence_metrics(
 
     validation_root = resolve_control_root(schema_root)
     effective_framework_version = framework_version or _evidence_framework_version(evidence)
+    _require_canonical_framework_version(effective_framework_version, validation_root)
     resolved_keys, resolved_key_ids, _ = _resolve_release_verification_material(
         evidence,
         framework_version=effective_framework_version,
@@ -795,6 +816,7 @@ def evaluate_release_gates(
     # Caller-provided metrics are deliberately not trusted. Keep them out of
     # the evaluator entirely so a complete-looking JSON object cannot mint GA.
     validation_root = resolve_control_root(schema_root)
+    _require_canonical_framework_version(framework_version, validation_root)
     timestamp = _release_timestamp(evaluated_at)
     resolved_keys, resolved_key_ids, trust_errors = _resolve_release_verification_material(
         evidence,
