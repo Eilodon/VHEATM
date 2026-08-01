@@ -7,6 +7,28 @@ Auto-populated by: knowledge-compound skill (run after every adr-commit)
 ---
 date: 2026-08-01
 sprint: v17-kernel-closure
+adr: ADR-24 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: claim-to-gate-binding
+
+### New Domain Terms Added to CONTEXT.md
+- Claim gate binding: added ✅
+
+### Bug Patterns
+- A content-addressed verified claim could be reused by an unrelated passing gate because the claim identity carried sources but not gate scope; a trusted source could also bypass claim relevance when used directly: observed and fixed by canonical `gate_trace` identity, direct-source rejection, and report-boundary coverage checks; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A verified claim can be true while still irrelevant to the gate consuming it: added to CONTEXT.md Domain Gotchas ✅
+- A trusted source is not automatically a gate-specific proof: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Claims used for verified gate/finding evidence must be bound to every consuming gate, and changing that scope creates a new claim ID: added to CONTEXT.md ✅
+
+---
+date: 2026-08-01
+sprint: v17-kernel-closure
 adr: ADR-7 in docs/superskills/DPS_v5/ADR.md
 modules: [MOD-EVIDENCE-ANCHORS, MOD-EXECUTION-FIDELITY, MOD-CONTEXT-CONTRACT, MOD-SYSTEM-MAPS, MOD-ADVERSARIAL-PASS, MOD-CLOSURE-METRICS]
 ---

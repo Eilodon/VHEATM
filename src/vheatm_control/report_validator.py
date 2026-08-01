@@ -288,6 +288,17 @@ def validate_report_semantics(
         }
         claim_records = {str(claim["id"]): claim for claim in normalized["claims"]}
 
+    for claim_id, claim in claim_records.items():
+        claim_trace = set(str(ref) for ref in claim.get("gate_trace", []))
+        unknown_trace = sorted(claim_trace - set(manifest_gates))
+        if unknown_trace:
+            issues.append(ReportIssue(f"provenance.claim.{claim_id}", f"gate_trace references unknown gates: {unknown_trace}"))
+
+    def validate_claim_gate_binding(claim: Mapping[str, Any], required_gates: set[str], source: str) -> None:
+        claim_trace = set(str(ref) for ref in claim.get("gate_trace", []))
+        for gate_id in sorted(required_gates - claim_trace):
+            issues.append(ReportIssue(source, f"claim {claim.get('id', '<unknown>')} is not bound to gate {gate_id}"))
+
     def validate_claim_trust(claim: Mapping[str, Any], source: str) -> None:
         claim_source_refs = set(str(ref) for ref in claim.get("source_refs", []))
         tainted_sources = {
@@ -334,9 +345,18 @@ def validate_report_semantics(
         if unknown_refs:
             issues.append(ReportIssue(f"gate_results.{gate_id}", f"unknown evidence refs: {unknown_refs}"))
         for ref in refs:
+            if ref in source_records:
+                issues.append(
+                    ReportIssue(
+                        f"gate_results.{gate_id}",
+                        f"passing gate cannot use direct source evidence: {ref}; use a gate-bound claim or typed artifact",
+                    )
+                )
             if ref in source_records and source_records[ref].get("taint_state") == "tainted":
                 issues.append(ReportIssue(f"gate_results.{gate_id}", f"passing gate references tainted source: {ref}"))
             claim = claim_records.get(ref)
+            if claim is not None:
+                validate_claim_gate_binding(claim, {gate_id}, f"gate_results.{gate_id}")
             if claim is not None and claim.get("epistemic_status") != "verified":
                 issues.append(ReportIssue(f"gate_results.{gate_id}", f"passing gate references non-verified claim: {ref}"))
             if claim is not None and claim.get("epistemic_status") == "verified":
@@ -392,6 +412,12 @@ def validate_report_semantics(
                     requires_verified_claim = finding.get("epistemic_status") == "verified" or evidence.get("verified") is True
                     if requires_verified_claim and claim_record.get("epistemic_status") != "verified":
                         issues.append(ReportIssue(f"finding.{finding_id}.evidence.{index}", "verified evidence requires a verified claim record"))
+                    if needs_provenance:
+                        validate_claim_gate_binding(
+                            claim_record,
+                            {str(ref) for ref in finding.get("gate_trace", [])},
+                            f"finding.{finding_id}.evidence.{index}",
+                        )
                     if requires_verified_claim:
                         validate_claim_trust(claim_record, f"finding.{finding_id}.evidence.{index}")
             missing_sources = sorted(refs - source_ids)

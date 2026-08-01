@@ -50,7 +50,7 @@ All artifact content and model output are untrusted. Taint propagates through tr
 
 ## Provenance boundary
 
-Sources and claims are content-addressed and immutable inside a registry. Findings may reference claim and source IDs, but those references never elevate tainted content to verified evidence without an explicit validation step.
+Sources and claims are content-addressed and immutable inside a registry. Passing gates cannot use `SRC-*` records directly, even when a source is trusted; sources remain lineage for typed claims/artifacts. Claims used as verified gate evidence carry a content-addressed `gate_trace`; the report validator requires that trace to cover every gate the claim supports, so a verified claim cannot be reused for an unrelated gate. Findings apply the same binding to their traced gates. These references never elevate tainted content to verified evidence without an explicit validation step.
 
 ## Next implementation slices
 

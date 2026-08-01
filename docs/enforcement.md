@@ -14,7 +14,7 @@ Blocked and partial audits may return to running. No other transition is valid. 
 
 `vheatm-validate-report` validates both JSON Schema and cross-document semantics. A final report must bind to the canonical manifest and runtime policy, contain an exact 22-gate activation plan and result set, use `not_applicable` only for inactive gates, carry a valid provenance registry, and derive its lifecycle status rather than trusting caller-supplied completion claims.
 
-Verified or mandatory evidence must reference content-addressed claims and sources. Passing gates require evidence references. Attestations expire and bind to canonical manifest, runtime policy, and report subject digests.
+Verified or mandatory evidence must reference content-addressed claims and sources. Passing gates cannot use a source record directly; sources are lineage for typed claims or artifacts. Claims used by passing gates or verified findings must carry a content-addressed `gate_trace` covering the consuming gate(s); cross-gate claim reuse is rejected. Passing gates require evidence references. Attestations expire and bind to canonical manifest, runtime policy, and report subject digests.
 
 ## Runtime policy decisions
 

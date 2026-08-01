@@ -65,6 +65,7 @@ def test_registry_matches_schema() -> None:
         confidence=1.0,
         source_refs=[source["id"]],
         evidence_kind="document",
+        gate_trace=["HG-A"],
     )
     value = ProvenanceRegistry()
     value.add_source(source)

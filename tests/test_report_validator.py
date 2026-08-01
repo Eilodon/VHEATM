@@ -8,6 +8,7 @@ from vheatm_control.provenance import (
     build_claim_record,
     build_source_record,
     build_validation_receipt,
+    expected_claim_id,
 )
 from vheatm_control.report_validator import (
     canonical_digest,
@@ -54,6 +55,7 @@ def report() -> dict:
         source_refs=[source["id"]],
         evidence_kind="code",
         validation_receipt_refs=[receipt["id"]],
+        gate_trace=["HG-A"],
     )
     registry = ProvenanceRegistry()
     registry.add_source(source)
@@ -203,6 +205,83 @@ def report() -> dict:
 
 def test_complete_attested_report_passes_semantic_validation() -> None:
     assert validate_report_semantics(manifest=MANIFEST, policy=POLICY, report=report(), now=NOW) == []
+
+
+def test_verified_claim_must_be_bound_to_the_gate_it_supports() -> None:
+    value = report()
+    claim = dict(value["provenance"]["claims"][0])
+    claim["gate_trace"] = ["HG-B"]
+    claim["id"] = expected_claim_id(claim)
+    registry = ProvenanceRegistry()
+    registry.add_source(value["provenance"]["sources"][0])
+    registry.add_validation_receipt(value["provenance"]["validation_receipts"][0])
+    registry.add_claim(claim)
+    value["provenance"] = registry.to_document()
+    value["gate_results"][0]["evidence_refs"] = [claim["id"]]
+    value["execution"]["module_runs"][0]["result"]["evidence_refs"] = [claim["id"]]
+    value["execution"]["artifacts"][0]["payload"]["evidence_refs"] = [claim["id"]]
+    value["findings"][0]["evidence"][0]["claim_id"] = claim["id"]
+    value["attestation"]["subject_digest"] = report_subject_digest(value)
+
+    issues = validate_report_semantics(manifest=MANIFEST, policy=POLICY, report=value, now=NOW)
+
+    assert any("not bound to gate HG-A" in issue.message for issue in issues)
+
+
+def test_verified_finding_claim_must_cover_every_traced_gate() -> None:
+    value = report()
+    value["findings"][0]["gate_trace"] = ["HG-A", "HG-B"]
+    value["attestation"]["subject_digest"] = report_subject_digest(value)
+
+    issues = validate_report_semantics(manifest=MANIFEST, policy=POLICY, report=value, now=NOW)
+
+    assert any("not bound to gate HG-B" in issue.message for issue in issues)
+
+
+def test_report_rejects_claim_trace_for_unknown_gate() -> None:
+    value = report()
+    source = value["provenance"]["sources"][0]
+    receipt = value["provenance"]["validation_receipts"][0]
+    unknown_claim = build_claim_record(
+        text="Evidence for a gate outside this manifest.",
+        epistemic_status="verified",
+        confidence=0.9,
+        source_refs=[source["id"]],
+        evidence_kind="document",
+        validation_receipt_refs=[receipt["id"]],
+        gate_trace=["HG-UNKNOWN"],
+    )
+    registry = ProvenanceRegistry(value["provenance"])
+    registry.add_claim(unknown_claim)
+    value["provenance"] = registry.to_document()
+    value["attestation"]["subject_digest"] = report_subject_digest(value)
+
+    issues = validate_report_semantics(manifest=MANIFEST, policy=POLICY, report=value, now=NOW)
+
+    assert any("unknown gates" in issue.message for issue in issues)
+
+
+def test_passing_gate_cannot_use_direct_trusted_source_evidence() -> None:
+    value = report()
+    trusted_source = build_source_record(
+        source_type="document",
+        locator="policy://trusted-evidence",
+        content="canonical policy evidence",
+        trust_zone="system_policy",
+        taint_state="validated",
+        captured_at="2026-07-31T00:00:00Z",
+    )
+    registry = ProvenanceRegistry(value["provenance"])
+    registry.add_source(trusted_source)
+    value["provenance"] = registry.to_document()
+    value["gate_results"][0]["evidence_refs"] = [trusted_source["id"]]
+    value["execution"]["module_runs"][0]["result"]["evidence_refs"] = [trusted_source["id"]]
+    value["execution"]["artifacts"][0]["payload"]["evidence_refs"] = [trusted_source["id"]]
+    value["attestation"]["subject_digest"] = report_subject_digest(value)
+
+    issues = validate_report_semantics(manifest=MANIFEST, policy=POLICY, report=value, now=NOW)
+
+    assert any("direct source evidence" in issue.message for issue in issues)
 
 
 def test_missing_gate_result_cannot_claim_complete() -> None:

@@ -30,6 +30,12 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^VRF-[A-F0-9]{64}$"}
     },
+    "gate_trace": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^HG-[A-Z0-9]+$"}
+    },
     "evidence_kind": {"enum": ["code", "test", "runtime", "document", "external", "human", "model", "tool"]},
     "supersedes": {"type": "string", "pattern": "^CLM-[A-F0-9]{64}$"}
   },

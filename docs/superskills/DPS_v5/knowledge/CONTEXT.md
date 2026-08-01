@@ -25,6 +25,7 @@
 - **Immutable pilot transition:** the lifecycle check that recomputes a pilot revision ID before completion or rollback may consume its fields. <!-- from ADR: ADR-21 -->
 - **Provider qualification state:** the canonical allowlist state separating a provider that may participate in shadow contract observation from one qualified for canary. <!-- from ADR: ADR-22 -->
 - **Verified sandbox backend:** the executable whose bytes match the execute request's digest and whose open file descriptor is reused for reference-monitor preflight and action launch. <!-- from ADR: ADR-23 -->
+- **Claim gate binding:** the content-addressed `gate_trace` on a claim that identifies the gate(s) for which verified evidence is valid; report validation rejects cross-gate reuse. <!-- from ADR: ADR-24 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -48,6 +49,8 @@
 - Pilot status is not pilot integrity; completion and rollback must revalidate the content-addressed pilot ID before consuming mutable fields. <!-- from ADR: ADR-21 -->
 - A broker allow receipt authorizes a network action but does not qualify the provider; allowlist membership is required for runs and `qualified` state is required for canary. <!-- from ADR: ADR-22 -->
 - Execute authorization must bind the backend executable digest; per-run rehash plus FD-bound launch is required before a sandbox outcome can claim authorized execution. <!-- from ADR: ADR-23 -->
+- Verified gate evidence must bind its claim to every consuming gate; a generic verified claim cannot be reused across unrelated gates without a new content address. <!-- from ADR: ADR-24 -->
+- Passing gates cannot use `SRC-*` records as direct evidence; a source must remain lineage for a gate-bound claim or typed artifact. <!-- from ADR: ADR-24 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -71,3 +74,5 @@
 - [2026-08] A `ready` pilot can be caller-mutated between preparation and completion | Recompute its immutable identity at every lifecycle transition, not only at creation. <!-- from ADR: ADR-21 -->
 - [2026-08] A valid provider receipt can hide an unallowlisted or unqualified implementation | Bind provider ID/version to canonical policy and reserve `qualified` for external evidence. <!-- from ADR: ADR-22 -->
 - [2026-08] A backend can change after executor construction or between hash and launch | Include its digest in the execute request, revalidate every run, and launch the verified FD; host provenance remains external. <!-- from ADR: ADR-23 -->
+- [2026-08] A verified claim can be semantically valid yet unrelated to the gate consuming it | Include `gate_trace` in claim identity and require report evidence to cover the consuming gate. <!-- from ADR: ADR-24 -->
+- [2026-08] A trusted source can still be raw, gate-irrelevant material | Reject direct source evidence at the passing-gate boundary and require a typed claim/artifact. <!-- from ADR: ADR-24 -->

@@ -43,6 +43,8 @@
 - Pilot completion and rollback now revalidate the prepared pilot's immutable content-addressed ID; caller-mutated execution mode or scope cannot cross a lifecycle transition.
 - Provider execution and persisted-run verification now require canonical allowlist membership; shadow accepts only `pending` allowlisted providers and canary requires external `qualified` state, with all local entries intentionally pending.
 - Execute approvals now bind the backend executable digest; the sandbox revalidates bytes per run and passes the verified backend FD to preflight/action launch to narrow TOCTOU exposure.
+- Verified claims used by gates/findings now carry content-addressed gate traces; report validation rejects a claim whose trace does not cover the consuming gate, closing generic-claim cross-gate reuse.
+- Passing gates now reject direct `SRC-*` evidence, including trusted sources; source records must remain lineage for a gate-bound claim or typed artifact.
 - Semantic migration now has schema-bound, non-authoritative records for signal/noise decisions, FAST/Standard/Full legacy-output mapping, enterprise stakeholder ownership, cross-cutting L7 obligations, ordered temporal/L4 scans, AI-RMF governance, and assurance maturity deltas; unknown and tainted states remain explicit.
 
 ## Verification gates
@@ -50,7 +52,7 @@
 Fresh evidence for this cycle:
 
 - `.venv/bin/vheatm-validate --root .` — pass.
-- `.venv/bin/pytest -o addopts=''` — 258 passed.
+- `.venv/bin/pytest -o addopts=''` — 263 passed.
 - Release-evidence regressions cover signed qualification and supply-chain documents with undeclared fields; both fail closed at the direct evaluator boundary.
 - Qualification regressions reject signed evidence with arbitrary method digests and verify canonical method-policy/bundle binding.
 - Supply-chain regressions reject stale/future vulnerability scans and reuse of one signing key across release, vulnerability, and provenance roles.
@@ -62,6 +64,8 @@ Fresh evidence for this cycle:
 - `uv build --wheel --sdist` — pass; package assets include the migration corpus, seeded eval corpus, standards/semantic policies, schemas, and `uv.lock`.
 - Global authority scan — no built-in `eval`/`exec`, shell interpolation, or target-code import/execution in the control runtime; the only subprocess boundary is the explicit digest-bound sandbox adapter with `shell=False`, while activation remains parser-backed (`ast.literal_eval` only).
 - Backend-integrity regression — backend replacement after executor construction is blocked, and execute request/approval identity includes `executable_digest`; verified backend FD is reused for preflight and action launch.
+- Provenance/report regressions — a claim bound to `HG-B` cannot support passing `HG-A`; gate binding is part of the claim identity and schema-valid claims remain immutable.
+- Direct-source regression — a trusted `SRC-*` record cannot be promoted to passing gate evidence without a typed gate-bound claim/artifact.
 
 ## Explicitly not complete
 

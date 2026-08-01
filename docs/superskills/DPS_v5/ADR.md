@@ -1655,3 +1655,79 @@ Start the next cycle when a deployment supplies a trusted backend attestation or
 - A backend digest is useful only when it participates in the authorization identity and is used for the same file that is executed.
 - Revalidation and FD binding are complementary: the first catches drift, the second prevents reopening a changed path after verification.
 - Local enforcement can close a code-path gap while production trust remains explicitly evidence-dependent.
+
+## ADR-24 — Bind verified claims to their consuming gates
+
+**Status:** ✅ ACCEPTED
+**Date:** 2026-08-01
+**Deciders:** VHEATM maintainers
+**Tags:** `provenance` `claims` `gate-binding` `report-validation` `fail-closed`
+**Change Classification:** `SECURITY HARDENING`
+**Review date:** 2026-09-01 — or earlier when claim schemas, finding evidence, or report gate derivation changes.
+**Supersedes:** —
+**Superseded by:** —
+
+**DECISION TYPE:** `CONSTRAINT-FORCED`
+**CONFIDENCE:** `HIGH` for local content-addressed claim/report enforcement; `NOT_PRODUCTION_QUALIFIED` for the still-open external qualification and pilot evidence.
+**LAST CONFIRMED:** 2026-08-01 — `IMPLEMENTATION`, `TESTS`, `VALIDATION`
+**VOLATILITY:** `WATCHFUL` — gate taxonomy and evidence aggregation may add multi-gate claim use cases.
+
+### Context
+
+Claims were content-addressed to their text, source references, validation receipts, and evidence kind, but not to the gates for which they were relevant. A verified claim could therefore be copied into a different passing gate or finding while remaining schema-valid and cryptographically consistent. Passing gates also accepted a trusted `SRC-*` record directly, allowing source material to bypass claim-level relevance entirely. Truth of a claim and relevance to a gate are separate properties; the report boundary had no canonical field with which to enforce the latter.
+
+### Decision
+
+Add an optional, structurally validated `gate_trace` to claim records. When present, the trace is included in the claim content identity, so changing gate scope creates a new immutable `CLM-*` record. Report semantic validation rejects unknown claim gate IDs and requires every claim used by a passing gate to cover that gate; verified or mandatory finding evidence must cover every gate in the finding trace. Passing gates reject direct `SRC-*` evidence, including trusted sources; source records remain lineage for gate-bound claims or typed artifacts. Generic claims remain available for non-gate provenance, but they cannot authorize a passing gate or verified finding without an explicit binding.
+
+### Options Considered
+
+- Infer relevance from source paths or claim wording: rejected because routing by filenames, prose, or model intuition violates canonical gate selection.
+- Treat module `gate_trace` as sufficient: rejected because module ownership proves where a result was emitted, not that each referenced claim is relevant to the consuming gate.
+- Require every historical claim to gain a gate trace immediately: rejected because generic provenance remains useful outside gate evidence and immutable records cannot be silently rewritten.
+- Store gate scope only in the report: rejected because changing evidence scope would not create a new content address and a claim could be detached from its canonical relevance.
+- Permit trusted source records directly as gate evidence: rejected because trust/taint state does not prove gate relevance or semantic validation.
+
+### Impact
+
+Schemas changed: `schemas/claim.schema.json`.
+Components changed: provenance claim identity/building, report semantic validator, provenance/report regression tests, architecture and lifecycle documentation.
+Breaking change: **YES** for passing-gate or verified-finding evidence that omits a relevant claim gate trace.
+
+IMPACT RADIUS: **HIGH**
+Cascades: `claim identity → provenance registry → module/report evidence → derived gate result → release evidence`.
+Cascade Review: ✅ Done — RED cross-gate reuse, GREEN content-address identity, schema coverage, report-boundary checks, full suite, validator, and package checks cover the changed boundary.
+
+### Consequences
+
+- A claim remains immutable when its gate scope changes; the new scope receives a new ID and journal entry.
+- A passing gate can no longer consume a verified claim that is bound only to an unrelated gate or to no gate, nor a trusted source record without typed gate context.
+- Verified findings receive the same relevance protection across their full gate trace.
+- Generic non-gate claims retain backward-compatible identity when no trace is supplied; external qualification evidence and pilot readiness remain separately blocked by their own prerequisites.
+- Consumers constructing gate evidence must now provide gate scope explicitly, adding a small amount of context to claim creation.
+
+### Evidence
+
+- [verified 2026-08-01] RED report regression accepted a claim whose declared gate scope was `HG-B` while `HG-A` passed.
+- [verified 2026-08-01] GREEN report validation rejects the mismatch with a typed gate-binding issue, and changing `gate_trace` changes the content-addressed claim ID.
+- [verified 2026-08-01] GREEN report validation rejects direct trusted `SRC-*` evidence and requires a typed gate-bound claim/artifact path.
+- [verified 2026-08-01] Schema/provenance/report tests pass for valid traces and invalid/unknown trace cases; no production qualification or GA evidence was created.
+
+### Owner
+
+**VHEATM maintainers**
+
+### Known Debts (PATTERN-DEBT)
+
+PATTERN-DEBT entries introduced or affected by this change: none registered. External private/time-sliced qualification, trusted key custody, provider qualification, host namespace capability, vulnerability feed, and successful shadow/canary observation remain open.
+
+### Next Cycle Trigger
+
+Start the next cycle when a new gate taxonomy or multi-gate evidence aggregator is introduced; add explicit coverage tests for shared claims and rerun the cross-gate mutation suite before changing the identity projection.
+
+### Cycle Retrospective
+
+- A claim can be true and verified while still being irrelevant to the gate consuming it.
+- Content-addressing protects integrity only for fields included in the identity projection.
+- Module ownership traces and claim relevance traces are complementary boundaries, not substitutes.
+- Keeping generic claims non-gate-bound preserves provenance reuse without allowing them to mint release gate passes.

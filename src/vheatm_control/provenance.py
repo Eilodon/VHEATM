@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from contextlib import contextmanager
 from copy import deepcopy
@@ -100,6 +101,24 @@ def _validate_source_trust_state(record: Mapping[str, Any]) -> None:
         raise ProvenanceError("untrusted source content must remain tainted until an explicit validation receipt exists")
 
 
+def _normalize_gate_trace(record: Mapping[str, Any]) -> list[str]:
+    if "gate_trace" not in record:
+        return []
+    raw_trace = record.get("gate_trace")
+    if not isinstance(raw_trace, (list, tuple, set)):
+        raise ProvenanceError("claim gate_trace must be an array")
+    values = [str(value) for value in raw_trace]
+    if len(values) != len(set(values)):
+        raise ProvenanceError("claim gate_trace must contain unique gate ids")
+    trace = sorted(set(values))
+    if not trace:
+        raise ProvenanceError("claim gate_trace must contain at least one gate")
+    invalid = sorted(value for value in trace if re.fullmatch(r"HG-[A-Z0-9]+", value) is None)
+    if invalid:
+        raise ProvenanceError(f"claim gate_trace contains invalid gate ids: {invalid}")
+    return trace
+
+
 def _claim_identity(record: Mapping[str, Any]) -> dict[str, Any]:
     text = " ".join(str(record.get("text", "")).split())
     refs = sorted(set(str(value) for value in record.get("source_refs", [])))
@@ -116,6 +135,9 @@ def _claim_identity(record: Mapping[str, Any]) -> dict[str, Any]:
     lineage_refs = sorted(set(str(value) for value in record.get("lineage_refs", [])))
     if lineage_refs:
         identity["lineage_refs"] = lineage_refs
+    gate_trace = _normalize_gate_trace(record)
+    if gate_trace:
+        identity["gate_trace"] = gate_trace
     return identity
 
 
@@ -240,8 +262,10 @@ def build_claim_record(
     supersedes: str | None = None,
     validation_receipt_refs: Iterable[str] = (),
     lineage_refs: Iterable[str] = (),
+    gate_trace: Iterable[str] = (),
 ) -> dict[str, Any]:
     lineage_refs = sorted(set(lineage_refs))
+    gate_trace = _normalize_gate_trace({"gate_trace": gate_trace}) if gate_trace else []
     identity = {
         "text": " ".join(text.split()),
         "epistemic_status": epistemic_status,
@@ -251,6 +275,8 @@ def build_claim_record(
     }
     if lineage_refs:
         identity["lineage_refs"] = lineage_refs
+    if gate_trace:
+        identity["gate_trace"] = gate_trace
     if not identity["text"]:
         raise ProvenanceError("claim text cannot be empty")
     if epistemic_status == "unknown" and confidence is not None:

@@ -77,6 +77,47 @@ def test_claim_id_is_recomputed_and_unknown_refs_rejected() -> None:
         registry.add_claim(dict(claim, id="CLM-" + "B" * 64))
 
 
+def test_claim_gate_binding_is_content_addressed_and_structurally_valid() -> None:
+    record = source()
+    claim_a = build_claim_record(
+        text="The control is enforced.",
+        epistemic_status="verified",
+        confidence=1.0,
+        source_refs=[record["id"]],
+        evidence_kind="test",
+        gate_trace=["HG-A"],
+    )
+    claim_b = build_claim_record(
+        text="The control is enforced.",
+        epistemic_status="verified",
+        confidence=1.0,
+        source_refs=[record["id"]],
+        evidence_kind="test",
+        gate_trace=["HG-B"],
+    )
+    assert claim_a["id"] != claim_b["id"]
+    assert claim_a["gate_trace"] == ["HG-A"]
+
+    with pytest.raises(ProvenanceError, match="invalid gate ids"):
+        build_claim_record(
+            text="Malformed gate binding.",
+            epistemic_status="inferred",
+            confidence=0.2,
+            source_refs=[record["id"]],
+            evidence_kind="document",
+            gate_trace=["NOT-A-GATE"],
+        )
+    with pytest.raises(ProvenanceError, match="unique gate ids"):
+        build_claim_record(
+            text="Duplicate gate binding.",
+            epistemic_status="inferred",
+            confidence=0.2,
+            source_refs=[record["id"]],
+            evidence_kind="document",
+            gate_trace=["HG-A", "HG-A"],
+        )
+
+
 def test_untrusted_source_cannot_self_declare_validated() -> None:
     with pytest.raises(ProvenanceError, match="tainted"):
         build_source_record(
