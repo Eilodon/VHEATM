@@ -13,12 +13,31 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .bundle import build_bundle
+from .serialization import load_yaml
 from .signer_service import SignerClient, SignerServiceError
 from .supply_chain_policy import SupplyChainPolicyError, vulnerability_scan_max_age_seconds
 
 
 class SupplyChainError(ValueError):
     """Raised when signed supply-chain evidence is malformed or mismatched."""
+
+
+def _canonical_framework_version(root: Path) -> str:
+    try:
+        manifest = load_yaml((root / "manifests" / "vheatm-v17.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SupplyChainError(f"canonical framework manifest cannot be read: {exc}") from exc
+    version = manifest.get("framework", {}).get("version") if isinstance(manifest, Mapping) else None
+    if not isinstance(version, str) or not version.strip():
+        raise SupplyChainError("canonical framework manifest has no framework version")
+    return version
+
+
+def _require_persisted_framework_version(document: Mapping[str, Any]) -> str:
+    version = document.get("framework_version")
+    if not isinstance(version, str) or not version.strip():
+        raise SupplyChainError("supply-chain evidence framework version is missing")
+    return version
 
 
 def _canonical(value: Any) -> bytes:
@@ -102,6 +121,9 @@ def _sign_with_configured_authority(
             raise SupplyChainError("external signer requires the expected Ed25519 public key")
         if not isinstance(framework_version, str) or not framework_version.strip():
             raise SupplyChainError("external signer requires the canonical framework version")
+        persisted_framework_version = _require_persisted_framework_version(subject)
+        if framework_version != persisted_framework_version:
+            raise SupplyChainError("external signer framework version does not match persisted framework version")
         try:
             receipt = signer.sign(
                 _canonical(subject),
@@ -185,12 +207,17 @@ def build_supply_chain_attestation(
     vulnerability_scan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     bundle = build_bundle(root)
+    framework_version = _canonical_framework_version(root)
     sbom = [{"path": entry["path"], "sha256": entry["sha256"]} for entry in bundle["entries"]]
     sbom_digest = hashlib.sha256(_canonical(sbom)).hexdigest()
     lock_present, lock_path, lock_digest = _lock_binding(root)
     scan_id, scan_digest, critical_count = _scan_binding(vulnerability_scan)
+    if isinstance(vulnerability_scan, Mapping) and vulnerability_scan.get("verification_state") == "verified":
+        if _require_persisted_framework_version(vulnerability_scan) != framework_version:
+            raise SupplyChainError("verified vulnerability scan framework version does not match the canonical framework")
     identity: dict[str, Any] = {
         "schema_version": "1.0.0",
+        "framework_version": framework_version,
         "bundle_root": bundle["bundle_root"],
         "sbom": sbom,
         "sbom_digest": sbom_digest,
@@ -219,6 +246,7 @@ def sign_supply_chain_attestation(
 ) -> dict[str, Any]:
     if not key_id.strip():
         raise SupplyChainError("supply-chain signing key_id is required")
+    _require_persisted_framework_version(attestation)
     if attestation.get("attestation_id") != expected_attestation_id(attestation):
         raise SupplyChainError("attestation_id does not match immutable attestation content")
     signed = dict(attestation)
@@ -232,10 +260,14 @@ def sign_supply_chain_attestation(
 
 
 def verify_supply_chain_attestation(
-    attestation: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None, root: Path | None = None
+    attestation: Mapping[str, Any], *, public_key: Ed25519PublicKey, key_id: str | None = None,
+    root: Path | None = None, expected_framework_version: str | None = None,
 ) -> dict[str, Any]:
     if attestation.get("schema_version") != "1.0.0":
         raise SupplyChainError("attestation schema version is invalid")
+    persisted_framework_version = _require_persisted_framework_version(attestation)
+    if expected_framework_version is not None and persisted_framework_version != expected_framework_version:
+        raise SupplyChainError("attestation framework version does not match the release")
     if attestation.get("attestation_id") != expected_attestation_id(attestation):
         raise SupplyChainError("attestation_id does not match immutable attestation content")
     sbom = attestation.get("sbom")
@@ -262,6 +294,7 @@ def verify_supply_chain_attestation(
         except (OSError, ValueError) as exc:
             raise SupplyChainError(f"canonical bundle binding cannot be verified: {exc}") from exc
         for field in (
+            "framework_version",
             "bundle_root",
             "sbom",
             "sbom_digest",
@@ -287,17 +320,21 @@ def build_vulnerability_scan(
     *,
     scanner_id: str,
     scanner_version: str,
+    framework_version: str,
     target_bundle_root: str,
     target_lock_digest: str,
     findings: list[Mapping[str, Any]],
     generated_at: str,
 ) -> dict[str, Any]:
+    if not isinstance(framework_version, str) or not framework_version.strip():
+        raise SupplyChainError("vulnerability scan framework version is required")
     normalized = [dict(item) for item in findings]
     if len({item.get("vulnerability_id") for item in normalized}) != len(normalized):
         raise SupplyChainError("vulnerability IDs must be unique")
     critical_count = sum(1 for item in normalized if item.get("severity") == "critical" and item.get("exploitable") is True)
     scan: dict[str, Any] = {
         "schema_version": "1.0.0",
+        "framework_version": framework_version,
         "scanner_id": scanner_id,
         "scanner_version": scanner_version,
         "target_bundle_root": target_bundle_root,
@@ -319,6 +356,7 @@ def sign_vulnerability_scan(
     signer: SignerClient | None = None, framework_version: str | None = None,
     public_key: Ed25519PublicKey | None = None, created_at: str | None = None,
 ) -> dict[str, Any]:
+    _require_persisted_framework_version(scan)
     if scan.get("scan_id") != expected_vulnerability_scan_id(scan):
         raise SupplyChainError("scan_id does not match immutable scan content")
     signed = dict(scan)
@@ -338,9 +376,13 @@ def verify_vulnerability_scan(
     bundle_root: str,
     lock_digest: str,
     key_id: str | None = None,
+    expected_framework_version: str | None = None,
 ) -> dict[str, Any]:
     if scan.get("schema_version") != "1.0.0" or not isinstance(scan.get("scanner_id"), str) or not scan["scanner_id"].strip() or not isinstance(scan.get("scanner_version"), str) or not scan["scanner_version"].strip():
         raise SupplyChainError("vulnerability scan identity is malformed")
+    persisted_framework_version = _require_persisted_framework_version(scan)
+    if expected_framework_version is not None and persisted_framework_version != expected_framework_version:
+        raise SupplyChainError("vulnerability scan framework version does not match the release")
     if scan.get("scan_id") != expected_vulnerability_scan_id(scan):
         raise SupplyChainError("scan_id does not match immutable scan content")
     if scan.get("target_bundle_root") != bundle_root or scan.get("target_lock_digest") != lock_digest:
@@ -405,6 +447,7 @@ def sign_provenance_statement(
         raise SupplyChainError("provenance statement identity is malformed")
     if statement.get("statement_id") != expected_provenance_statement_id(statement):
         raise SupplyChainError("provenance statement identity is invalid")
+    _require_persisted_framework_version(statement)
     signed = dict(statement)
     signed.update({"signature_algorithm": "ed25519", "signature_key_id": key_id})
     signed["signature_value"] = _sign_with_configured_authority(
@@ -424,6 +467,8 @@ def verify_provenance_statement(
 ) -> dict[str, Any]:
     if statement.get("schema_version") != "1.0.0" or not isinstance(statement.get("builder_id"), str) or not statement["builder_id"].strip() or not isinstance(statement.get("build_type"), str) or not statement["build_type"].strip():
         raise SupplyChainError("provenance statement identity is malformed")
+    if _require_persisted_framework_version(statement) != _require_persisted_framework_version(attestation):
+        raise SupplyChainError("provenance statement framework version does not match the attestation")
     if statement.get("statement_id") != expected_provenance_statement_id(statement):
         raise SupplyChainError("provenance statement identity is invalid")
     if statement.get("bundle_root") != attestation.get("bundle_root") or statement.get("sbom_digest") != attestation.get("sbom_digest"):

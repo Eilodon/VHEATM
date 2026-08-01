@@ -617,6 +617,7 @@ def _verified_host_metrics(
 def _verified_supply_chain_metrics(
     evidence: Mapping[str, Any],
     *,
+    framework_version: str,
     expected_bundle_root: str | None,
     verification_keys: Mapping[str, Ed25519PublicKey] | None,
     verification_key_ids: Mapping[str, str] | None,
@@ -663,6 +664,7 @@ def _verified_supply_chain_metrics(
             bundle_root=str(attestation.get("bundle_root", "")),
             lock_digest=str(attestation.get("dependency_lock_digest", "")),
             key_id=_key_id(verification_key_ids, "vulnerability"),
+            expected_framework_version=framework_version,
         )
         verify_vulnerability_scan_freshness(verified_scan, evaluated_at=str(evaluated_at or ""), root=schema_root)
         verified_attestation = verify_supply_chain_attestation(
@@ -670,6 +672,7 @@ def _verified_supply_chain_metrics(
             public_key=release_key,
             key_id=_key_id(verification_key_ids, "supply_chain"),
             root=schema_root,
+            expected_framework_version=framework_version,
         )
         scan_digest = _digest({key: value for key, value in verified_scan.items() if key != "signature_value"})
         if verified_attestation.get("vulnerability_scan_id") != verified_scan.get("scan_id") or verified_attestation.get("vulnerability_scan_digest") != scan_digest:
@@ -764,6 +767,7 @@ def derive_verified_evidence_metrics(
     else:
         supply_metrics, _ = _verified_supply_chain_metrics(
             evidence,
+            framework_version=effective_framework_version,
             expected_bundle_root=expected_bundle_root,
             verification_keys=resolved_keys,
             verification_key_ids=resolved_key_ids,
@@ -834,6 +838,7 @@ def evaluate_release_gates(
     else:
         supply_metrics, supply_errors = _verified_supply_chain_metrics(
             evidence,
+            framework_version=framework_version,
             expected_bundle_root=expected_bundle_root,
             verification_keys=resolved_keys,
             verification_key_ids=resolved_key_ids,

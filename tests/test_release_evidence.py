@@ -478,6 +478,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     scan = build_vulnerability_scan(
         scanner_id="scanner:v17",
         scanner_version="1.0.0",
+        framework_version="17.0.0-dev.1",
         target_bundle_root=base_attestation["bundle_root"],
         target_lock_digest=base_attestation["dependency_lock_digest"],
         findings=[],
@@ -497,6 +498,7 @@ def test_release_gates_require_cryptographically_verified_qualification_and_supp
     )
     provenance = {
         "schema_version": "1.0.0",
+        "framework_version": attestation["framework_version"],
         "bundle_root": attestation["bundle_root"],
         "sbom_digest": attestation["sbom_digest"],
         "builder_id": "builder:test",
@@ -655,6 +657,7 @@ def test_release_gates_reject_signed_attestation_with_noncanonical_sbom() -> Non
     scan = build_vulnerability_scan(
         scanner_id="scanner:v17",
         scanner_version="1.0.0",
+        framework_version="17.0.0-dev.1",
         target_bundle_root=base_attestation["bundle_root"],
         target_lock_digest=base_attestation["dependency_lock_digest"],
         findings=[],
@@ -681,6 +684,7 @@ def test_release_gates_reject_signed_attestation_with_noncanonical_sbom() -> Non
     signed_attestation = sign_supply_chain_attestation(forged, private_key=release_key, key_id="supply-chain-key")
     provenance = {
         "schema_version": "1.0.0",
+        "framework_version": signed_attestation["framework_version"],
         "bundle_root": signed_attestation["bundle_root"],
         "sbom_digest": signed_attestation["sbom_digest"],
         "builder_id": "builder:test",

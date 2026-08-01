@@ -78,6 +78,7 @@ def test_supply_chain_attestation_binds_verified_uv_lock() -> None:
     lock_path = ROOT / "uv.lock"
     assert lock_path.is_file()
     attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
+    assert attestation["framework_version"] == "17.0.0-dev.1"
     assert attestation["dependency_lock_present"] is True
     assert attestation["dependency_lock_digest"] == hashlib.sha256(lock_path.read_bytes()).hexdigest()
     assert attestation["dependency_lock_path"] == "uv.lock"
@@ -87,6 +88,7 @@ def test_vulnerability_scan_cannot_be_future_dated_against_evaluation() -> None:
     scan = build_vulnerability_scan(
         scanner_id="test-scanner",
         scanner_version="1.0.0",
+        framework_version="17.0.0-dev.1",
         target_bundle_root="a" * 64,
         target_lock_digest="b" * 64,
         findings=[],
@@ -103,6 +105,7 @@ def test_signed_attestation_and_vulnerability_scan_are_cryptographically_bound()
     scan = build_vulnerability_scan(
         scanner_id="test-scanner",
         scanner_version="1.0.0",
+        framework_version="17.0.0-dev.1",
         target_bundle_root=attestation["bundle_root"],
         target_lock_digest=attestation["dependency_lock_digest"],
         findings=[
@@ -133,6 +136,7 @@ def test_signed_attestation_and_vulnerability_scan_are_cryptographically_bound()
 
     provenance = {
         "schema_version": "1.0.0",
+        "framework_version": verified["framework_version"],
         "bundle_root": verified["bundle_root"],
         "sbom_digest": verified["sbom_digest"],
         "builder_id": "builder:test",
@@ -170,6 +174,7 @@ def test_supply_chain_artifacts_can_be_signed_only_through_external_signer_clien
     scan = build_vulnerability_scan(
         scanner_id="test-scanner",
         scanner_version="1.0.0",
+        framework_version="17.0.0-dev.1",
         target_bundle_root=attestation["bundle_root"],
         target_lock_digest=attestation["dependency_lock_digest"],
         findings=[],
@@ -192,6 +197,7 @@ def test_supply_chain_artifacts_can_be_signed_only_through_external_signer_clien
 
     provenance = {
         "schema_version": "1.0.0",
+        "framework_version": attestation["framework_version"],
         "bundle_root": attestation["bundle_root"],
         "sbom_digest": attestation["sbom_digest"],
         "builder_id": "builder:test",
@@ -216,6 +222,88 @@ def test_supply_chain_artifacts_can_be_signed_only_through_external_signer_clien
         public_key=key.public_key(),
         key_id="provenance-key",
     )["provenance_verified"] is True
+
+
+def test_supply_chain_external_signer_scope_must_match_persisted_framework() -> None:
+    key = Ed25519PrivateKey.generate()
+    attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
+
+    with pytest.raises(SupplyChainError, match="framework version"):
+        sign_supply_chain_attestation(
+            attestation,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            public_key=key.public_key(),
+            key_id="release-key",
+        )
+
+
+def test_supply_chain_scan_and_provenance_scope_cannot_drift_from_records() -> None:
+    key = Ed25519PrivateKey.generate()
+    attestation = build_supply_chain_attestation(ROOT, generated_at="2026-08-01T00:00:00Z")
+    scan = build_vulnerability_scan(
+        scanner_id="test-scanner",
+        scanner_version="1.0.0",
+        framework_version=attestation["framework_version"],
+        target_bundle_root=attestation["bundle_root"],
+        target_lock_digest=attestation["dependency_lock_digest"],
+        findings=[],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    with pytest.raises(SupplyChainError, match="framework version"):
+        sign_vulnerability_scan(
+            scan,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            public_key=key.public_key(),
+            key_id="vulnerability-key",
+        )
+
+    foreign_scan = build_vulnerability_scan(
+        scanner_id="foreign-scanner",
+        scanner_version="1.0.0",
+        framework_version="17.0.0-foreign",
+        target_bundle_root=attestation["bundle_root"],
+        target_lock_digest=attestation["dependency_lock_digest"],
+        findings=[],
+        generated_at="2026-08-01T00:00:00Z",
+    )
+    foreign_verified_scan = verify_vulnerability_scan(
+        sign_vulnerability_scan(foreign_scan, private_key=key, key_id="foreign-key"),
+        public_key=key.public_key(),
+        bundle_root=attestation["bundle_root"],
+        lock_digest=attestation["dependency_lock_digest"],
+        key_id="foreign-key",
+    )
+    with pytest.raises(SupplyChainError, match="canonical framework"):
+        build_supply_chain_attestation(
+            ROOT,
+            generated_at="2026-08-01T00:00:00Z",
+            vulnerability_scan=foreign_verified_scan,
+        )
+
+    provenance = {
+        "schema_version": "1.0.0",
+        "framework_version": attestation["framework_version"],
+        "bundle_root": attestation["bundle_root"],
+        "sbom_digest": attestation["sbom_digest"],
+        "builder_id": "builder:test",
+        "build_type": "test-build",
+        "verified": True,
+        "signature_algorithm": "ed25519",
+        "signature_key_id": "provenance-key",
+        "signature_value": None,
+        "generated_at": "2026-08-01T00:00:00Z",
+    }
+    provenance["statement_id"] = expected_provenance_statement_id(provenance)
+    with pytest.raises(SupplyChainError, match="framework version"):
+        sign_provenance_statement(
+            provenance,
+            signer=_signer_client(key),
+            framework_version="17.0.0-wrong",
+            public_key=key.public_key(),
+            key_id="provenance-key",
+        )
 
 
 def test_supply_chain_signer_service_failure_never_falls_back_to_private_signing() -> None:
