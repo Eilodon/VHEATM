@@ -546,3 +546,26 @@ modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-F
 - `qualified` is not a valid policy state without qualification evidence references, and current local entries remain pending: added to CONTEXT.md ✅
 
 ---
+
+date: 2026-08-02
+sprint: v17-kernel-closure
+adr: ADR-31 in docs/superskills/DPS_v5/ADR.md
+modules: [MOD-AGENT-SECURITY, MOD-CLOSURE-METRICS, MOD-EXECUTION-FIDELITY, MOD-FIX-VERIFICATION]
+---
+
+## Cycle: qualification-bundle-replay-resistance
+
+### New Domain Terms Added to CONTEXT.md
+- Bundle-bound qualification evidence: added ✅
+- Qualification bundle replay: added ✅
+
+### Bug Patterns
+- A signed private time-slice record could be replayed against a different bundle with the same framework version: observed and fixed by including `bundle_root` in the evidence identity/signature and requiring the current root at release evaluation; no PATTERN-DEBT entry (first occurrence).
+
+### Gotchas Captured
+- A time slice identifies the qualification population, not the runtime bytes that produced the metrics: added to CONTEXT.md Domain Gotchas ✅
+
+### Architectural Decisions Promoted
+- Release qualification metrics require an externally supplied current bundle root; missing or mismatched roots remain unavailable, while lower-level offline verification may remain explicit and non-authoritative: added to CONTEXT.md Architectural Decisions ✅
+
+---

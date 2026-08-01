@@ -1,5 +1,5 @@
 # CONTEXT.md — Domain Knowledge
-<!-- Version: 22 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
+<!-- Version: 23 — populate via domain-alignment skill, then keep updated via knowledge-compound -->
 
 ## Ubiquitous Language
 <!-- Add domain terms where the word means something more specific than common usage -->
@@ -34,6 +34,8 @@
 - **Strict JSON boundary:** the shared loader and runtime transport/CAS readers reject duplicate keys and non-finite JSON constants before typed evidence or persisted state is interpreted. <!-- from ADR: ADR-29 -->
 - **Canonical provider binding:** the provider policy fields that bind an adapter profile, exact endpoint, and configuration digest to an allowlisted provider/version before broker or pilot use. <!-- from ADR: ADR-30 -->
 - **Qualification evidence reference:** a canonical reference required before a provider policy entry may claim `qualified`; the reference is not itself proof until an external authority makes its evidence verifiable. <!-- from ADR: ADR-30 -->
+- **Bundle-bound qualification evidence:** signed private measurement evidence whose content identity includes the exact canonical control-bundle root consumed by release evaluation. <!-- from ADR: ADR-31 -->
+- **Qualification bundle replay:** reuse of valid time-sliced qualification evidence against a different control bundle; release evaluation must reject it even when the framework version is unchanged. <!-- from ADR: ADR-31 -->
 
 ## Architectural Decisions
 <!-- Decisions with applicability beyond a single feature -->
@@ -66,6 +68,7 @@
 - The HAT signed subject must include signature algorithm and key ID; unsigned key labels can be relabeled without cryptographic failure. <!-- from ADR: ADR-29 -->
 - Python's JSON Schema validator accepts `NaN` as a `number`; reject non-finite JSON constants at parsing and typed-run boundaries rather than relying on schema minimums. <!-- from ADR: ADR-29 -->
 - Provider endpoint, adapter profile, and configuration digest must be canonical policy bindings checked before broker/transport and before pilot evidence; a `qualified` state also requires evidence references. <!-- from ADR: ADR-30 -->
+- Private qualification evidence must bind its content address and signature to the current control-bundle root; release evaluation requires the caller to supply that root and leaves metrics unavailable when it is absent or mismatched. <!-- from ADR: ADR-31 -->
 
 ## Domain Gotchas
 <!-- Format: - [YYYY-MM] What surprised us | Why it matters -->
@@ -98,3 +101,4 @@
 - [2026-08] A signed host record can retain a valid signature after its key label is renamed if key metadata is outside the signed subject | Sign algorithm and key ID, then verify against the supplied key identity. <!-- from ADR: ADR-29 -->
 - [2026-08] Python JSON Schema treats `NaN` as a number | Use a strict parser plus finite typed-run checks so non-standard numeric constants cannot poison evidence or persisted state. <!-- from ADR: ADR-29 -->
 - [2026-08] An allowlisted provider ID/version did not bind the caller-selected endpoint or configuration | A valid network receipt proved authorization only; canonical descriptor binding now fails closed before broker/transport and at pilot verification. <!-- from ADR: ADR-30 -->
+- [2026-08] A signed private time slice identifies the population but not the runtime bytes that produced its metrics | Include the current bundle root in the evidence identity and require the release evaluator to supply the expected root; a self-declared root is not a trust anchor. <!-- from ADR: ADR-31 -->
